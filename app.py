@@ -892,7 +892,7 @@ with tab_admin:
         col_pass1, col_pass2 = st.columns([2, 1])
         with col_pass1:
             with st.form("form_login_admin"):
-                input_pass = st.text_input("Contrasena de Administrador", type="password")
+                input_pass = st.text_input("Contraseña de Administrador", type="password")
                 btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
                 
                 if btn_login:
