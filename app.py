@@ -336,7 +336,6 @@ with st.sidebar.form("form_filtros"):
 
     btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
 
-# Botón "Establecer Fecha de Hoy" ubicado justo debajo de los filtros
 if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
     st.session_state["input_f_desde"] = datetime.now().date()
     st.session_state["input_f_hasta"] = datetime.now().date()
@@ -700,8 +699,52 @@ def renderizar_control_operativo():
 
     st.markdown("---")
 
-    # RANKING DE CHATS ABIERTOS
-    st.markdown("### Ranking de Chats Abiertos (Por Antigüedad)")
+    # RANKING DE CHATS ABIERTOS FILTRADO POR FECHA DE CONSULTA
+    if f_desde_v == f_hasta_v:
+        texto_rango_abiertos = f"del dia {f_desde_v}"
+    else:
+        texto_rango_abiertos = f"del periodo {f_desde_v} al {f_hasta_v}"
+
+    st.markdown(f"### Ranking de Chats Abiertos ({texto_rango_abiertos})")
+    
+    df_abiertos_filtrados = df_filtered[~df_filtered["es_cerrado"]].copy() if not df_filtered.empty else pd.DataFrame()
+    
+    if not df_abiertos_filtrados.empty:
+        df_abiertos_filtrados = df_abiertos_filtrados.drop_duplicates(subset=["id"])
+        df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at"].dt.tz_localize(None)).dt.total_seconds() / 60).round(1)
+        df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
+        df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at", ascending=True)
+
+        df_abiertos_filtrados["Acceso Directo"] = df_abiertos_filtrados["id"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+        )
+
+        st.dataframe(
+            df_abiertos_filtrados[[
+                "id", "Acceso Directo", "created_at", "Horas Transcurridas", 
+                "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"
+            ]],
+            column_config={
+                "id": "ID Conversacion",
+                "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
+                "created_at": "Fecha Creacion", 
+                "Horas Transcurridas": "Horas Abierto",
+                "nombre_contacto": "Contacto",
+                "tenant": "Tenant",
+                "company": "Company",
+                "canal": "Canal", 
+                "agente_asignado": "Agente Asignado", 
+                "motivo_normalizado": "Motivo Normalizado"
+            },
+            hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_filtrados"
+        )
+    else:
+        st.info(f"No hay chats abiertos pendientes creados en el rango {texto_rango_abiertos}.")
+
+    st.markdown("---")
+
+    # RANKING DE CHATS ABIERTOS GENERAL (TODOS LOS PENDIENTES HISTÓRICOS)
+    st.markdown("### Ranking General de Chats Abiertos (Historico Pendiente)")
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
@@ -781,7 +824,6 @@ with tab_resumen:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Paleta de colores sobrios
         palette_e = ["#0284c7", "#6366f1", "#10b981", "#f59e0b", "#e11d48", "#8b5cf6", "#14b8a6"]
 
         g_pie, g_bar = st.columns([1, 1])
