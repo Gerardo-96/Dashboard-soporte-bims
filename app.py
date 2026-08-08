@@ -30,6 +30,7 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
+@st.cache_data(ttl=10)
 def obtener_datos_supabase():
     """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
     todos_los_datos = []
@@ -40,8 +41,11 @@ def obtener_datos_supabase():
         inicio = lote * tamanio_lote
         fin = inicio + tamanio_lote - 1
         
-        response = supabase.table("conversaciones").select("*").range(inicio, fin).execute()
-        datos = response.data
+        try:
+            response = supabase.table("conversaciones").select("*").range(inicio, fin).execute()
+            datos = response.data
+        except Exception:
+            break
         
         if not datos:
             break
@@ -279,7 +283,6 @@ if not df_all_init.empty and "created_at" in df_all_init.columns:
     </div>
     """, unsafe_allow_html=True)
 
-# Botón directo "Hoy"
 if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
     st.session_state["input_f_desde"] = datetime.now().date()
     st.session_state["input_f_hasta"] = datetime.now().date()
@@ -287,17 +290,14 @@ if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
 
 st.sidebar.markdown("### Filtros de Consulta")
 
-# 1. Checkbox REACTIVO (Fuera del formulario para responder al instante)
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
 
-# 2. Formulario de filtros
 with st.sidebar.form("form_filtros"):
     st.caption("Rango de Fechas")
     f_col1, f_col2 = st.columns(2)
     fecha_desde = f_col1.date_input("Desde", key="input_f_desde")
     fecha_hasta = f_col2.date_input("Hasta", key="input_f_hasta")
 
-    # Si se activa la casilla, los campos de hora se muestran dinámicamente de inmediato
     if usar_filtro_hora:
         st.caption("Franja Horaria")
         h_col1, h_col2 = st.columns(2)
@@ -321,7 +321,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte = pd.DataFrame()
     df_reporte["Conversacion ID"] = df_exp.get("id", "")
     
-    # Manejo seguro de fechas nulas (NaT) para evitar NaTType.strftime error
     if "created_at" in df_exp and not df_exp["created_at"].empty:
         df_reporte["Fecha creacion"] = pd.to_datetime(df_exp["created_at"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
     else:
@@ -346,7 +345,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
 
-    # Manejo seguro de fecha de cierre nula
     if "fecha_cierre" in df_exp and not df_exp["fecha_cierre"].empty:
         df_reporte["Fecha cierre"] = pd.to_datetime(df_exp["fecha_cierre"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
     else:
@@ -829,6 +827,7 @@ with tab_admin:
                     
                     progress_bar.progress(100)
                     status_text.text("Sincronizacion completada exitosamente!")
+                    st.cache_data.clear()
                     st.success("La base de datos fue actualizada. Recargando la vista...")
                     time_lib.sleep(1)
                     st.rerun()
