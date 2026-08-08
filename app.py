@@ -270,7 +270,7 @@ if not df_all_init.empty and "created_at" in df_all_init.columns:
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
-        <b>Estado Base de Datos (Supabase):</b><br>
+        <b>Estado Base de Datos:</b><br>
         • <b>Ultima sincronizacion:</b> {tiempo_hace(max_updated_dt)}<br>
         • <b>Registros desde:</b> {min_created_dt.strftime('%d/%m/%Y')}
     </div>
@@ -315,7 +315,13 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
 
     df_reporte = pd.DataFrame()
     df_reporte["Conversacion ID"] = df_exp.get("id", "")
-    df_reporte["Fecha creacion"] = df_exp["created_at"].dt.strftime("%Y-%m-%d %H:%M:%S") if "created_at" in df_exp else ""
+    
+    # Manejo seguro de fechas nulas (NaT) para evitar NaTType.strftime error
+    if "created_at" in df_exp and not df_exp["created_at"].empty:
+        df_reporte["Fecha creacion"] = pd.to_datetime(df_exp["created_at"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
+    else:
+        df_reporte["Fecha creacion"] = ""
+
     df_reporte["Canal de contacto"] = df_exp.get("canal", "")
     df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
     df_reporte["Company"] = df_exp.get("company", "Sin datos")
@@ -334,7 +340,13 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Feedback"] = df_exp.get("feedback", "")
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
-    df_reporte["Fecha cierre"] = df_exp.get("fecha_cierre", "").fillna("")
+
+    # Manejo seguro de fecha de cierre nula
+    if "fecha_cierre" in df_exp and not df_exp["fecha_cierre"].empty:
+        df_reporte["Fecha cierre"] = pd.to_datetime(df_exp["fecha_cierre"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
+    else:
+        df_reporte["Fecha cierre"] = ""
+
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
     df_reporte["Modulo"] = df_exp.get("modulo", "")
     df_reporte["Cliente"] = df_exp.get("cliente", "")
@@ -786,7 +798,7 @@ with tab_admin:
         st.markdown("---")
         
         st.markdown("#### Forzar Sincronizacion Manual de Intercom")
-        st.write("Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.")
+        st.write("Sincroniza directamente los registros desde Intercom a la base de datos.")
         
         c_sync1, c_sync2 = st.columns([1, 2])
         dias_a_sincronizar = c_sync1.number_input("Dias hacia atras:", min_value=1, max_value=90, value=3)
@@ -807,7 +819,7 @@ with tab_admin:
                     sincronizar_intercom(dias=dias_a_sincronizar)
                     
                     progress_bar.progress(90)
-                    status_text.text("Guardando cambios en Supabase...")
+                    status_text.text("Guardando cambios...")
                     time_lib.sleep(0.5)
                     
                     progress_bar.progress(100)
