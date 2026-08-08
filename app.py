@@ -30,6 +30,34 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
+def procesar_fechas_df(df):
+    """Convierte las fechas UTC a hora local (UTC-3) y crea las columnas auxiliares."""
+    if df.empty or "created_at" not in df.columns:
+        return df
+    
+    # 1. Parsear a datetime UTC
+    created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
+    
+    # 2. Convertir a hora local Paraguay / UTC-3
+    local_dt = created_dt.dt.tz_convert("America/Asuncion")
+    
+    df["created_at_dt"] = local_dt
+    # Formato limpio YYYY-MM-DD HH:MM para mostrar en pantalla
+    df["created_at_fmt"] = local_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+    df["fecha_solo"] = local_dt.dt.date
+    df["hora_solo"] = local_dt.dt.time
+
+    if "fecha_cierre" in df.columns:
+        cierre_dt = pd.to_datetime(df["fecha_cierre"], errors="coerce", utc=True)
+        local_cierre = cierre_dt.dt.tz_convert("America/Asuncion")
+        df["fecha_cierre_fmt"] = local_cierre.dt.strftime("%Y-%m-%d %H:%M").fillna("")
+
+    if "updated_at" in df.columns:
+        updated_dt = pd.to_datetime(df["updated_at"], errors="coerce", utc=True)
+        df["updated_at_local"] = updated_dt.dt.tz_convert("America/Asuncion")
+
+    return df
+
 @st.cache_data(ttl=10)
 def obtener_datos_supabase():
     """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
@@ -58,7 +86,7 @@ def obtener_datos_supabase():
         lote += 1
 
     df = pd.DataFrame(todos_los_datos)
-    return df
+    return procesar_fechas_df(df)
 
 st.set_page_config(page_title="Executive Operations Control Center", layout="wide")
 
@@ -298,12 +326,9 @@ if "input_f_hasta" not in st.session_state:
 # ==========================
 df_all_init = obtener_datos_supabase()
 
-if not df_all_init.empty and "created_at" in df_all_init.columns:
-    df_all_init["created_at"] = pd.to_datetime(df_all_init["created_at"], errors="coerce")
-    df_all_init["updated_at"] = pd.to_datetime(df_all_init["updated_at"], errors="coerce")
-    
-    min_created_dt = df_all_init["created_at"].min()
-    max_updated_dt = df_all_init["updated_at"].max() if "updated_at" in df_all_init.columns else min_created_dt
+if not df_all_init.empty and "created_at_dt" in df_all_init.columns:
+    min_created_dt = df_all_init["created_at_dt"].min()
+    max_updated_dt = df_all_init["updated_at_local"].max() if "updated_at_local" in df_all_init.columns else min_created_dt
     min_created_str = min_created_dt.strftime('%d/%m/%Y') if pd.notna(min_created_dt) else "N/A"
     
     st.sidebar.markdown(f"""
@@ -351,12 +376,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
 
     df_reporte = pd.DataFrame()
     df_reporte["Conversacion ID"] = df_exp.get("id", "")
-    
-    if "created_at" in df_exp and not df_exp["created_at"].empty:
-        df_reporte["Fecha creacion"] = pd.to_datetime(df_exp["created_at"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
-    else:
-        df_reporte["Fecha creacion"] = ""
-
+    df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
     df_reporte["Canal de contacto"] = df_exp.get("canal", "")
     df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
     df_reporte["Company"] = df_exp.get("company", "Sin datos")
@@ -375,11 +395,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Feedback"] = df_exp.get("feedback", "")
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
-
-    if "fecha_cierre" in df_exp and not df_exp["fecha_cierre"].empty:
-        df_reporte["Fecha cierre"] = pd.to_datetime(df_exp["fecha_cierre"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
-    else:
-        df_reporte["Fecha cierre"] = ""
+    df_reporte["Fecha cierre"] = df_exp.get("fecha_cierre_fmt", "")
 
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
     df_reporte["Modulo"] = df_exp.get("modulo", "")
@@ -429,11 +445,7 @@ def renderizar_control_operativo():
     sla_gest_th = st.session_state["sla_gest_th"]
 
     if not df_all.empty:
-        df_all["created_at"] = pd.to_datetime(df_all["created_at"], errors="coerce")
-        df_all["fecha_cierre_dt"] = pd.to_datetime(df_all["fecha_cierre"], errors="coerce")
-        df_all["fecha_solo"] = df_all["created_at"].dt.date
-        df_all["hora_solo"] = df_all["created_at"].dt.time
-        df_all["horario_evaluado"] = df_all["created_at"].apply(evaluar_horario)
+        df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario)
         df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
 
         df_all["sla_1ra_eval"] = df_all.apply(
@@ -460,7 +472,7 @@ def renderizar_control_operativo():
         df_abiertos_all = df_abiertos_all.drop_duplicates(subset=["id"])
 
     if not df_abiertos_all.empty:
-        df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at"].dt.tz_localize(None)).dt.total_seconds() / 60).round(1)
+        df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"].dt.tz_localize(None)).dt.total_seconds() / 60).round(1)
         
         df_criticos_sla = df_abiertos_all[
             (df_abiertos_all["primera_respuesta_min"].isna()) & 
@@ -548,8 +560,8 @@ def renderizar_control_operativo():
             df_csat_6m = obtener_df_csat_valido(df_6m)
 
             if not df_csat_6m.empty:
-                df_csat_6m["Periodo_Sort"] = df_csat_6m["created_at"].dt.to_period("M")
-                df_csat_6m["Mes_Nombre"] = df_csat_6m["created_at"].dt.strftime("%b %Y").fillna("")
+                df_csat_6m["Periodo_Sort"] = df_csat_6m["created_at_dt"].dt.to_period("M")
+                df_csat_6m["Mes_Nombre"] = df_csat_6m["created_at_dt"].dt.strftime("%b %Y").fillna("")
 
                 res_csat_mensual = []
                 for period, grp in df_csat_6m.groupby("Periodo_Sort"):
@@ -623,17 +635,17 @@ def renderizar_control_operativo():
                     lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
                 )
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-                df_csat_det = df_csat_det.sort_values(by=["rating_num", "created_at"], ascending=[True, False])
+                df_csat_det = df_csat_det.sort_values(by=["rating_num", "created_at_dt"], ascending=[True, False])
 
                 st.dataframe(
                     df_csat_det[[
-                        "id", "Acceso Directo", "created_at", "Calificacion", "feedback", 
+                        "id", "Acceso Directo", "created_at_fmt", "Calificacion", "feedback", 
                         "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
                     ]],
                     column_config={
                         "id": "ID Chat",
                         "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
-                        "created_at": "Fecha/Hora",
+                        "created_at_fmt": "Fecha/Hora Creacion",
                         "Calificacion": "Puntaje",
                         "feedback": "Comentario / Feedback",
                         "nombre_contacto": "Contacto",
@@ -711,9 +723,9 @@ def renderizar_control_operativo():
     
     if not df_abiertos_filtrados.empty:
         df_abiertos_filtrados = df_abiertos_filtrados.drop_duplicates(subset=["id"])
-        df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at"].dt.tz_localize(None)).dt.total_seconds() / 60).round(1)
+        df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at_dt"].dt.tz_localize(None)).dt.total_seconds() / 60).round(1)
         df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
-        df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at", ascending=True)
+        df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
         df_abiertos_filtrados["Acceso Directo"] = df_abiertos_filtrados["id"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
@@ -721,13 +733,13 @@ def renderizar_control_operativo():
 
         st.dataframe(
             df_abiertos_filtrados[[
-                "id", "Acceso Directo", "created_at", "Horas Transcurridas", 
+                "id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
                 "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"
             ]],
             column_config={
                 "id": "ID Conversacion",
                 "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
-                "created_at": "Fecha Creacion", 
+                "created_at_fmt": "Fecha Creacion", 
                 "Horas Transcurridas": "Horas Abierto",
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
@@ -748,7 +760,7 @@ def renderizar_control_operativo():
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
-        df_rank = df_rank.sort_values(by="created_at", ascending=True)
+        df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
 
         df_rank["Acceso Directo"] = df_rank["id"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
@@ -756,13 +768,13 @@ def renderizar_control_operativo():
 
         st.dataframe(
             df_rank[[
-                "id", "Acceso Directo", "created_at", "Horas Transcurridas", 
+                "id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
                 "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"
             ]],
             column_config={
                 "id": "ID Conversacion",
                 "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
-                "created_at": "Fecha Creacion", 
+                "created_at_fmt": "Fecha Creacion", 
                 "Horas Transcurridas": "Horas Abierto",
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
@@ -788,9 +800,6 @@ with tab_resumen:
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
     if not df_all_r.empty:
-        df_all_r["created_at_dt"] = pd.to_datetime(df_all_r["created_at"], errors="coerce")
-        df_all_r["fecha_solo"] = df_all_r["created_at_dt"].dt.date
-        df_all_r["hora_solo"] = df_all_r["created_at_dt"].dt.time
         df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy()
         
         if usar_filtro_hora and not df_filtered_r.empty:
@@ -885,14 +894,14 @@ with tab_resumen:
         st.info("No hay chats registrados para el rango de fechas seleccionado en la barra lateral.")
 
 with tab_admin:
-    st.markdown("### Panel de Administración y Configuración")
+    st.markdown("### Panel de Administracion y Configuracion")
 
     if not st.session_state["admin_authenticated"]:
         
         col_pass1, col_pass2 = st.columns([2, 1])
         with col_pass1:
             with st.form("form_login_admin"):
-                input_pass = st.text_input("Contraseña de Administrador", type="password")
+                input_pass = st.text_input("Contrasena de Administrador", type="password")
                 btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
                 
                 if btn_login:
@@ -998,9 +1007,6 @@ with tab_admin:
             
             df_all_exp = obtener_datos_supabase()
             if not df_all_exp.empty:
-                df_all_exp["created_at_dt"] = pd.to_datetime(df_all_exp["created_at"], errors="coerce")
-                df_all_exp["fecha_solo"] = df_all_exp["created_at_dt"].dt.date
-                df_all_exp["hora_solo"] = df_all_exp["created_at_dt"].dt.time
                 df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
                 if usar_filtro_hora and not df_exp_filt.empty:
                     df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
