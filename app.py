@@ -136,6 +136,8 @@ EXTENDIDO_V_S_INICIO = time(18, 0, 0)
 EXTENDIDO_V_S_FIN = time(3, 0, 0)
 
 def evaluar_horario(dt_objeto):
+    if pd.isna(dt_objeto):
+        return "fuera de horario"
     fecha_str = dt_objeto.strftime("%Y-%m-%d")
     dia_semana = dt_objeto.weekday()
     hora_actual = dt_objeto.time()
@@ -262,17 +264,19 @@ if "input_f_hasta" not in st.session_state:
 df_all_init = obtener_datos_supabase()
 
 if not df_all_init.empty and "created_at" in df_all_init.columns:
-    df_all_init["created_at"] = pd.to_datetime(df_all_init["created_at"])
-    df_all_init["updated_at"] = pd.to_datetime(df_all_init["updated_at"])
+    df_all_init["created_at"] = pd.to_datetime(df_all_init["created_at"], errors="coerce")
+    df_all_init["updated_at"] = pd.to_datetime(df_all_init["updated_at"], errors="coerce")
     
     min_created_dt = df_all_init["created_at"].min()
     max_updated_dt = df_all_init["updated_at"].max() if "updated_at" in df_all_init.columns else min_created_dt
+    
+    min_created_str = min_created_dt.strftime('%d/%m/%Y') if pd.notna(min_created_dt) else "N/A"
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
         <b>Estado Base de Datos:</b><br>
         • <b>Ultima sincronizacion:</b> {tiempo_hace(max_updated_dt)}<br>
-        • <b>Registros desde:</b> {min_created_dt.strftime('%d/%m/%Y')}
+        • <b>Registros desde:</b> {min_created_str}
     </div>
     """, unsafe_allow_html=True)
 
@@ -395,7 +399,7 @@ def renderizar_control_operativo():
     sla_gest_th = st.session_state["sla_gest_th"]
 
     if not df_all.empty:
-        df_all["created_at"] = pd.to_datetime(df_all["created_at"])
+        df_all["created_at"] = pd.to_datetime(df_all["created_at"], errors="coerce")
         df_all["fecha_cierre_dt"] = pd.to_datetime(df_all["fecha_cierre"], errors="coerce")
         df_all["fecha_solo"] = df_all["created_at"].dt.date
         df_all["hora_solo"] = df_all["created_at"].dt.time
@@ -499,7 +503,7 @@ def renderizar_control_operativo():
 
             if not df_csat_6m.empty:
                 df_csat_6m["Periodo_Sort"] = df_csat_6m["created_at"].dt.to_period("M")
-                df_csat_6m["Mes_Nombre"] = df_csat_6m["created_at"].dt.strftime("%b %Y")
+                df_csat_6m["Mes_Nombre"] = df_csat_6m["created_at"].dt.strftime("%b %Y").fillna("")
 
                 res_csat_mensual = []
                 for period, grp in df_csat_6m.groupby("Periodo_Sort"):
@@ -692,9 +696,9 @@ with tab_resumen:
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
     if not df_all_r.empty:
-        df_all_r["created_at"] = pd.to_datetime(df_all_r["created_at"])
-        df_all_r["fecha_solo"] = df_all_r["created_at"].dt.date
-        df_all_r["hora_solo"] = df_all_r["created_at"].dt.time
+        df_all_r["created_at_dt"] = pd.to_datetime(df_all_r["created_at"], errors="coerce")
+        df_all_r["fecha_solo"] = df_all_r["created_at_dt"].dt.date
+        df_all_r["hora_solo"] = df_all_r["created_at_dt"].dt.time
         df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy()
         
         if usar_filtro_hora and not df_filtered_r.empty:
@@ -706,9 +710,9 @@ with tab_resumen:
     
     if not df_filtered_r.empty:
         df_res = df_filtered_r.copy()
-        df_res = df_res.sort_values(by="created_at", ascending=True)
+        df_res = df_res.sort_values(by="created_at_dt", ascending=True)
 
-        df_res["Dia"] = df_res["created_at"].dt.strftime("%Y-%m-%d")
+        df_res["Dia"] = df_res["created_at_dt"].dt.strftime("%Y-%m-%d").fillna("Sin fecha")
 
         df_agentes_total = df_res["agente_asignado"].value_counts().reset_index()
         df_agentes_total.columns = ["Agente", "Cantidad de Chats"]
@@ -863,9 +867,9 @@ with tab_admin:
         
         df_all_exp = obtener_datos_supabase()
         if not df_all_exp.empty:
-            df_all_exp["created_at"] = pd.to_datetime(df_all_exp["created_at"])
-            df_all_exp["fecha_solo"] = df_all_exp["created_at"].dt.date
-            df_all_exp["hora_solo"] = df_all_exp["created_at"].dt.time
+            df_all_exp["created_at_dt"] = pd.to_datetime(df_all_exp["created_at"], errors="coerce")
+            df_all_exp["fecha_solo"] = df_all_exp["created_at_dt"].dt.date
+            df_all_exp["hora_solo"] = df_all_exp["created_at_dt"].dt.time
             df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
             if usar_filtro_hora and not df_exp_filt.empty:
                 df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
