@@ -96,20 +96,20 @@ st.markdown("""
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
         color: #f8fafc;
         padding: 16px;
-        border-radius: 12px;
+        border-radius: 10px;
         border: 1px solid #334155;
-        border-left: 5px solid #0284c7;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        border-left: 4px solid #0284c7;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
     .metric-card-title {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         color: #94a3b8;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
     .metric-card-value {
-        font-size: 1.6rem;
+        font-size: 1.5rem;
         font-weight: 700;
         color: #f8fafc;
         margin-top: 4px;
@@ -125,15 +125,15 @@ st.markdown("""
         border-radius: 8px; border: 1px solid #334155; font-size: 0.85rem; margin-bottom: 12px;
     }
     .alert-card-critical {
-        background-color: #7f1d1d; color: #fef2f2; padding: 16px;
-        border-radius: 8px; border-left: 6px solid #ef4444; margin-bottom: 15px;
+        background-color: #451a03; color: #fef3c7; padding: 16px;
+        border-radius: 8px; border-left: 6px solid #d97706; margin-bottom: 15px;
     }
     .admin-card {
         background-color: #1e293b;
         border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 20px;
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 15px;
     }
     .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
 </style>
@@ -575,8 +575,8 @@ def renderizar_control_operativo():
                     name="CSAT (%)",
                     text=[f"<b>{v}%</b><br>({n} enc.)" for v, n in zip(df_evo_csat["CSAT %"], df_evo_csat["Encuestas"])],
                     textposition="top center",
-                    line=dict(color="#38bdf8", width=4, shape="spline"),
-                    marker=dict(size=10, color="#0284c7", symbol="circle", line=dict(color="#ffffff", width=2)),
+                    line=dict(color="#38bdf8", width=3, shape="spline"),
+                    marker=dict(size=8, color="#0284c7", symbol="circle", line=dict(color="#ffffff", width=1.5)),
                     fill="tozeroy",
                     fillcolor="rgba(56, 189, 248, 0.08)"
                 ))
@@ -781,7 +781,8 @@ with tab_resumen:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        palette_e = ["#38bdf8", "#818cf8", "#34d399", "#f43f5e", "#fbbf24", "#c084fc", "#a7f3d0"]
+        # Paleta de colores sobrios
+        palette_e = ["#0284c7", "#6366f1", "#10b981", "#f59e0b", "#e11d48", "#8b5cf6", "#14b8a6"]
 
         g_pie, g_bar = st.columns([1, 1])
 
@@ -794,7 +795,7 @@ with tab_resumen:
                 hole=0.5,
                 color_discrete_sequence=palette_e
             )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0f172a', width=2)))
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0f172a', width=1.5)))
             fig_pie.update_layout(
                 showlegend=True, 
                 paper_bgcolor="#1e293b",
@@ -847,17 +848,19 @@ with tab_admin:
     if not st.session_state["admin_authenticated"]:
         st.warning("Esta seccion esta protegida. Por favor ingresa la contrasena de administrador.")
         
-        with st.form("form_login_admin"):
-            input_pass = st.text_input("Contrasena", type="password")
-            btn_login = st.form_submit_button("Acceder", use_container_width=True)
-            
-            if btn_login:
-                if input_pass == ADMIN_PASSWORD:
-                    st.session_state["admin_authenticated"] = True
-                    st.success("Acceso concedido.")
-                    st.rerun()
-                else:
-                    st.error("Contrasena incorrecta.")
+        col_pass1, col_pass2 = st.columns([2, 1])
+        with col_pass1:
+            with st.form("form_login_admin"):
+                input_pass = st.text_input("Contrasena de Administrador", type="password")
+                btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
+                
+                if btn_login:
+                    if input_pass == ADMIN_PASSWORD:
+                        st.session_state["admin_authenticated"] = True
+                        st.success("Acceso concedido.")
+                        st.rerun()
+                    else:
+                        st.error("Contrasena incorrecta.")
     else:
         st.success("Sesion de administracion activa.")
         if st.button("Cerrar Sesion Admin"):
@@ -871,11 +874,11 @@ with tab_admin:
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">1. Forzar Sincronizacion Manual de Intercom</h4>
-                <p style="color:#94a3b8; font-size:0.9rem;">Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.</p>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.</p>
             </div>
             """, unsafe_allow_html=True)
             
-            c_sync1, c_sync2 = st.columns([1, 2])
+            c_sync1, c_sync2 = st.columns([2, 1], vertical_alignment="bottom")
             dias_a_sincronizar = c_sync1.number_input("Dias hacia atras a consultar:", min_value=1, max_value=365, value=2)
             
             if c_sync2.button("Iniciar Sincronizacion Manual", use_container_width=True):
@@ -916,7 +919,7 @@ with tab_admin:
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
-                <p style="color:#94a3b8; font-size:0.9rem;">Ajusta los tiempos de refresco en vivo y los limites objetivo para los SLA de atencion.</p>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo y los limites objetivo para los SLA de atencion.</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -948,7 +951,7 @@ with tab_admin:
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">3. Descarga Masiva de Reportes Excel</h4>
-                <p style="color:#94a3b8; font-size:0.9rem;">Genera y descarga el archivo Excel completo con el formato formateado de los registros filtrados.</p>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Genera y descarga el archivo Excel completo con el formato formateado de los registros filtrados.</p>
             </div>
             """, unsafe_allow_html=True)
             
