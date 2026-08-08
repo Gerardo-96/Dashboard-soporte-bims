@@ -805,7 +805,7 @@ with tab_admin:
         st.write("Sincroniza directamente los registros desde Intercom a la base de datos.")
         
         c_sync1, c_sync2 = st.columns([1, 2])
-        dias_a_sincronizar = c_sync1.number_input("Dias hacia atras:", min_value=1, max_value=90, value=3)
+        dias_a_sincronizar = c_sync1.number_input("Dias hacia atras:", min_value=1, max_value=365, value=2)
         
         if c_sync2.button("Iniciar Sincronizacion Manual", use_container_width=True):
             if SYNC_AVAILABLE:
