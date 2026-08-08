@@ -888,7 +888,6 @@ with tab_admin:
     st.markdown("### Panel de Administracion y Configuracion")
 
     if not st.session_state["admin_authenticated"]:
-        st.warning("Esta seccion esta protegida. Por favor ingresa la contrasena de administrador.")
         
         col_pass1, col_pass2 = st.columns([2, 1])
         with col_pass1:
