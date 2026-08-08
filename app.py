@@ -93,9 +93,33 @@ st.markdown("""
     }
 
     .metric-card {
-        background-color: #1e293b; color: #f8fafc; padding: 16px;
-        border-radius: 10px; border-left: 5px solid #38bdf8;
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        color: #f8fafc;
+        padding: 16px;
+        border-radius: 12px;
+        border: 1px solid #334155;
+        border-left: 5px solid #0284c7;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     }
+    .metric-card-title {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .metric-card-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin-top: 4px;
+    }
+    .metric-card-sub {
+        font-size: 0.75rem;
+        color: #38bdf8;
+        margin-top: 2px;
+    }
+
     .db-info-box {
         background-color: #1e293b; color: #94a3b8; padding: 12px;
         border-radius: 8px; border: 1px solid #334155; font-size: 0.85rem; margin-bottom: 12px;
@@ -104,7 +128,14 @@ st.markdown("""
         background-color: #7f1d1d; color: #fef2f2; padding: 16px;
         border-radius: 8px; border-left: 6px solid #ef4444; margin-bottom: 15px;
     }
-    .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; }
+    .admin-card {
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -283,11 +314,6 @@ if not df_all_init.empty and "created_at" in df_all_init.columns:
     </div>
     """, unsafe_allow_html=True)
 
-if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
-    st.session_state["input_f_desde"] = datetime.now().date()
-    st.session_state["input_f_hasta"] = datetime.now().date()
-    st.rerun()
-
 st.sidebar.markdown("### Filtros de Consulta")
 
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
@@ -309,6 +335,12 @@ with st.sidebar.form("form_filtros"):
     act_sonido = st.checkbox("Alertas Sonoras", value=True)
 
     btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
+
+# Botón "Establecer Fecha de Hoy" ubicado justo debajo de los filtros
+if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
+    st.session_state["input_f_desde"] = datetime.now().date()
+    st.session_state["input_f_hasta"] = datetime.now().date()
+    st.rerun()
 
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
@@ -486,12 +518,28 @@ def renderizar_control_operativo():
     c_rango_prev, _ = calcular_csat(df_prev_rango)
     diff_rango = round(c_rango - c_rango_prev, 1)
 
+    def render_metric_card(title, value, diff, sub_text):
+        diff_color = "#34d399" if diff >= 0 else "#f43f5e"
+        diff_symbol = "▲" if diff >= 0 else "▼"
+        return f"""
+        <div class="metric-card">
+            <div class="metric-card-title">{title}</div>
+            <div class="metric-card-value">{value}</div>
+            <div style="color: {diff_color}; font-size: 0.8rem; font-weight: 600; margin-top: 2px;">
+                {diff_symbol} {abs(diff)}% vs anterior
+            </div>
+            <div class="metric-card-sub">{sub_text}</div>
+        </div>
+        """
+
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("CSAT Hoy", f"{c_hoy}%", f"{diff_hoy}% vs Ayer", help=f"{k_hoy} respuestas validadas")
-    m2.metric("CSAT Esta Semana", f"{c_sem}%", f"{diff_sem}% vs Sem. Ant.", help=f"{k_sem} respuestas validadas")
-    m3.metric("CSAT Este Mes", f"{c_mes}%", f"{diff_mes}% vs Mes Ant.", help=f"{k_mes} respuestas validadas")
-    m4.metric(f"CSAT Trimestre (Q{q_act})", f"{c_q}%", f"{diff_q}% vs Q Ant.", help=f"{k_q} respuestas validadas")
-    m5.metric("CSAT Rango Seleccionado", f"{c_rango}%", f"{diff_rango}% vs Periodo Ant.", help=f"{k_rango} respuestas validadas ({f_desde_v} a {f_hasta_v})")
+    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, f"{k_hoy} encuestas"), unsafe_allow_html=True)
+    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, f"{k_sem} encuestas"), unsafe_allow_html=True)
+    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, f"{k_mes} encuestas"), unsafe_allow_html=True)
+    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"{k_q} encuestas"), unsafe_allow_html=True)
+    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, f"{k_rango} encuestas"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # EVOLUCIÓN HISTÓRICA DE CSAT
     with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
@@ -530,14 +578,14 @@ def renderizar_control_operativo():
                     line=dict(color="#38bdf8", width=4, shape="spline"),
                     marker=dict(size=10, color="#0284c7", symbol="circle", line=dict(color="#ffffff", width=2)),
                     fill="tozeroy",
-                    fillcolor="rgba(56, 189, 248, 0.1)"
+                    fillcolor="rgba(56, 189, 248, 0.08)"
                 ))
 
                 fig_csat.add_shape(
                     type="line",
                     x0=0, x1=1, xref="paper",
                     y0=90, y1=90, yref="y",
-                    line=dict(color="#22c55e", width=2, dash="dash")
+                    line=dict(color="#34d399", width=2, dash="dash")
                 )
 
                 fig_csat.add_annotation(
@@ -545,7 +593,7 @@ def renderizar_control_operativo():
                     text="<b>Meta Objetivo (90%)</b>",
                     showarrow=False,
                     yshift=12,
-                    font=dict(color="#22c55e", size=12)
+                    font=dict(color="#34d399", size=12)
                 )
 
                 fig_csat.update_layout(
@@ -611,10 +659,12 @@ def renderizar_control_operativo():
         df_cerrados = df_filtered[df_filtered["es_cerrado"]]
 
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Prom. 1a Respuesta", f"{p_1r} min")
-        k2.metric("Prom. Tiempo Gestion", f"{p_gest} min")
-        k3.metric("Total Chats Consultados", len(df_filtered))
-        k4.metric("Total Chats Cerrados", len(df_cerrados))
+        k1.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. 1a Respuesta</div><div class="metric-card-value">{p_1r} min</div></div>', unsafe_allow_html=True)
+        k2.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. Tiempo Gestion</div><div class="metric-card-value">{p_gest} min</div></div>', unsafe_allow_html=True)
+        k3.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Consultados</div><div class="metric-card-value">{len(df_filtered)}</div></div>', unsafe_allow_html=True)
+        k4.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Cerrados</div><div class="metric-card-value">{len(df_cerrados)}</div></div>', unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         res_agentes = []
         for agente, grp in df_filtered.groupby("agente_asignado"):
@@ -724,12 +774,14 @@ with tab_resumen:
         pct_top = round((top_agente_count / total_chats_periodo) * 100, 1) if total_chats_periodo > 0 else 0
 
         r1, r2, r3, r4 = st.columns(4)
-        r1.metric("Total Chats en Rango", total_chats_periodo)
-        r2.metric("Promedio Diario", f"{promedio_diario} chats")
-        r3.metric("Agente con Mas Chats", top_agente, f"{top_agente_count} chats")
-        r4.metric("Participacion Top Agente", f"{pct_top}%")
+        r1.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats en Rango</div><div class="metric-card-value">{total_chats_periodo}</div></div>', unsafe_allow_html=True)
+        r2.markdown(f'<div class="metric-card"><div class="metric-card-title">Promedio Diario</div><div class="metric-card-value">{promedio_diario}</div></div>', unsafe_allow_html=True)
+        r3.markdown(f'<div class="metric-card"><div class="metric-card-title">Agente con Mas Chats</div><div class="metric-card-value" style="font-size:1.2rem;">{top_agente}</div><div class="metric-card-sub">{top_agente_count} chats</div></div>', unsafe_allow_html=True)
+        r4.markdown(f'<div class="metric-card"><div class="metric-card-title">Participacion Top Agente</div><div class="metric-card-value">{pct_top}%</div></div>', unsafe_allow_html=True)
 
-        st.markdown("---")
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        palette_e = ["#38bdf8", "#818cf8", "#34d399", "#f43f5e", "#fbbf24", "#c084fc", "#a7f3d0"]
 
         g_pie, g_bar = st.columns([1, 1])
 
@@ -739,11 +791,17 @@ with tab_resumen:
                 df_agentes_total, 
                 values="Cantidad de Chats", 
                 names="Agente",
-                hole=0.4,
-                color_discrete_sequence=px.colors.qualitative.Pastel
+                hole=0.5,
+                color_discrete_sequence=palette_e
             )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label+value')
-            fig_pie.update_layout(showlegend=True, margin=dict(t=20, b=20, l=20, r=20))
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0f172a', width=2)))
+            fig_pie.update_layout(
+                showlegend=True, 
+                paper_bgcolor="#1e293b",
+                plot_bgcolor="#1e293b",
+                font=dict(color="#f8fafc"),
+                margin=dict(t=30, b=30, l=30, r=30)
+            )
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with g_bar:
@@ -756,7 +814,15 @@ with tab_resumen:
                 color="agente_asignado",
                 barmode="stack",
                 title="Volumen de Chats por Dia",
-                color_discrete_sequence=px.colors.qualitative.Pastel
+                color_discrete_sequence=palette_e
+            )
+            fig_bar.update_layout(
+                paper_bgcolor="#1e293b",
+                plot_bgcolor="#1e293b",
+                font=dict(color="#f8fafc"),
+                xaxis=dict(gridcolor="#334155"),
+                yaxis=dict(gridcolor="#334155"),
+                margin=dict(t=30, b=30, l=30, r=30)
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -798,91 +864,112 @@ with tab_admin:
             st.session_state["admin_authenticated"] = False
             st.rerun()
 
-        st.markdown("---")
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        st.markdown("#### Forzar Sincronizacion Manual de Intercom")
-        st.write("Sincroniza directamente los registros desde Intercom a la base de datos.")
-        
-        c_sync1, c_sync2 = st.columns([1, 2])
-        dias_a_sincronizar = c_sync1.number_input("Dias hacia atras:", min_value=1, max_value=365, value=2)
-        
-        if c_sync2.button("Iniciar Sincronizacion Manual", use_container_width=True):
-            if SYNC_AVAILABLE:
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                try:
-                    status_text.text("Iniciando conexion con Intercom API...")
-                    progress_bar.progress(20)
-                    time_lib.sleep(0.5)
+        # Tarjeta 1: Sincronización
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">1. Forzar Sincronizacion Manual de Intercom</h4>
+                <p style="color:#94a3b8; font-size:0.9rem;">Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            c_sync1, c_sync2 = st.columns([1, 2])
+            dias_a_sincronizar = c_sync1.number_input("Dias hacia atras a consultar:", min_value=1, max_value=365, value=2)
+            
+            if c_sync2.button("Iniciar Sincronizacion Manual", use_container_width=True):
+                if SYNC_AVAILABLE:
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
-                    status_text.text(f"Procesando conversaciones de los ultimos {dias_a_sincronizar} dias...")
-                    progress_bar.progress(50)
-                    
-                    sincronizar_intercom(dias=dias_a_sincronizar)
-                    
-                    progress_bar.progress(90)
-                    status_text.text("Guardando cambios...")
-                    time_lib.sleep(0.5)
-                    
-                    progress_bar.progress(100)
-                    status_text.text("Sincronizacion completada exitosamente!")
-                    st.cache_data.clear()
-                    st.success("La base de datos fue actualizada. Recargando la vista...")
-                    time_lib.sleep(1)
-                    st.rerun()
-                except Exception as e:
-                    status_text.text("Ocurrio un error durante la sincronizacion.")
-                    st.error(f"Detalle del error: {str(e)}")
+                    try:
+                        status_text.text("Iniciando conexion con Intercom API...")
+                        progress_bar.progress(20)
+                        time_lib.sleep(0.5)
+                        
+                        status_text.text(f"Procesando conversaciones de los ultimos {dias_a_sincronizar} dias...")
+                        progress_bar.progress(50)
+                        
+                        sincronizar_intercom(dias=dias_a_sincronizar)
+                        
+                        progress_bar.progress(90)
+                        status_text.text("Guardando cambios...")
+                        time_lib.sleep(0.5)
+                        
+                        progress_bar.progress(100)
+                        status_text.text("Sincronizacion completada exitosamente!")
+                        st.cache_data.clear()
+                        st.success("La base de datos fue actualizada. Recargando la vista...")
+                        time_lib.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        status_text.text("Ocurrio un error durante la sincronizacion.")
+                        st.error(f"Detalle del error: {str(e)}")
+                else:
+                    st.error("No se encontro el modulo `sync_intercom.py` en el proyecto.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Tarjeta 2: Parámetros Globales
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
+                <p style="color:#94a3b8; font-size:0.9rem;">Ajusta los tiempos de refresco en vivo y los limites objetivo para los SLA de atencion.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_cfg1, col_cfg2 = st.columns(2)
+            
+            with col_cfg1:
+                st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
+                cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
+                cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
+            
+            with col_cfg2:
+                st.markdown("<b>Umbrales de SLA (Minutos)</b>", unsafe_allow_html=True)
+                cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
+                cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Guardar Configuracion de Parametros", use_container_width=True):
+                st.session_state["auto_refresh"] = cfg_auto
+                st.session_state["refresh_interval"] = cfg_interval
+                st.session_state["sla_1ra_th"] = cfg_sla_1ra
+                st.session_state["sla_gest_th"] = cfg_sla_gest
+                st.success("Configuracion actualizada correctamente.")
+                st.rerun()
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Tarjeta 3: Descarga Masiva
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">3. Descarga Masiva de Reportes Excel</h4>
+                <p style="color:#94a3b8; font-size:0.9rem;">Genera y descarga el archivo Excel completo con el formato formateado de los registros filtrados.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            df_all_exp = obtener_datos_supabase()
+            if not df_all_exp.empty:
+                df_all_exp["created_at_dt"] = pd.to_datetime(df_all_exp["created_at"], errors="coerce")
+                df_all_exp["fecha_solo"] = df_all_exp["created_at_dt"].dt.date
+                df_all_exp["hora_solo"] = df_all_exp["created_at_dt"].dt.time
+                df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
+                if usar_filtro_hora and not df_exp_filt.empty:
+                    df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
             else:
-                st.error("No se encontro el modulo `sync_intercom.py` en el proyecto.")
+                df_exp_filt = pd.DataFrame()
 
-        st.markdown("---")
-
-        st.markdown("#### Parametros Globales del Dashboard")
-        
-        col_cfg1, col_cfg2 = st.columns(2)
-        
-        with col_cfg1:
-            st.markdown("##### Refresco Automatico")
-            cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
-            cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
-        
-        with col_cfg2:
-            st.markdown("##### Umbrales de SLA (Minutos)")
-            cfg_sla_1ra = st.number_input("SLA Primera Respuesta (m):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
-            cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (m):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
-
-        if st.button("Guardar Configuracion de Parametros"):
-            st.session_state["auto_refresh"] = cfg_auto
-            st.session_state["refresh_interval"] = cfg_interval
-            st.session_state["sla_1ra_th"] = cfg_sla_1ra
-            st.session_state["sla_gest_th"] = cfg_sla_gest
-            st.success("Configuracion actualizada correctamente.")
-            st.rerun()
-
-        st.markdown("---")
-
-        st.markdown("#### Descarga Masiva de Reportes Excel")
-        
-        df_all_exp = obtener_datos_supabase()
-        if not df_all_exp.empty:
-            df_all_exp["created_at_dt"] = pd.to_datetime(df_all_exp["created_at"], errors="coerce")
-            df_all_exp["fecha_solo"] = df_all_exp["created_at_dt"].dt.date
-            df_all_exp["hora_solo"] = df_all_exp["created_at_dt"].dt.time
-            df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
-            if usar_filtro_hora and not df_exp_filt.empty:
-                df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
-        else:
-            df_exp_filt = pd.DataFrame()
-
-        if not df_exp_filt.empty:
-            st.download_button(
-                label="Descargar Reporte Filtrado en Excel",
-                data=generar_excel_reporte(df_exp_filt, fecha_desde, fecha_hasta, usar_filtro_hora, hora_inicio, hora_fin),
-                file_name=f"reporte_intercom_{fecha_desde}_a_{fecha_hasta}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        else:
-            st.info("No hay datos filtrados para descargar actualmente.")
+            if not df_exp_filt.empty:
+                st.download_button(
+                    label="Descargar Reporte Filtrado en Excel",
+                    data=generar_excel_reporte(df_exp_filt, fecha_desde, fecha_hasta, usar_filtro_hora, hora_inicio, hora_fin),
+                    file_name=f"reporte_intercom_{fecha_desde}_a_{fecha_hasta}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            else:
+                st.info("No hay datos filtrados para descargar actualmente.")
