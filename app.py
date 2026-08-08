@@ -9,7 +9,15 @@ import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 
+# Intentar importar la función de sincronización desde sync_intercom.py
+try:
+    from sync_intercom import sincronizar_intercom
+    SYNC_AVAILABLE = True
+except ImportError:
+    SYNC_AVAILABLE = False
+
 INTERCOM_APP_ID = "co9kozj6"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")  # Cambiar por tu clave deseada
 
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
@@ -61,12 +69,11 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
     }
     
-    /* OCULTAR LA BARRA SUPERIOR DE STREAMLIT (STOP, DEPLOY, ANIMACIÓN) */
+    /* OCULTAR LA BARRA SUPERIOR DE STREAMLIT */
     header[data-testid="stHeader"] {
         display: none !important;
     }
     
-    /* Ocultar menú de opciones y pie de página si aparecieran */
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
 
@@ -234,6 +241,20 @@ def tiempo_hace(dt_obj):
         return f"Hace {secs // 86400} día(s)"
 
 # ==========================
+# INITIAL SESSION STATE PARAMS
+# ==========================
+if "auto_refresh" not in st.session_state:
+    st.session_state["auto_refresh"] = True
+if "refresh_interval" not in st.session_state:
+    st.session_state["refresh_interval"] = 5
+if "sla_1ra_th" not in st.session_state:
+    st.session_state["sla_1ra_th"] = 1.5
+if "sla_gest_th" not in st.session_state:
+    st.session_state["sla_gest_th"] = 60.0
+if "admin_authenticated" not in st.session_state:
+    st.session_state["admin_authenticated"] = False
+
+# ==========================
 # CARGA DE DATOS DE SUPABASE
 # ==========================
 df_all = obtener_datos_supabase()
@@ -241,7 +262,6 @@ df_all = obtener_datos_supabase()
 # ==========================
 # SIDEBAR / CONTROL CENTER
 # ==========================
-
 if not df_all.empty and "created_at" in df_all.columns:
     df_all["created_at"] = pd.to_datetime(df_all["created_at"])
     df_all["updated_at"] = pd.to_datetime(df_all["updated_at"])
@@ -266,14 +286,16 @@ if "input_f_hasta" not in st.session_state:
 
 col_top1, col_top2 = st.sidebar.columns([1, 1])
 with col_top1:
-    auto_refresh = st.toggle("Autorefresh", value=True)
+    auto_refresh_val = st.toggle("Autorefresh", value=st.session_state["auto_refresh"])
+    st.session_state["auto_refresh"] = auto_refresh_val
 with col_top2:
     if st.button("📅 Hoy", use_container_width=True):
         st.session_state["input_f_desde"] = datetime.now().date()
         st.session_state["input_f_hasta"] = datetime.now().date()
         st.rerun()
 
-refresh_interval = st.sidebar.slider("Frecuencia de refresco (seg)", 3, 30, 5)
+refresh_interval = st.sidebar.slider("Frecuencia de refresco (seg)", 3, 30, st.session_state["refresh_interval"])
+st.session_state["refresh_interval"] = refresh_interval
 
 with st.sidebar.form("form_filtros"):
     f_col1, f_col2 = st.columns(2)
@@ -286,8 +308,10 @@ with st.sidebar.form("form_filtros"):
     hora_fin = h_col2.time_input("Fin", time(18, 0))
 
     s_col1, s_col2 = st.columns(2)
-    sla_1ra_th = s_col1.number_input("SLA 1ª (m)", value=1.5, step=0.5)
-    sla_gest_th = s_col2.number_input("SLA Gest (m)", value=60.0, step=5.0)
+    sla_1ra_th = s_col1.number_input("SLA 1ª (m)", value=float(st.session_state["sla_1ra_th"]), step=0.5)
+    sla_gest_th = s_col2.number_input("SLA Gest (m)", value=float(st.session_state["sla_gest_th"]), step=5.0)
+    st.session_state["sla_1ra_th"] = sla_1ra_th
+    st.session_state["sla_gest_th"] = sla_gest_th
 
     act_sonido = st.checkbox("Alertas Sonoras", value=True)
 
@@ -379,7 +403,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
 if not df_filtered.empty:
     st.sidebar.markdown("---")
     st.sidebar.download_button(
-        label="Exportar Excel",
+        label="📥 Exportar Excel",
         data=generar_excel_reporte(df_filtered, f_desde, f_hasta, usar_filtro_hora, hora_inicio, hora_fin),
         file_name=f"reporte_intercom_{f_desde}_a_{f_hasta}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -390,7 +414,11 @@ if not df_filtered.empty:
 st.title("Dashboard Soporte BIMS")
 
 # TABS PRINCIPALES
-tab_operativo, tab_resumen = st.tabs(["Control Operativo & SLA", "Resumen de Chats & Agentes"])
+tab_operativo, tab_resumen, tab_admin = st.tabs([
+    "Control Operativo & SLA", 
+    "Resumen de Chats & Agentes", 
+    "⚙️ Administración & Configuración"
+])
 
 # ==========================================
 # PESTAÑA 1: CONTROL OPERATIVO & SLA
@@ -496,7 +524,6 @@ with tab_operativo:
 
                 fig_csat = go.Figure()
 
-                # Área y Línea Principal de CSAT
                 fig_csat.add_trace(go.Scatter(
                     x=df_evo_csat["Mes"],
                     y=df_evo_csat["CSAT %"],
@@ -510,7 +537,6 @@ with tab_operativo:
                     fillcolor="rgba(56, 189, 248, 0.1)"
                 ))
 
-                # Línea de Meta / SLA Objetivo (90%)
                 fig_csat.add_shape(
                     type="line",
                     x0=0, x1=1, xref="paper",
@@ -735,6 +761,114 @@ with tab_resumen:
     else:
         st.info("No hay chats registrados para el rango de fechas seleccionado en la barra lateral.")
 
-if auto_refresh:
-    time_lib.sleep(refresh_interval)
+# ==========================================
+# PESTAÑA 3: ADMINISTRACIÓN & CONFIGURACIÓN
+# ==========================================
+with tab_admin:
+    st.markdown("### 🔒 Panel de Administración y Configuración")
+
+    if not st.session_state["admin_authenticated"]:
+        st.warning("Esta sección está protegida. Por favor ingresa la contraseña de administrador.")
+        
+        with st.form("form_login_admin"):
+            input_pass = st.text_input("Contraseña", type="password")
+            btn_login = st.form_submit_button("Acceder", use_container_width=True)
+            
+            if btn_login:
+                if input_pass == ADMIN_PASSWORD:
+                    st.session_state["admin_authenticated"] = True
+                    st.success("Acceso concedido.")
+                    st.rerun()
+                else:
+                    st.error("Contraseña incorrecta.")
+    else:
+        st.success("🔓 Sesión de administración activa.")
+        if st.button("Cerrar Sesión Admin"):
+            st.session_state["admin_authenticated"] = False
+            st.rerun()
+
+        st.markdown("---")
+        
+        # SECCIÓN 1: FORZAR ACTUALIZACIÓN CON INDICADOR DE PROGRESO
+        st.markdown("#### 🔄 Forzar Sincronización Manual de Intercom")
+        st.write("Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.")
+        
+        c_sync1, c_sync2 = st.columns([1, 2])
+        dias_a_sincronizar = c_sync1.number_input("Días hacia atrás:", min_value=1, max_value=90, value=3)
+        
+        if c_sync2.button("🚀 Iniciar Sincronización Manual", use_container_width=True):
+            if SYNC_AVAILABLE:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                try:
+                    status_text.text("🔄 Iniciando conexión con Intercom API...")
+                    progress_bar.progress(20)
+                    time_lib.sleep(0.5)
+                    
+                    status_text.text(f"⏳ Procesando conversaciones de los últimos {dias_a_sincronizar} días...")
+                    progress_bar.progress(50)
+                    
+                    # Llamada a la función sync
+                    sincronizar_intercom(dias=dias_a_sincronizar)
+                    
+                    progress_bar.progress(90)
+                    status_text.text("💾 Guardando cambios en Supabase...")
+                    time_lib.sleep(0.5)
+                    
+                    progress_bar.progress(100)
+                    status_text.text("✅ ¡Sincronización completada exitosamente!")
+                    st.success("La base de datos fue actualizada. Recargando la vista...")
+                    time_lib.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    status_text.text("❌ Ocurrió un error durante la sincronización.")
+                    st.error(f"Detalle del error: {str(e)}")
+            else:
+                st.error("No se encontró el módulo `sync_intercom.py` en el proyecto. Asegúrate de incluirlo junto con `app.py`.")
+
+        st.markdown("---")
+
+        # SECCIÓN 2: CONTROL DE REFRESCO AUTOMÁTICO Y TIEMPOS DE SLA
+        st.markdown("#### ⚙️ Parámetros Globales del Dashboard")
+        
+        col_cfg1, col_cfg2 = st.columns(2)
+        
+        with col_cfg1:
+            st.markdown("##### ⏱️ Refresco Automático")
+            cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
+            cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
+        
+        with col_cfg2:
+            st.markdown("##### 🎯 Umbrales de SLA (Minutos)")
+            cfg_sla_1ra = st.number_input("SLA Primera Respuesta (m):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
+            cfg_sla_gest = st.number_input("SLA Tiempo de Gestión (m):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
+
+        if st.button("💾 Guardar Configuración de Parámetros"):
+            st.session_state["auto_refresh"] = cfg_auto
+            st.session_state["refresh_interval"] = cfg_interval
+            st.session_state["sla_1ra_th"] = cfg_sla_1ra
+            st.session_state["sla_gest_th"] = cfg_sla_gest
+            st.success("Configuración actualizada correctamente.")
+            st.rerun()
+
+        st.markdown("---")
+
+        # SECCIÓN 3: DESCARGA DIRECTA DE EXCEL
+        st.markdown("#### 📊 Descarga Masiva de Reportes Excel")
+        st.write("Genera y descarga un reporte completo formateado en Excel para los registros filtrados actualmente o de forma masiva.")
+        
+        if not df_filtered.empty:
+            st.download_button(
+                label="📥 Descargar Reporte Filtrado en Excel",
+                data=generar_excel_reporte(df_filtered, f_desde, f_hasta, usar_filtro_hora, hora_inicio, hora_fin),
+                file_name=f"reporte_admin_intercom_{f_desde}_a_{f_hasta}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.info("No hay datos filtrados para descargar actualmente.")
+
+if st.session_state["auto_refresh"]:
+    time_lib.sleep(st.session_state["refresh_interval"])
     st.rerun()
