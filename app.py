@@ -885,7 +885,7 @@ with tab_resumen:
         st.info("No hay chats registrados para el rango de fechas seleccionado en la barra lateral.")
 
 with tab_admin:
-    st.markdown("### Panel de Administracion y Configuracion")
+    st.markdown("### Panel de Administración y Configuración")
 
     if not st.session_state["admin_authenticated"]:
         
