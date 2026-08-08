@@ -1,15 +1,14 @@
 import os
-import streamlit as st
-import pandas as pd
 import io
 import time as time_lib
 from datetime import datetime, timedelta, time
+import pandas as pd
+import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 
-# Intentar importar la función de sincronización desde sync_intercom.py
 try:
     from sync_intercom import sincronizar_intercom
     SYNC_AVAILABLE = True
@@ -17,7 +16,7 @@ except ImportError:
     SYNC_AVAILABLE = False
 
 INTERCOM_APP_ID = "co9kozj6"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")  # Cambiar por tu clave deseada
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
@@ -57,19 +56,17 @@ def obtener_datos_supabase():
     df = pd.DataFrame(todos_los_datos)
     return df
 
-st.set_page_config(page_title="Executive Operations Control Center", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Executive Operations Control Center", layout="wide")
 
 st.markdown("""
 <style>
     .stApp { background-color: #0f172a; color: #f8fafc; }
     
-    /* MARGEN SUPERIOR ESTÉTICO PARA EL CONTENIDO PRINCIPAL */
     .block-container {
         padding-top: 2.2rem !important;
         padding-bottom: 1.5rem !important;
     }
     
-    /* OCULTAR LA BARRA SUPERIOR DE STREAMLIT */
     header[data-testid="stHeader"] {
         display: none !important;
     }
@@ -77,7 +74,6 @@ st.markdown("""
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
 
-    /* Colapsar espacio muerto en la cabecera del sidebar */
     [data-testid="stSidebarHeader"] {
         padding-top: 0px !important;
         padding-bottom: 0px !important;
@@ -97,8 +93,8 @@ st.markdown("""
         border-radius: 10px; border-left: 5px solid #38bdf8;
     }
     .db-info-box {
-        background-color: #1e293b; color: #94a3b8; padding: 10px;
-        border-radius: 8px; border: 1px solid #334155; font-size: 0.85rem; margin-bottom: 8px;
+        background-color: #1e293b; color: #94a3b8; padding: 12px;
+        border-radius: 8px; border: 1px solid #334155; font-size: 0.85rem; margin-bottom: 12px;
     }
     .alert-card-critical {
         background-color: #7f1d1d; color: #fef2f2; padding: 16px;
@@ -238,10 +234,10 @@ def tiempo_hace(dt_obj):
     elif secs < 86400:
         return f"Hace {secs // 3600} hora(s)"
     else:
-        return f"Hace {secs // 86400} día(s)"
+        return f"Hace {secs // 86400} dia(s)"
 
 # ==========================
-# INITIAL SESSION STATE PARAMS
+# ESTADO DE SESIÓN Y PARÁMETROS
 # ==========================
 if "auto_refresh" not in st.session_state:
     st.session_state["auto_refresh"] = True
@@ -254,105 +250,72 @@ if "sla_gest_th" not in st.session_state:
 if "admin_authenticated" not in st.session_state:
     st.session_state["admin_authenticated"] = False
 
-# ==========================
-# CARGA DE DATOS DE SUPABASE
-# ==========================
-df_all = obtener_datos_supabase()
-
-# ==========================
-# SIDEBAR / CONTROL CENTER
-# ==========================
-if not df_all.empty and "created_at" in df_all.columns:
-    df_all["created_at"] = pd.to_datetime(df_all["created_at"])
-    df_all["updated_at"] = pd.to_datetime(df_all["updated_at"])
-    
-    min_created_dt = df_all["created_at"].min()
-    max_updated_dt = df_all["updated_at"].max() if "updated_at" in df_all.columns else min_created_dt
-    
-    st.sidebar.markdown(f"""
-    <div class="db-info-box">
-        <b>💾 Estado Base de Datos (Supabase):</b><br>
-        • <b>Actualizado:</b> {tiempo_hace(max_updated_dt)}<br>
-        • <b>Registros desde:</b> {min_created_dt.strftime('%d/%m/%Y')}
-    </div>
-    """, unsafe_allow_html=True)
-
 hoy = datetime.now().date()
-
 if "input_f_desde" not in st.session_state:
     st.session_state["input_f_desde"] = hoy
 if "input_f_hasta" not in st.session_state:
     st.session_state["input_f_hasta"] = hoy
+
+# ==========================
+# SIDEBAR / ESTADO & FILTROS ELEGANTES
+# ==========================
+df_all_init = obtener_datos_supabase()
+
+if not df_all_init.empty and "created_at" in df_all_init.columns:
+    df_all_init["created_at"] = pd.to_datetime(df_all_init["created_at"])
+    df_all_init["updated_at"] = pd.to_datetime(df_all_init["updated_at"])
+    
+    min_created_dt = df_all_init["created_at"].min()
+    max_updated_dt = df_all_init["updated_at"].max() if "updated_at" in df_all_init.columns else min_created_dt
+    
+    st.sidebar.markdown(f"""
+    <div class="db-info-box">
+        <b>Estado Base de Datos (Supabase):</b><br>
+        • <b>Ultima sincronizacion:</b> {tiempo_hace(max_updated_dt)}<br>
+        • <b>Registros desde:</b> {min_created_dt.strftime('%d/%m/%Y')}
+    </div>
+    """, unsafe_allow_html=True)
 
 col_top1, col_top2 = st.sidebar.columns([1, 1])
 with col_top1:
     auto_refresh_val = st.toggle("Autorefresh", value=st.session_state["auto_refresh"])
     st.session_state["auto_refresh"] = auto_refresh_val
 with col_top2:
-    if st.button("📅 Hoy", use_container_width=True):
+    if st.button("Hoy", use_container_width=True):
         st.session_state["input_f_desde"] = datetime.now().date()
         st.session_state["input_f_hasta"] = datetime.now().date()
         st.rerun()
 
-refresh_interval = st.sidebar.slider("Frecuencia de refresco (seg)", 3, 30, st.session_state["refresh_interval"])
-st.session_state["refresh_interval"] = refresh_interval
+st.sidebar.markdown("### Filtros de Consulta")
 
 with st.sidebar.form("form_filtros"):
+    st.markdown("<b>Rango de Fechas</b>", unsafe_allow_html=True)
     f_col1, f_col2 = st.columns(2)
     fecha_desde = f_col1.date_input("Desde", key="input_f_desde")
     fecha_hasta = f_col2.date_input("Hasta", key="input_f_hasta")
 
+    st.markdown("---")
     usar_filtro_hora = st.checkbox("Restringir Franja Horaria")
     h_col1, h_col2 = st.columns(2)
     hora_inicio = h_col1.time_input("Inicio", time(8, 0))
     hora_fin = h_col2.time_input("Fin", time(18, 0))
 
-    s_col1, s_col2 = st.columns(2)
-    sla_1ra_th = s_col1.number_input("SLA 1ª (m)", value=float(st.session_state["sla_1ra_th"]), step=0.5)
-    sla_gest_th = s_col2.number_input("SLA Gest (m)", value=float(st.session_state["sla_gest_th"]), step=5.0)
-    st.session_state["sla_1ra_th"] = sla_1ra_th
-    st.session_state["sla_gest_th"] = sla_gest_th
-
+    st.markdown("---")
     act_sonido = st.checkbox("Alertas Sonoras", value=True)
 
-    btn_aplicar = st.form_submit_button("Aplicar Filtro", use_container_width=True)
+    btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
 
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
 
-# PROCESAMIENTO DE DATOS
-if not df_all.empty:
-    df_all["fecha_cierre_dt"] = pd.to_datetime(df_all["fecha_cierre"], errors="coerce")
-    df_all["fecha_solo"] = df_all["created_at"].dt.date
-    df_all["hora_solo"] = df_all["created_at"].dt.time
-    df_all["horario_evaluado"] = df_all["created_at"].apply(evaluar_horario)
-    df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
-
-    df_all["sla_1ra_eval"] = df_all.apply(
-        lambda r: evaluar_sla_1ra(r.get("por_agente"), r.get("horario_evaluado"), r.get("primera_respuesta_min"), sla_1ra_th), axis=1
-    )
-    df_all["sla_gest_eval"] = df_all.apply(
-        lambda r: evaluar_sla_gestion(r.get("por_agente"), r.get("horario_evaluado"), r.get("tiempo_resolucion_minutos"), sla_gest_th), axis=1
-    )
-
-    for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado"]:
-        if col not in df_all.columns:
-            df_all[col] = "Sin datos" if col != "motivo_normalizado" else "Consulta General"
-
-f_desde, f_hasta = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
-df_filtered = df_all[(df_all["fecha_solo"] >= f_desde) & (df_all["fecha_solo"] <= f_hasta)].copy() if not df_all.empty else pd.DataFrame()
-
-if usar_filtro_hora and not df_filtered.empty:
-    df_filtered = df_filtered[(df_filtered["hora_solo"] >= hora_inicio) & (df_filtered["hora_solo"] <= hora_fin)]
-
 # Exportador a Excel
 def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
     output = io.BytesIO()
-    horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el día (Sin restricción)"
+    horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
 
     df_reporte = pd.DataFrame()
-    df_reporte["Conversación ID"] = df_exp.get("id", "")
-    df_reporte["Fecha creación"] = df_exp["created_at"].dt.strftime("%Y-%m-%d %H:%M:%S") if "created_at" in df_exp else ""
+    df_reporte["Conversacion ID"] = df_exp.get("id", "")
+    df_reporte["Fecha creacion"] = df_exp["created_at"].dt.strftime("%Y-%m-%d %H:%M:%S") if "created_at" in df_exp else ""
     df_reporte["Canal de contacto"] = df_exp.get("canal", "")
     df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
     df_reporte["Company"] = df_exp.get("company", "Sin datos")
@@ -361,33 +324,33 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Horario Evaluado"] = df_exp.get("horario_evaluado", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
-    df_reporte["SLA 1ª Resp"] = df_exp.get("sla_1ra_eval", "")
+    df_reporte["SLA 1a Resp"] = df_exp.get("sla_1ra_eval", "")
     
     if "rating" in df_exp:
-        df_reporte["Calificación"] = df_exp["rating"].apply(calificacion_a_estrellas)
+        df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
     else:
-        df_reporte["Calificación"] = ""
+        df_reporte["Calificacion"] = ""
         
     df_reporte["Feedback"] = df_exp.get("feedback", "")
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
     df_reporte["Fecha cierre"] = df_exp.get("fecha_cierre", "").fillna("")
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
-    df_reporte["Módulo"] = df_exp.get("modulo", "")
+    df_reporte["Modulo"] = df_exp.get("modulo", "")
     df_reporte["Cliente"] = df_exp.get("cliente", "")
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
     df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
-    df_reporte["Tiempo resolución (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
-    df_reporte["Tiempo resolución (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
-    df_reporte["SLA Tiempo Gestión"] = df_exp.get("sla_gest_eval", "")
+    df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
+    df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
+    df_reporte["SLA Tiempo Gestion"] = df_exp.get("sla_gest_eval", "")
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_meta = pd.DataFrame([
             ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
             ["Rango de Fechas Consultado:", f"Desde {f_desde_val} hasta {f_hasta_val}"],
             ["Franja Horaria Aplicada:", horario_texto],
-            ["Fecha de Generación:", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+            ["Fecha de Generacion:", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
             ["", ""]
         ])
         df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
@@ -400,30 +363,50 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     output.seek(0)
     return output
 
-if not df_filtered.empty:
-    st.sidebar.markdown("---")
-    st.sidebar.download_button(
-        label="📥 Exportar Excel",
-        data=generar_excel_reporte(df_filtered, f_desde, f_hasta, usar_filtro_hora, hora_inicio, hora_fin),
-        file_name=f"reporte_intercom_{f_desde}_a_{f_hasta}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
-
-# Header
 st.title("Dashboard Soporte BIMS")
 
-# TABS PRINCIPALES
 tab_operativo, tab_resumen, tab_admin = st.tabs([
     "Control Operativo & SLA", 
     "Resumen de Chats & Agentes", 
-    "⚙️ Administración & Configuración"
+    "Administracion & Configuracion"
 ])
 
-# ==========================================
-# PESTAÑA 1: CONTROL OPERATIVO & SLA
-# ==========================================
-with tab_operativo:
+# =========================================================
+# FRAGMENTO SIN PARPADEO PARA LA PESTAÑA DE CONTROL OPERATIVO
+# =========================================================
+refresh_sec = timedelta(seconds=st.session_state["refresh_interval"]) if st.session_state["auto_refresh"] else None
+
+@st.fragment(run_every=refresh_sec)
+def renderizar_control_operativo():
+    df_all = obtener_datos_supabase()
+    sla_1ra_th = st.session_state["sla_1ra_th"]
+    sla_gest_th = st.session_state["sla_gest_th"]
+
+    if not df_all.empty:
+        df_all["created_at"] = pd.to_datetime(df_all["created_at"])
+        df_all["fecha_cierre_dt"] = pd.to_datetime(df_all["fecha_cierre"], errors="coerce")
+        df_all["fecha_solo"] = df_all["created_at"].dt.date
+        df_all["hora_solo"] = df_all["created_at"].dt.time
+        df_all["horario_evaluado"] = df_all["created_at"].apply(evaluar_horario)
+        df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
+
+        df_all["sla_1ra_eval"] = df_all.apply(
+            lambda r: evaluar_sla_1ra(r.get("por_agente"), r.get("horario_evaluado"), r.get("primera_respuesta_min"), sla_1ra_th), axis=1
+        )
+        df_all["sla_gest_eval"] = df_all.apply(
+            lambda r: evaluar_sla_gestion(r.get("por_agente"), r.get("horario_evaluado"), r.get("tiempo_resolucion_minutos"), sla_gest_th), axis=1
+        )
+
+        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado"]:
+            if col not in df_all.columns:
+                df_all[col] = "Sin datos" if col != "motivo_normalizado" else "Consulta General"
+
+    f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
+    df_filtered = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy() if not df_all.empty else pd.DataFrame()
+
+    if usar_filtro_hora and not df_filtered.empty:
+        df_filtered = df_filtered[(df_filtered["hora_solo"] >= hora_inicio) & (df_filtered["hora_solo"] <= hora_fin)]
+
     now_dt = datetime.now()
     
     df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty else pd.DataFrame()
@@ -441,8 +424,8 @@ with tab_operativo:
         if not df_criticos_sla.empty:
             st.markdown(f"""
             <div class="alert-card-critical">
-                <b>¡ALERTA CRÍTICA DE SLA EN VIVO!</b><br>
-                Hay <b>{len(df_criticos_sla)} chat(s) en espera</b> sin respuesta rozando o superando el límite de SLA ({sla_1ra_th} min).
+                <b>ALERTA CRITICA DE SLA EN VIVO</b><br>
+                Hay <b>{len(df_criticos_sla)} chat(s) en espera</b> sin respuesta rozando o superando el limite de SLA ({sla_1ra_th} min).
             </div>
             """, unsafe_allow_html=True)
 
@@ -481,8 +464,8 @@ with tab_operativo:
     diff_q = round(c_q - c_q_ant, 1)
 
     c_rango, k_rango = calcular_csat(df_filtered) if not df_filtered.empty else (0.0, 0)
-    duracion_dias = (f_hasta - f_desde).days + 1
-    f_hasta_prev = f_desde - timedelta(days=1)
+    duracion_dias = (f_hasta_v - f_desde_v).days + 1
+    f_hasta_prev = f_desde_v - timedelta(days=1)
     f_desde_prev = f_hasta_prev - timedelta(days=duracion_dias - 1)
     df_prev_rango = df_all[(df_all["fecha_solo"] >= f_desde_prev) & (df_all["fecha_solo"] <= f_hasta_prev)] if not df_all.empty else pd.DataFrame()
     c_rango_prev, _ = calcular_csat(df_prev_rango)
@@ -493,12 +476,10 @@ with tab_operativo:
     m2.metric("CSAT Esta Semana", f"{c_sem}%", f"{diff_sem}% vs Sem. Ant.", help=f"{k_sem} respuestas validadas")
     m3.metric("CSAT Este Mes", f"{c_mes}%", f"{diff_mes}% vs Mes Ant.", help=f"{k_mes} respuestas validadas")
     m4.metric(f"CSAT Trimestre (Q{q_act})", f"{c_q}%", f"{diff_q}% vs Q Ant.", help=f"{k_q} respuestas validadas")
-    m5.metric("CSAT Rango Seleccionado", f"{c_rango}%", f"{diff_rango}% vs Período Ant.", help=f"{k_rango} respuestas validadas ({f_desde} a {f_hasta})")
+    m5.metric("CSAT Rango Seleccionado", f"{c_rango}%", f"{diff_rango}% vs Periodo Ant.", help=f"{k_rango} respuestas validadas ({f_desde_v} a {f_hasta_v})")
 
-    # ==========================================
-    # GRÁFICO DE EVOLUCIÓN HISTÓRICA DE CSAT (ÚLTIMOS 6 MESES)
-    # ==========================================
-    with st.expander("📈 Ver Gráfico de Evolución del CSAT (Últimos 6 Meses)", expanded=False):
+    # EVOLUCIÓN HISTÓRICA DE CSAT
+    with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
         if not df_all.empty:
             fecha_6m_atras = (datetime.now() - timedelta(days=180)).date()
             df_6m = df_all[df_all["fecha_solo"] >= fecha_6m_atras].copy()
@@ -553,9 +534,9 @@ with tab_operativo:
                 )
 
                 fig_csat.update_layout(
-                    title="<b>Evolución Mensual de Satisfacción al Cliente (CSAT)</b>",
+                    title="<b>Evolucion Mensual de Satisfaccion al Cliente (CSAT)</b>",
                     xaxis_title="Mes",
-                    yaxis_title="Satisfacción Positiva (%)",
+                    yaxis_title="Satisfaccion Positiva (%)",
                     yaxis=dict(range=[0, 105], gridcolor="#334155"),
                     xaxis=dict(gridcolor="#334155"),
                     paper_bgcolor="#1e293b",
@@ -567,37 +548,37 @@ with tab_operativo:
 
                 st.plotly_chart(fig_csat, use_container_width=True)
             else:
-                st.info("No hay suficientes encuestas validadas en los últimos 6 meses para generar el gráfico.")
+                st.info("No hay suficientes encuestas validadas en los ultimos 6 meses para generar el grafico.")
         else:
             st.info("Sin registros en la base de datos.")
 
-    # TABLA DE DETALLE DE CSAT DEL PERÍODO CONSULTADO
+    # DETALLE DE CSAT
     if not df_filtered.empty:
         df_csat_det = obtener_df_csat_valido(df_filtered)
         if not df_csat_det.empty:
-            with st.expander(f"📋 Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
+            with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
                 df_csat_det["Acceso Directo"] = df_csat_det["id"].apply(
                     lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
                 )
-                df_csat_det["Calificación"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+                df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
                 df_csat_det = df_csat_det.sort_values(by=["rating_num", "created_at"], ascending=[True, False])
 
                 st.dataframe(
                     df_csat_det[[
-                        "id", "Acceso Directo", "created_at", "Calificación", "feedback", 
+                        "id", "Acceso Directo", "created_at", "Calificacion", "feedback", 
                         "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
                     ]],
                     column_config={
                         "id": "ID Chat",
-                        "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat ↗"),
+                        "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
                         "created_at": "Fecha/Hora",
-                        "Calificación": "Puntaje",
+                        "Calificacion": "Puntaje",
                         "feedback": "Comentario / Feedback",
                         "nombre_contacto": "Contacto",
                         "tenant": "Tenant",
                         "company": "Company",
                         "agente_evaluado": "Agente Evaluado",
-                        "cx_score_explanation": "Explicación CX"
+                        "cx_score_explanation": "Explicacion CX"
                     },
                     hide_index=True,
                     use_container_width=True
@@ -605,8 +586,8 @@ with tab_operativo:
 
     st.markdown("---")
 
-    # RESUMEN POR AGENTE
-    st.markdown("### Métricas por Agente")
+    # METRICAS POR AGENTE
+    st.markdown("### Metricas por Agente")
     if not df_filtered.empty:
         v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] != "fuera de horario")]
         p_1r = round(v_df["primera_respuesta_min"].mean(), 2) if not v_df.empty else 0
@@ -615,8 +596,8 @@ with tab_operativo:
         df_cerrados = df_filtered[df_filtered["es_cerrado"]]
 
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Prom. 1ª Respuesta", f"{p_1r} min")
-        k2.metric("Prom. Tiempo Gestión", f"{p_gest} min")
+        k1.metric("Prom. 1a Respuesta", f"{p_1r} min")
+        k2.metric("Prom. Tiempo Gestion", f"{p_gest} min")
         k3.metric("Total Chats Consultados", len(df_filtered))
         k4.metric("Total Chats Cerrados", len(df_cerrados))
 
@@ -645,9 +626,9 @@ with tab_operativo:
                 "Agente": agente, 
                 "Asignados": asig, 
                 "Cerrados": cerr,
-                "Prom. 1ª Resp (min)": p_1, 
-                f"% SLA 1ª Resp (≤{sla_1ra_th}m)": f"{sla_1}%", 
-                f"% SLA Gestión (≤{sla_gest_th}m)": f"{sla_g}%"
+                "Prom. 1a Resp (min)": p_1, 
+                f"% SLA 1a Resp (<= {sla_1ra_th}m)": f"{sla_1}%", 
+                f"% SLA Gestion (<= {sla_gest_th}m)": f"{sla_g}%"
             })
         
         st.dataframe(pd.DataFrame(res_agentes), use_container_width=True)
@@ -655,7 +636,7 @@ with tab_operativo:
     st.markdown("---")
 
     # RANKING DE CHATS ABIERTOS
-    st.markdown("### Ranking de Chats Abiertos (Por Antigüedad)")
+    st.markdown("### Ranking de Chats Abiertos (Por Antigueedad)")
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
@@ -671,9 +652,9 @@ with tab_operativo:
                 "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"
             ]],
             column_config={
-                "id": "ID Conversación",
-                "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat ↗"),
-                "created_at": "Fecha Creación", 
+                "id": "ID Conversacion",
+                "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
+                "created_at": "Fecha Creacion", 
                 "Horas Transcurridas": "Horas Abierto",
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
@@ -688,22 +669,40 @@ with tab_operativo:
         st.info("No hay chats abiertos pendientes en este momento.")
 
 # ==========================================
-# PESTAÑA 2: RESUMEN DE CHATS & AGENTES
+# RENDERIZADO DE PESTAÑAS
 # ==========================================
+
+with tab_operativo:
+    renderizar_control_operativo()
+
 with tab_resumen:
-    st.markdown(f"### 📈 Análisis de Chats por Agente (`{f_desde}` al `{f_hasta}`)")
+    df_all_r = obtener_datos_supabase()
+    f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
-    if not df_filtered.empty:
-        df_res = df_filtered.copy()
+    if not df_all_r.empty:
+        df_all_r["created_at"] = pd.to_datetime(df_all_r["created_at"])
+        df_all_r["fecha_solo"] = df_all_r["created_at"].dt.date
+        df_all_r["hora_solo"] = df_all_r["created_at"].dt.time
+        df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy()
+        
+        if usar_filtro_hora and not df_filtered_r.empty:
+            df_filtered_r = df_filtered_r[(df_filtered_r["hora_solo"] >= hora_inicio) & (df_filtered_r["hora_solo"] <= hora_fin)]
+    else:
+        df_filtered_r = pd.DataFrame()
+
+    st.markdown(f"### Analisis de Chats por Agente (`{f_desde_v}` al `{f_hasta_v}`)")
+    
+    if not df_filtered_r.empty:
+        df_res = df_filtered_r.copy()
         df_res = df_res.sort_values(by="created_at", ascending=True)
 
-        df_res["Día"] = df_res["created_at"].dt.strftime("%Y-%m-%d")
+        df_res["Dia"] = df_res["created_at"].dt.strftime("%Y-%m-%d")
 
         df_agentes_total = df_res["agente_asignado"].value_counts().reset_index()
         df_agentes_total.columns = ["Agente", "Cantidad de Chats"]
 
         total_chats_periodo = len(df_res)
-        num_dias = df_res["Día"].nunique()
+        num_dias = df_res["Dia"].nunique()
         promedio_diario = round(total_chats_periodo / num_dias, 1) if num_dias > 0 else 0
         top_agente = df_agentes_total.iloc[0]["Agente"] if not df_agentes_total.empty else "N/A"
         top_agente_count = df_agentes_total.iloc[0]["Cantidad de Chats"] if not df_agentes_total.empty else 0
@@ -712,15 +711,15 @@ with tab_resumen:
         r1, r2, r3, r4 = st.columns(4)
         r1.metric("Total Chats en Rango", total_chats_periodo)
         r2.metric("Promedio Diario", f"{promedio_diario} chats")
-        r3.metric("Agente con Más Chats", top_agente, f"{top_agente_count} chats")
-        r4.metric("Participación Top Agente", f"{pct_top}%")
+        r3.metric("Agente con Mas Chats", top_agente, f"{top_agente_count} chats")
+        r4.metric("Participacion Top Agente", f"{pct_top}%")
 
         st.markdown("---")
 
         g_pie, g_bar = st.columns([1, 1])
 
         with g_pie:
-            st.markdown("#### 🥧 Distribución de Chats por Agente")
+            st.markdown("#### Distribucion de Chats por Agente")
             fig_pie = px.pie(
                 df_agentes_total, 
                 values="Cantidad de Chats", 
@@ -733,24 +732,24 @@ with tab_resumen:
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with g_bar:
-            st.markdown("#### 📊 Evolución Diaria por Agente")
-            df_dia_agente = df_res.groupby(["Día", "agente_asignado"]).size().reset_index(name="Cantidad")
+            st.markdown("#### Evolucion Diaria por Agente")
+            df_dia_agente = df_res.groupby(["Dia", "agente_asignado"]).size().reset_index(name="Cantidad")
             fig_bar = px.bar(
                 df_dia_agente,
-                x="Día",
+                x="Dia",
                 y="Cantidad",
                 color="agente_asignado",
                 barmode="stack",
-                title="Volumen de Chats por Día",
+                title="Volumen de Chats por Dia",
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
         st.markdown("---")
 
-        st.markdown("#### 📋 Tabla Desglosada por Día y Agente")
+        st.markdown("#### Tabla Desglosada por Dia y Agente")
         df_pivot = df_res.pivot_table(
-            index="Día", 
+            index="Dia", 
             columns="agente_asignado", 
             values="id", 
             aggfunc="count", 
@@ -761,17 +760,14 @@ with tab_resumen:
     else:
         st.info("No hay chats registrados para el rango de fechas seleccionado en la barra lateral.")
 
-# ==========================================
-# PESTAÑA 3: ADMINISTRACIÓN & CONFIGURACIÓN
-# ==========================================
 with tab_admin:
-    st.markdown("### 🔒 Panel de Administración y Configuración")
+    st.markdown("### Panel de Administracion y Configuracion")
 
     if not st.session_state["admin_authenticated"]:
-        st.warning("Esta sección está protegida. Por favor ingresa la contraseña de administrador.")
+        st.warning("Esta seccion esta protegida. Por favor ingresa la contrasena de administrador.")
         
         with st.form("form_login_admin"):
-            input_pass = st.text_input("Contraseña", type="password")
+            input_pass = st.text_input("Contrasena", type="password")
             btn_login = st.form_submit_button("Acceder", use_container_width=True)
             
             if btn_login:
@@ -780,95 +776,97 @@ with tab_admin:
                     st.success("Acceso concedido.")
                     st.rerun()
                 else:
-                    st.error("Contraseña incorrecta.")
+                    st.error("Contrasena incorrecta.")
     else:
-        st.success("🔓 Sesión de administración activa.")
-        if st.button("Cerrar Sesión Admin"):
+        st.success("Sesion de administracion activa.")
+        if st.button("Cerrar Sesion Admin"):
             st.session_state["admin_authenticated"] = False
             st.rerun()
 
         st.markdown("---")
         
-        # SECCIÓN 1: FORZAR ACTUALIZACIÓN CON INDICADOR DE PROGRESO
-        st.markdown("#### 🔄 Forzar Sincronización Manual de Intercom")
+        st.markdown("#### Forzar Sincronizacion Manual de Intercom")
         st.write("Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.")
         
         c_sync1, c_sync2 = st.columns([1, 2])
-        dias_a_sincronizar = c_sync1.number_input("Días hacia atrás:", min_value=1, max_value=90, value=3)
+        dias_a_sincronizar = c_sync1.number_input("Dias hacia atras:", min_value=1, max_value=90, value=3)
         
-        if c_sync2.button("🚀 Iniciar Sincronización Manual", use_container_width=True):
+        if c_sync2.button("Iniciar Sincronizacion Manual", use_container_width=True):
             if SYNC_AVAILABLE:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
                 try:
-                    status_text.text("🔄 Iniciando conexión con Intercom API...")
+                    status_text.text("Iniciando conexion con Intercom API...")
                     progress_bar.progress(20)
                     time_lib.sleep(0.5)
                     
-                    status_text.text(f"⏳ Procesando conversaciones de los últimos {dias_a_sincronizar} días...")
+                    status_text.text(f"Procesando conversaciones de los ultimos {dias_a_sincronizar} dias...")
                     progress_bar.progress(50)
                     
-                    # Llamada a la función sync
                     sincronizar_intercom(dias=dias_a_sincronizar)
                     
                     progress_bar.progress(90)
-                    status_text.text("💾 Guardando cambios en Supabase...")
+                    status_text.text("Guardando cambios en Supabase...")
                     time_lib.sleep(0.5)
                     
                     progress_bar.progress(100)
-                    status_text.text("✅ ¡Sincronización completada exitosamente!")
+                    status_text.text("Sincronizacion completada exitosamente!")
                     st.success("La base de datos fue actualizada. Recargando la vista...")
                     time_lib.sleep(1)
                     st.rerun()
                 except Exception as e:
-                    status_text.text("❌ Ocurrió un error durante la sincronización.")
+                    status_text.text("Ocurrio un error durante la sincronizacion.")
                     st.error(f"Detalle del error: {str(e)}")
             else:
-                st.error("No se encontró el módulo `sync_intercom.py` en el proyecto. Asegúrate de incluirlo junto con `app.py`.")
+                st.error("No se encontro el modulo `sync_intercom.py` en el proyecto.")
 
         st.markdown("---")
 
-        # SECCIÓN 2: CONTROL DE REFRESCO AUTOMÁTICO Y TIEMPOS DE SLA
-        st.markdown("#### ⚙️ Parámetros Globales del Dashboard")
+        st.markdown("#### Parametros Globales del Dashboard")
         
         col_cfg1, col_cfg2 = st.columns(2)
         
         with col_cfg1:
-            st.markdown("##### ⏱️ Refresco Automático")
+            st.markdown("##### Refresco Automatico")
             cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
             cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
         
         with col_cfg2:
-            st.markdown("##### 🎯 Umbrales de SLA (Minutos)")
+            st.markdown("##### Umbrales de SLA (Minutos)")
             cfg_sla_1ra = st.number_input("SLA Primera Respuesta (m):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
-            cfg_sla_gest = st.number_input("SLA Tiempo de Gestión (m):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
+            cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (m):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
 
-        if st.button("💾 Guardar Configuración de Parámetros"):
+        if st.button("Guardar Configuracion de Parametros"):
             st.session_state["auto_refresh"] = cfg_auto
             st.session_state["refresh_interval"] = cfg_interval
             st.session_state["sla_1ra_th"] = cfg_sla_1ra
             st.session_state["sla_gest_th"] = cfg_sla_gest
-            st.success("Configuración actualizada correctamente.")
+            st.success("Configuracion actualizada correctamente.")
             st.rerun()
 
         st.markdown("---")
 
-        # SECCIÓN 3: DESCARGA DIRECTA DE EXCEL
-        st.markdown("#### 📊 Descarga Masiva de Reportes Excel")
-        st.write("Genera y descarga un reporte completo formateado en Excel para los registros filtrados actualmente o de forma masiva.")
+        st.markdown("#### Descarga Masiva de Reportes Excel")
         
-        if not df_filtered.empty:
+        df_all_exp = obtener_datos_supabase()
+        if not df_all_exp.empty:
+            df_all_exp["created_at"] = pd.to_datetime(df_all_exp["created_at"])
+            df_all_exp["fecha_solo"] = df_all_exp["created_at"].dt.date
+            df_all_exp["hora_solo"] = df_all_exp["created_at"].dt.time
+            df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
+            if usar_filtro_hora and not df_exp_filt.empty:
+                df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
+        else:
+            df_exp_filt = pd.DataFrame()
+
+        if not df_exp_filt.empty:
             st.download_button(
-                label="📥 Descargar Reporte Filtrado en Excel",
-                data=generar_excel_reporte(df_filtered, f_desde, f_hasta, usar_filtro_hora, hora_inicio, hora_fin),
-                file_name=f"reporte_admin_intercom_{f_desde}_a_{f_hasta}.xlsx",
+                label="Descargar Reporte Filtrado en Excel",
+                data=generar_excel_reporte(df_exp_filt, fecha_desde, fecha_hasta, usar_filtro_hora, hora_inicio, hora_fin),
+                file_name=f"reporte_intercom_{fecha_desde}_a_{fecha_hasta}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
         else:
             st.info("No hay datos filtrados para descargar actualmente.")
-
-if st.session_state["auto_refresh"]:
-    time_lib.sleep(st.session_state["refresh_interval"])
-    st.rerun()
