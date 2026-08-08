@@ -653,7 +653,7 @@ def renderizar_control_operativo():
     st.markdown("---")
 
     # RANKING DE CHATS ABIERTOS
-    st.markdown("### Ranking de Chats Abiertos (Por Antigueedad)")
+    st.markdown("### Ranking de Chats Abiertos (Por Antigüedad)")
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
