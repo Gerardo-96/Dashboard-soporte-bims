@@ -259,7 +259,7 @@ if "input_f_hasta" not in st.session_state:
     st.session_state["input_f_hasta"] = hoy
 
 # ==========================
-# SIDEBAR / ESTADO & FILTROS ELEGANTES
+# SIDEBAR / ESTADO & FILTROS OPTIMIZADOS
 # ==========================
 df_all_init = obtener_datos_supabase()
 
@@ -269,7 +269,6 @@ if not df_all_init.empty and "created_at" in df_all_init.columns:
     
     min_created_dt = df_all_init["created_at"].min()
     max_updated_dt = df_all_init["updated_at"].max() if "updated_at" in df_all_init.columns else min_created_dt
-    
     min_created_str = min_created_dt.strftime('%d/%m/%Y') if pd.notna(min_created_dt) else "N/A"
     
     st.sidebar.markdown(f"""
@@ -280,31 +279,28 @@ if not df_all_init.empty and "created_at" in df_all_init.columns:
     </div>
     """, unsafe_allow_html=True)
 
-col_top1, col_top2 = st.sidebar.columns([1, 1])
-with col_top1:
-    auto_refresh_val = st.toggle("Autorefresh", value=st.session_state["auto_refresh"])
-    st.session_state["auto_refresh"] = auto_refresh_val
-with col_top2:
-    if st.button("Hoy", use_container_width=True):
-        st.session_state["input_f_desde"] = datetime.now().date()
-        st.session_state["input_f_hasta"] = datetime.now().date()
-        st.rerun()
+# Boton directo "Hoy" a ancho completo
+if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
+    st.session_state["input_f_desde"] = datetime.now().date()
+    st.session_state["input_f_hasta"] = datetime.now().date()
+    st.rerun()
 
 st.sidebar.markdown("### Filtros de Consulta")
 
 with st.sidebar.form("form_filtros"):
-    st.markdown("<b>Rango de Fechas</b>", unsafe_allow_html=True)
+    st.caption("Rango de Fechas")
     f_col1, f_col2 = st.columns(2)
     fecha_desde = f_col1.date_input("Desde", key="input_f_desde")
     fecha_hasta = f_col2.date_input("Hasta", key="input_f_hasta")
 
-    st.markdown("---")
     usar_filtro_hora = st.checkbox("Restringir Franja Horaria")
-    h_col1, h_col2 = st.columns(2)
-    hora_inicio = h_col1.time_input("Inicio", time(8, 0))
-    hora_fin = h_col2.time_input("Fin", time(18, 0))
+    if usar_filtro_hora:
+        h_col1, h_col2 = st.columns(2)
+        hora_inicio = h_col1.time_input("Inicio", time(8, 0))
+        hora_fin = h_col2.time_input("Fin", time(18, 0))
+    else:
+        hora_inicio, hora_fin = time(8, 0), time(18, 0)
 
-    st.markdown("---")
     act_sonido = st.checkbox("Alertas Sonoras", value=True)
 
     btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
