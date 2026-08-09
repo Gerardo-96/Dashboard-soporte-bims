@@ -366,7 +366,7 @@ def tiempo_hace(dt_obj):
 if "auto_refresh" not in st.session_state:
     st.session_state["auto_refresh"] = True
 if "refresh_interval" not in st.session_state:
-    st.session_state["refresh_interval"] = 5
+    st.session_state["refresh_interval"] = 10
 if "sla_1ra_th" not in st.session_state:
     st.session_state["sla_1ra_th"] = 1.5
 if "sla_gest_th" not in st.session_state:
