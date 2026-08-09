@@ -34,8 +34,18 @@ def obtener_fecha_local_hoy():
     """Retorna la fecha actual en la zona horaria de Paraguay (America/Asuncion)."""
     return pd.Timestamp.now(tz="America/Asuncion").date()
 
+def convertir_a_minutos(val):
+    """Garantiza la conversión limpia a minutos numéricos float."""
+    if pd.isna(val) or val is None:
+        return None
+    try:
+        v = float(val)
+        return round(v, 2)
+    except (ValueError, TypeError):
+        return None
+
 def procesar_fechas_df(df):
-    """Convierte las fechas UTC a hora local (UTC-3) y crea las columnas auxiliares."""
+    """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas numéricas."""
     if df.empty or "created_at" not in df.columns:
         return df
     
@@ -62,6 +72,12 @@ def procesar_fechas_df(df):
         df["intercom_url"] = df["id_str"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
+
+    # Normalizar columnas de tiempo a minutos numéricos homogéneos
+    if "primera_respuesta_min" in df.columns:
+        df["primera_respuesta_min"] = df["primera_respuesta_min"].apply(convertir_a_minutos)
+    if "tiempo_resolucion_minutos" in df.columns:
+        df["tiempo_resolucion_minutos"] = df["tiempo_resolucion_minutos"].apply(convertir_a_minutos)
 
     return df
 
@@ -116,10 +132,12 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Oculta botón Manage App, Status Widget, Toolbar y pie de página de Streamlit */
+    /* Oculta botón Manage App, Badges, Status Widget, Toolbar y Footer de Streamlit */
     [data-testid="stStatusWidget"],
     [data-testid="stDecoration"],
     [data-testid="stAppViewerBadge"],
+    .stAppViewerBadge,
+    div[class*="stAppViewerBadge"],
     .stAppToolbar,
     div[data-testid="stDecoration"],
     #MainMenu,
@@ -127,7 +145,10 @@ st.markdown("""
     .stApp > footer {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
         height: 0px !important;
+        width: 0px !important;
+        pointer-events: none !important;
     }
 
     /* Botón flotante para el despliegue del sidebar */
