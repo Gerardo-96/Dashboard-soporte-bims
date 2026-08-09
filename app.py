@@ -110,22 +110,9 @@ def obtener_datos_supabase():
     df = pd.DataFrame(todos_los_datos)
     return procesar_fechas_df(df)
 
-# ==========================
-# CONTROL DEL SIDEBAR PERSONALIZADO
-# ==========================
-if "sidebar_state" not in st.session_state:
-    st.session_state["sidebar_state"] = "expanded"
-
-def toggle_sidebar():
-    if st.session_state["sidebar_state"] == "expanded":
-        st.session_state["sidebar_state"] = "collapsed"
-    else:
-        st.session_state["sidebar_state"] = "expanded"
-
 st.set_page_config(
     page_title="Executive Operations Control Center", 
-    layout="wide",
-    initial_sidebar_state=st.session_state["sidebar_state"]
+    layout="wide"
 )
 
 st.markdown("""
@@ -133,20 +120,25 @@ st.markdown("""
     .stApp { background-color: #0f172a; color: #f8fafc; }
     
     .block-container {
-        padding-top: 1.2rem !important;
+        padding-top: 1.5rem !important;
         padding-bottom: 1.5rem !important;
     }
     
-    /* Ocultar únicamente barra superior y menús no deseados */
-    header[data-testid="stHeader"],
+    /* Configuración transparente del header manteniendo accesible la flecha del sidebar */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+        z-index: 99999 !important;
+    }
+
+    /* Ocultar botones de Deploy y Menú estándar de la barra superior */
+    header[data-testid="stHeader"] .stDeployButton,
+    header[data-testid="stHeader"] #MainMenu,
     [data-testid="stStatusWidget"],
     [data-testid="stDecoration"],
     [data-testid="stAppViewerBadge"],
     .stAppViewerBadge,
     div[class*="stAppViewerBadge"],
     .stAppToolbar,
-    div[data-testid="stDecoration"],
-    #MainMenu,
     footer,
     .stApp > footer {
         display: none !important;
@@ -157,10 +149,22 @@ st.markdown("""
         pointer-events: none !important;
     }
 
+    /* HACER VISIBLE Y DESTACAR LA FLECHA NATIVA PARA ABRIR/CERRAR EL SIDEBAR */
+    [data-testid="stSidebarCollapseButton"], 
+    [data-testid="collapsedControl"] {
+        visibility: visible !important;
+        display: flex !important;
+        opacity: 1 !important;
+        color: #f8fafc !important;
+        background-color: #1e293b !important;
+        border-radius: 6px !important;
+        border: 1px solid #334155 !important;
+    }
+
     [data-testid="stSidebarHeader"] {
         padding-top: 0px !important;
         padding-bottom: 0px !important;
-        height: 1rem !important;
+        height: 1.8rem !important;
     }
     
     [data-testid="stSidebarUserContent"] {
@@ -518,17 +522,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     output.seek(0)
     return output
 
-# ==========================================
-# BARRA SUPERIOR CON BOTÓN DE TOGGLE SIDEBAR
-# ==========================================
-col_btn, col_title = st.columns([2, 15], vertical_alignment="center")
-
-with col_btn:
-    btn_icon = "◀ Filtros" if st.session_state["sidebar_state"] == "expanded" else "▶ Filtros"
-    st.button(btn_icon, on_click=toggle_sidebar, use_container_width=True)
-
-with col_title:
-    st.title("Dashboard Soporte BIMS")
+st.title("Dashboard Soporte BIMS")
 
 tab_operativo, tab_resumen, tab_admin = st.tabs([
     "Control Operativo & SLA", 
