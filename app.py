@@ -53,7 +53,7 @@ def verificar_credenciales_supabase(email_val, pass_val):
 
 # PANTALLA DE LOGIN
 if not st.session_state["user_authenticated"]:
-    st.set_page_config(page_title="Acceso - Dashboard Soporte BIMS", layout="centered")
+    st.set_page_config(page_title="Acceso - Dashboard Soporte BIMS", page_icon="📈", layout="centered")
     
     st.markdown("""
     <script>
@@ -270,9 +270,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 AUDIO_ALARM_HTML = """
-<audio autoplay>
-  <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
-</audio>
+<script>
+  function reproducirAlarma() {
+    var audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+    audio.play().catch(function(e) { console.log("Audio bloqueado por navegador:", e); });
+  }
+  // Reproducción inicial inmediata
+  reproducirAlarma();
+  // Pulso periódico cada 10 segundos
+  setInterval(reproducirAlarma, 10000);
+</script>
 """
 
 # ==========================
