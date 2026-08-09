@@ -334,7 +334,7 @@ if "sla_1ra_th" not in st.session_state:
 if "sla_gest_th" not in st.session_state:
     st.session_state["sla_gest_th"] = 60.0
 if "alerta_nuevo_th" not in st.session_state:
-    st.session_state["alerta_nuevo_th"] = 1.5
+    st.session_state["alerta_nuevo_th"] = 1.0
 if "admin_authenticated" not in st.session_state:
     st.session_state["admin_authenticated"] = False
 
