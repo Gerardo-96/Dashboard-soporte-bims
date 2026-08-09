@@ -16,13 +16,13 @@ except ImportError:
     SYNC_AVAILABLE = False
 
 INTERCOM_APP_ID = "co9kozj6"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
 # ==========================
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fpkuulubmyxuievvfsrj.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_49BZ9GrO1-3udRQj070uLQ_tgxYV7l1")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 @st.cache_resource
 def init_supabase() -> Client:
@@ -403,6 +403,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
     df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
+    df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
     df_reporte["SLA Tiempo Gestion"] = df_exp.get("sla_gest_eval", "")
@@ -455,9 +456,9 @@ def renderizar_control_operativo():
             lambda r: evaluar_sla_gestion(r.get("por_agente"), r.get("horario_evaluado"), r.get("tiempo_resolucion_minutos"), sla_gest_th), axis=1
         )
 
-        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado"]:
+        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "resumen_ia"]:
             if col not in df_all.columns:
-                df_all[col] = "Sin datos" if col != "motivo_normalizado" else "Consulta General"
+                df_all[col] = "Sin datos" if col not in ["motivo_normalizado", "resumen_ia"] else ("Consulta General" if col == "motivo_normalizado" else "Pendiente de procesamiento")
 
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     df_filtered = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy() if not df_all.empty else pd.DataFrame()
@@ -717,9 +718,10 @@ def renderizar_control_operativo():
     else:
         texto_rango_abiertos = f"del periodo {f_desde_v} al {f_hasta_v}"
 
-    st.markdown(f"### Ranking de Chats Abiertos ({texto_rango_abiertos})")
-    
     df_abiertos_filtrados = df_filtered[~df_filtered["es_cerrado"]].copy() if not df_filtered.empty else pd.DataFrame()
+    cant_abiertos_filtrados = len(df_abiertos_filtrados.drop_duplicates(subset=["id"])) if not df_abiertos_filtrados.empty else 0
+
+    st.markdown(f"### Ranking de Chats Abiertos ({texto_rango_abiertos}) — {cant_abiertos_filtrados} chats")
     
     if not df_abiertos_filtrados.empty:
         df_abiertos_filtrados = df_abiertos_filtrados.drop_duplicates(subset=["id"])
@@ -731,11 +733,13 @@ def renderizar_control_operativo():
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
 
+        cols_mostrar_filt = ["id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
+                             "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"]
+        if "resumen_ia" in df_abiertos_filtrados.columns:
+            cols_mostrar_filt.append("resumen_ia")
+
         st.dataframe(
-            df_abiertos_filtrados[[
-                "id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
-                "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"
-            ]],
+            df_abiertos_filtrados[cols_mostrar_filt],
             column_config={
                 "id": "ID Conversacion",
                 "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
@@ -746,7 +750,8 @@ def renderizar_control_operativo():
                 "company": "Company",
                 "canal": "Canal", 
                 "agente_asignado": "Agente Asignado", 
-                "motivo_normalizado": "Motivo Normalizado"
+                "motivo_normalizado": "Motivo Normalizado",
+                "resumen_ia": "Resumen IA"
             },
             hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_filtrados"
         )
@@ -756,7 +761,9 @@ def renderizar_control_operativo():
     st.markdown("---")
 
     # RANKING DE CHATS ABIERTOS GENERAL (TODOS LOS PENDIENTES HISTÓRICOS)
-    st.markdown("### Ranking General de Chats Abiertos (Historico Pendiente)")
+    cant_abiertos_gen = len(df_abiertos_all) if not df_abiertos_all.empty else 0
+    st.markdown(f"### Ranking General de Chats Abiertos (Historico Pendiente) — {cant_abiertos_gen} chats")
+    
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
@@ -766,11 +773,13 @@ def renderizar_control_operativo():
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
 
+        cols_mostrar_gen = ["id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
+                            "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"]
+        if "resumen_ia" in df_rank.columns:
+            cols_mostrar_gen.append("resumen_ia")
+
         st.dataframe(
-            df_rank[[
-                "id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
-                "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"
-            ]],
+            df_rank[cols_mostrar_gen],
             column_config={
                 "id": "ID Conversacion",
                 "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
@@ -781,7 +790,8 @@ def renderizar_control_operativo():
                 "company": "Company",
                 "canal": "Canal", 
                 "agente_asignado": "Agente Asignado", 
-                "motivo_normalizado": "Motivo Normalizado"
+                "motivo_normalizado": "Motivo Normalizado",
+                "resumen_ia": "Resumen IA"
             },
             hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_unica"
         )
