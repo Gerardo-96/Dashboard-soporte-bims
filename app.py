@@ -404,11 +404,25 @@ st.sidebar.markdown("### Filtros de Consulta")
 
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
 
+# Callback para restablecer la fecha a hoy de forma segura
+def set_fechas_hoy():
+    hoy = obtener_fecha_local_hoy()
+    st.session_state["input_f_desde"] = hoy
+    st.session_state["input_f_hasta"] = hoy
+
+# Botón ubicado arriba o fuera del formulario con su función callback
+st.sidebar.button("Establecer Fecha de Hoy", on_click=set_fechas_hoy, use_container_width=True)
+
 with st.sidebar.form("form_filtros"):
     st.caption("Rango de Fechas")
     f_col1, f_col2 = st.columns(2)
-    fecha_desde = f_col1.date_input("Desde", key="input_f_desde")
-    fecha_hasta = f_col2.date_input("Hasta", key="input_f_hasta")
+    
+    # Se obtienen los valores actuales cargados en session_state
+    val_desde = st.session_state.get("input_f_desde", hoy_local)
+    val_hasta = st.session_state.get("input_f_hasta", hoy_local)
+
+    fecha_desde = f_col1.date_input("Desde", value=val_desde, key="input_f_desde")
+    fecha_hasta = f_col2.date_input("Hasta", value=val_hasta, key="input_f_hasta")
 
     if usar_filtro_hora:
         st.caption("Franja Horaria")
@@ -421,11 +435,6 @@ with st.sidebar.form("form_filtros"):
     act_sonido = st.checkbox("Alertas Sonoras", value=True)
 
     btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
-
-if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
-    st.session_state["input_f_desde"] = obtener_fecha_local_hoy()
-    st.session_state["input_f_hasta"] = obtener_fecha_local_hoy()
-    st.rerun()
 
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
