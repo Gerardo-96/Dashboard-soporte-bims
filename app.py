@@ -124,13 +124,11 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
     }
     
-    /* Configuración transparente del header manteniendo accesible la flecha del sidebar */
+    /* Ocultar únicamente elementos no deseados de la barra superior */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
-        z-index: 99999 !important;
     }
 
-    /* Ocultar botones de Deploy y Menú estándar de la barra superior */
     header[data-testid="stHeader"] .stDeployButton,
     header[data-testid="stHeader"] #MainMenu,
     [data-testid="stStatusWidget"],
@@ -143,22 +141,20 @@ st.markdown("""
     .stApp > footer {
         display: none !important;
         visibility: hidden !important;
-        opacity: 0 !important;
-        height: 0px !important;
-        width: 0px !important;
-        pointer-events: none !important;
     }
 
-    /* HACER VISIBLE Y DESTACAR LA FLECHA NATIVA PARA ABRIR/CERRAR EL SIDEBAR */
+    /* RELLAVE DE VISIBILIDAD: Mantiene la flecha por defecto del sidebar siempre accesible */
     [data-testid="stSidebarCollapseButton"], 
     [data-testid="collapsedControl"] {
-        visibility: visible !important;
         display: flex !important;
+        visibility: visible !important;
         opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 999999 !important;
         color: #f8fafc !important;
         background-color: #1e293b !important;
-        border-radius: 6px !important;
         border: 1px solid #334155 !important;
+        border-radius: 6px !important;
     }
 
     [data-testid="stSidebarHeader"] {
