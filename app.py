@@ -30,6 +30,70 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
+# ==========================================
+# AUTENTICACIÓN Y CONTROL DE ACCESO GLOBAL
+# ==========================================
+if "user_authenticated" not in st.session_state:
+    st.session_state["user_authenticated"] = False
+if "user_email" not in st.session_state:
+    st.session_state["user_email"] = ""
+
+def verificar_credenciales_supabase(email_val, pass_val):
+    """Consulta la tabla 'usuarios_autorizados' en Supabase para validar el ingreso."""
+    try:
+        res = supabase.table("usuarios_autorizados")\
+            .select("*")\
+            .eq("email", email_val.strip().lower())\
+            .eq("password", pass_val.strip())\
+            .eq("activo", True)\
+            .execute()
+        return len(res.data) > 0, res.data[0] if res.data else None
+    except Exception:
+        return False, None
+
+# PANTALLA DE LOGIN
+if not st.session_state["user_authenticated"]:
+    st.set_page_config(page_title="Acceso - Executive Control Center", layout="centered")
+    
+    st.markdown("""
+    <style>
+        .stApp { background-color: #0f172a; color: #f8fafc; }
+        .login-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 50px;
+        }
+        .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<h2 style='text-align: center; color: #38bdf8;'>Executive Control Center</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #94a3b8;'>Ingresa tus credenciales autorizadas para acceder al Dashboard.</p>", unsafe_allow_html=True)
+    
+    with st.form("form_login_global"):
+        input_user_email = st.text_input("Correo Electrónico")
+        input_user_pass = st.text_input("Contraseña", type="password")
+        btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
+        
+        if btn_login_user:
+            valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+            if valido:
+                st.session_state["user_authenticated"] = True
+                st.session_state["user_email"] = datos_user.get("email")
+                st.session_state["user_name"] = datos_user.get("nombre")
+                st.success("Acceso concedido.")
+                st.rerun()
+            else:
+                st.error("Credenciales incorrectas o usuario no activo.")
+                
+    st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
+
+# ==========================================
+# CÓDIGO PRINCIPAL DEL DASHBOARD
+# ==========================================
+
 def obtener_fecha_local_hoy():
     """Retorna la fecha actual en la zona horaria de Paraguay (America/Asuncion)."""
     return pd.Timestamp.now(tz="America/Asuncion").date()
@@ -1182,3 +1246,74 @@ with tab_admin:
                 )
             else:
                 st.info("No hay datos filtrados para descargar actualmente.")
+
+# Tarjeta 4: Gestión de Usuarios Autorizados
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">4. Gestion de Usuarios Autorizados</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Formulario para registrar un nuevo usuario
+            with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
+                with st.form("form_nuevo_usuario"):
+                    col_u1, col_u2, col_u3 = st.columns(3)
+                    n_nombre = col_u1.text_input("Nombre / Agente:")
+                    n_email = col_u2.text_input("Correo Electronico:")
+                    n_pass = col_u3.text_input("Contraseña de Acceso:")
+                    btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
+
+                    if btn_crear_u:
+                        if n_email.strip() and n_pass.strip() and n_nombre.strip():
+                            try:
+                                supabase.table("usuarios_autorizados").insert({
+                                    "email": n_email.strip().lower(),
+                                    "password": n_pass.strip(),
+                                    "nombre": n_nombre.strip(),
+                                    "activo": True
+                                }).execute()
+                                st.success(f"Usuario {n_email} creado exitosamente.")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"Error al registrar usuario: {str(ex)}")
+                        else:
+                            st.warning("Completa todos los campos obligatorios.")
+
+            # Tabla de Usuarios Actuales
+            try:
+                res_users = supabase.table("usuarios_autorizados").select("*").order("created_at", desc=True).execute()
+                df_users = pd.DataFrame(res_users.data)
+                
+                if not df_users.empty:
+                    st.markdown("<b>Listado de Usuarios Registrados:</b>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df_users[["id", "nombre", "email", "password", "activo", "created_at"]],
+                        column_config={
+                            "id": "ID",
+                            "nombre": "Nombre",
+                            "email": "Correo",
+                            "password": "Contraseña",
+                            "activo": st.column_config.CheckboxColumn("Acceso Activo"),
+                            "created_at": "Fecha Alta"
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    col_edit1, col_edit2 = st.columns(2)
+                    id_toggle = col_edit1.number_input("ID de usuario a activar/desactivar:", min_value=1, step=1)
+                    if col_edit2.button("Alternar Estado (Activo/Inactivo)", use_container_width=True):
+                        usr_actual = df_users[df_users["id"] == id_toggle]
+                        if not usr_actual.empty:
+                            nuevo_estado = not bool(usr_actual.iloc[0]["activo"])
+                            supabase.table("usuarios_autorizados").update({"activo": nuevo_estado}).eq("id", id_toggle).execute()
+                            st.success(f"Estado del usuario ID {id_toggle} actualizado.")
+                            st.rerun()
+                        else:
+                            st.error("ID de usuario no encontrado.")
+                else:
+                    st.info("No hay usuarios registrados aún en la base de datos.")
+            except Exception as e:
+                st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
