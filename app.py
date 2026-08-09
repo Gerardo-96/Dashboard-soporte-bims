@@ -73,7 +73,6 @@ def procesar_fechas_df(df):
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
 
-    # Normalizar columnas de tiempo a minutos numéricos homogéneos
     if "primera_respuesta_min" in df.columns:
         df["primera_respuesta_min"] = df["primera_respuesta_min"].apply(convertir_a_minutos)
     if "tiempo_resolucion_minutos" in df.columns:
@@ -111,24 +110,35 @@ def obtener_datos_supabase():
     df = pd.DataFrame(todos_los_datos)
     return procesar_fechas_df(df)
 
-st.set_page_config(page_title="Executive Operations Control Center", layout="wide")
+# ==========================
+# CONTROL DEL SIDEBAR PERSONALIZADO
+# ==========================
+if "sidebar_state" not in st.session_state:
+    st.session_state["sidebar_state"] = "expanded"
+
+def toggle_sidebar():
+    if st.session_state["sidebar_state"] == "expanded":
+        st.session_state["sidebar_state"] = "collapsed"
+    else:
+        st.session_state["sidebar_state"] = "expanded"
+
+st.set_page_config(
+    page_title="Executive Operations Control Center", 
+    layout="wide",
+    initial_sidebar_state=st.session_state["sidebar_state"]
+)
 
 st.markdown("""
 <style>
     .stApp { background-color: #0f172a; color: #f8fafc; }
     
     .block-container {
-        padding-top: 2.2rem !important;
+        padding-top: 1.2rem !important;
         padding-bottom: 1.5rem !important;
     }
     
-    /* Configuración del header: oculta animaciones y menús superiores */
-    header[data-testid="stHeader"] {
-        background-color: transparent !important;
-        pointer-events: none !important;
-    }
-
-    /* Oculta botón Manage App, Badges, Status Widget, Toolbar y Footer de Streamlit */
+    /* Ocultar barra superior y menús no deseados */
+    header[data-testid="stHeader"],
     [data-testid="stStatusWidget"],
     [data-testid="stDecoration"],
     [data-testid="stAppViewerBadge"],
@@ -136,6 +146,8 @@ st.markdown("""
     div[class*="stAppViewerBadge"],
     .stAppToolbar,
     div[data-testid="stDecoration"],
+    [data-testid="stSidebarCollapseButton"], 
+    [data-testid="collapsedControl"],
     #MainMenu,
     footer,
     .stApp > footer {
@@ -147,27 +159,10 @@ st.markdown("""
         pointer-events: none !important;
     }
 
-    /* Botón flotante para el despliegue del sidebar */
-    [data-testid="stSidebarCollapseButton"], 
-    [data-testid="collapsedControl"] {
-        visibility: visible !important;
-        display: flex !important;
-        pointer-events: auto !important;
-        position: fixed !important;
-        top: 0.5rem !important;
-        left: 0.5rem !important;
-        z-index: 999999 !important;
-        color: #f8fafc !important;
-        background-color: #1e293b !important;
-        border-radius: 6px !important;
-        border: 1px solid #334155 !important;
-        padding: 4px !important;
-    }
-
     [data-testid="stSidebarHeader"] {
         padding-top: 0px !important;
         padding-bottom: 0px !important;
-        height: 2rem !important;
+        height: 1rem !important;
     }
     
     [data-testid="stSidebarUserContent"] {
@@ -253,7 +248,6 @@ EXTENDIDO_V_S_INICIO = time(18, 0, 0)
 EXTENDIDO_V_S_FIN = time(3, 0, 0)
 
 def evaluar_horario_dashboard(dt_objeto):
-    """Evalúa horario operativo estándar para el Dashboard en pantalla."""
     if pd.isna(dt_objeto):
         return "fuera de horario"
     fecha_str = dt_objeto.strftime("%Y-%m-%d")
@@ -285,7 +279,6 @@ def evaluar_horario_dashboard(dt_objeto):
     return "fuera de horario"
 
 def evaluar_horario_estricto(dt_objeto):
-    """Evalúa estricto L-V de 08:00 a 17:00 para la exportación a Excel."""
     if pd.isna(dt_objeto):
         return False
     fecha_str = dt_objeto.strftime("%Y-%m-%d")
@@ -485,7 +478,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
     
-    # SLA 1ª Respuesta para Excel
     df_reporte["SLA 1a Resp"] = df_exp.apply(lambda r: evaluar_sla_1ra_excel(r, sla_1ra_threshold), axis=1)
     
     if "rating" in df_exp:
@@ -508,7 +500,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
     
-    # SLA Gestión para Excel
     df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1)
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -529,7 +520,18 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     output.seek(0)
     return output
 
-st.title("Dashboard Soporte BIMS")
+# ==========================================
+# BARRA SUPERIOR CON BOTÓN DE TOGGLE SIDEBAR
+# ==========================================
+col_btn, col_title = st.columns([1, 15], vertical_alignment="center")
+
+with col_btn:
+    btn_icon = "◀ Filtros" if st.session_state["sidebar_state"] == "expanded" else "▶ Filtros"
+    if st.button(btn_icon, on_click=toggle_sidebar, use_container_width=True):
+        st.rerun()
+
+with col_title:
+    st.title("Dashboard Soporte BIMS")
 
 tab_operativo, tab_resumen, tab_admin = st.tabs([
     "Control Operativo & SLA", 
@@ -594,7 +596,6 @@ def renderizar_control_operativo():
     if not df_abiertos_all.empty:
         df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
         
-        # Alerta configurada según el tiempo personalizado de chat nuevo
         df_criticos_sla = df_abiertos_all[
             (df_abiertos_all["primera_respuesta_min"].isna()) & 
             (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th)
