@@ -59,7 +59,7 @@ if not st.session_state["user_authenticated"]:
         .stApp { background-color: #0f172a; color: #f8fafc; }
         .login-card {
             background-color: #1e293b;
-            border: 1px solid #334155;
+            border: 1.0px solid #334155;
             border-radius: 12px;
             padding: 24px;
             margin-top: 50px;
