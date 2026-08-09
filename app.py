@@ -124,11 +124,7 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
     }
     
-    /* Ocultar únicamente elementos no deseados de la barra superior */
-    header[data-testid="stHeader"] {
-        background-color: transparent !important;
-    }
-
+    
     header[data-testid="stHeader"] .stDeployButton,
     header[data-testid="stHeader"] #MainMenu,
     [data-testid="stStatusWidget"],
