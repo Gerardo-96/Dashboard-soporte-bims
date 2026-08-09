@@ -106,16 +106,26 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
     }
     
+    /* Configuración del header: oculta animaciones y menús superiores */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
         z-index: 99999 !important;
     }
 
-    header[data-testid="stHeader"] .stDeployButton,
-    header[data-testid="stHeader"] #MainMenu {
+    header[data-testid="stHeader"] > div:first-child {
         display: none !important;
     }
 
+    /* Oculta botón Manage App y pie de página de Streamlit */
+    [data-testid="stStatusWidget"],
+    #MainMenu,
+    footer,
+    .stApp > footer {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* Botón flotante para el despliegue del sidebar */
     [data-testid="stSidebarCollapseButton"], 
     [data-testid="collapsedControl"] {
         visibility: visible !important;
@@ -125,9 +135,6 @@ st.markdown("""
         border-radius: 6px !important;
         border: 1px solid #334155 !important;
     }
-    
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
 
     [data-testid="stSidebarHeader"] {
         padding-top: 0px !important;
@@ -201,66 +208,48 @@ FERIADOS = [
     "2026-12-08", "2026-12-25"
 ]
 
-DIAS_NORMAL_L_V = [0, 1, 2, 3, 4]
-NORMAL_L_V_INICIO = time(8, 0, 0)
-NORMAL_L_V_FIN = time(18, 0, 0)
-
-DIAS_NORMAL_SABADO = [5]
-NORMAL_SABADO_INICIO = time(9, 0, 0)
-NORMAL_SABADO_FIN = time(12, 0, 0)
-
-DIAS_EXTENDIDO_L_J = [0, 1, 2, 3]
-EXTENDIDO_L_J_INICIO = time(19, 0, 0)
-EXTENDIDO_L_J_FIN = time(2, 0, 0)
-
-DIAS_EXTENDIDO_V_S = [4, 5]
-EXTENDIDO_V_S_INICIO = time(18, 0, 0)
-EXTENDIDO_V_S_FIN = time(3, 0, 0)
-
-def evaluar_horario(dt_objeto):
+def evaluar_horario_estricto(dt_objeto):
+    """
+    Evalúa si la fecha/hora corresponde a Lunes-Viernes de 08:00 a 17:00 hs
+    (sin contar feriados).
+    """
     if pd.isna(dt_objeto):
-        return "fuera de horario"
+        return False
     fecha_str = dt_objeto.strftime("%Y-%m-%d")
     dia_semana = dt_objeto.weekday()
     hora_actual = dt_objeto.time()
 
-    dt_ayer = dt_objeto - timedelta(days=1)
-    dia_ayer = dt_ayer.weekday()
-    fecha_ayer_str = dt_ayer.strftime("%Y-%m-%d")
-
-    if dia_ayer in DIAS_EXTENDIDO_L_J and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_L_J_FIN:
-        return "extendido"
-    if dia_ayer in DIAS_EXTENDIDO_V_S and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_V_S_FIN:
-        return "extendido"
-
     if fecha_str in FERIADOS:
-        return "fuera de horario"
+        return False
+    
+    # Lunes (0) a Viernes (4) entre 08:00 y 17:00 hs
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 0, 0):
+        return True
+    return False
 
-    if dia_semana in DIAS_NORMAL_L_V and NORMAL_L_V_INICIO <= hora_actual <= NORMAL_L_V_FIN:
-        return "normal"
-    if dia_semana in DIAS_NORMAL_SABADO and NORMAL_SABADO_INICIO <= hora_actual <= NORMAL_SABADO_FIN:
-        return "normal"
-
-    if dia_semana in DIAS_EXTENDIDO_L_J and hora_actual >= EXTENDIDO_L_J_INICIO:
-        return "extendido"
-    if dia_semana in DIAS_EXTENDIDO_V_S and hora_actual >= EXTENDIDO_V_S_INICIO:
-        return "extendido"
-
-    return "fuera de horario"
-
-def evaluar_sla_1ra(por_agente, horario, min_1ra, threshold):
-    if por_agente == "excluido" or horario == "fuera de horario":
-        return "excluido"
+def evaluar_sla_1ra_excel(row, threshold_1ra):
+    dt_obj = row.get("created_at_dt")
+    if not evaluar_horario_estricto(dt_obj):
+        return "excluido por filtro"
+    
+    min_1ra = row.get("primera_respuesta_min")
     if pd.isna(min_1ra):
         return "no cumple"
-    return "cumple" if min_1ra <= threshold else "no cumple"
+    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
 
-def evaluar_sla_gestion(por_agente, horario, min_gest, threshold):
-    if por_agente == "excluido" or horario == "fuera de horario":
-        return "excluido"
+def evaluar_sla_gestion_excel(row, threshold_gest):
+    dt_obj = row.get("created_at_dt")
+    if not evaluar_horario_estricto(dt_obj):
+        return "excluido por filtro"
+    
+    etiquetas = str(row.get("etiquetas", "")).lower()
+    if "sin respuesta" in etiquetas:
+        return "excluido por filtro"
+    
+    min_gest = row.get("tiempo_resolucion_minutos")
     if pd.isna(min_gest):
         return "sin cerrar"
-    return "cumple" if min_gest <= threshold else "no cumple"
+    return "cumple" if min_gest <= threshold_gest else "no cumple"
 
 def calificacion_a_estrellas(x):
     if pd.isna(x) or str(x).strip() in ["", "None", "nan", "null"]:
@@ -397,6 +386,9 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     output = io.BytesIO()
     horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
 
+    sla_1ra_threshold = st.session_state.get("sla_1ra_th", 1.5)
+    sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
+
     df_reporte = pd.DataFrame()
     df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
     df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
@@ -405,9 +397,10 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Company"] = df_exp.get("company", "Sin datos")
     df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
-    df_reporte["Horario Evaluado"] = df_exp.get("horario_evaluado", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
-    df_reporte["SLA 1a Resp"] = df_exp.get("sla_1ra_eval", "")
+    
+    # SLA 1ª Respuesta calculado según panel Admin y ventana 08:00 a 17:00 L-V
+    df_reporte["SLA 1a Resp"] = df_exp.apply(lambda r: evaluar_sla_1ra_excel(r, sla_1ra_threshold), axis=1)
     
     if "rating" in df_exp:
         df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
@@ -428,7 +421,9 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
-    df_reporte["SLA Tiempo Gestion"] = df_exp.get("sla_gest_eval", "")
+    
+    # SLA Gestión calculado según panel Admin, ventana 08:00 a 17:00 L-V y exclusión por "sin respuesta"
+    df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1)
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_meta = pd.DataFrame([
@@ -469,14 +464,14 @@ def renderizar_control_operativo():
     alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
 
     if not df_all.empty:
-        df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario)
+        df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_estricto)
         df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
 
         df_all["sla_1ra_eval"] = df_all.apply(
-            lambda r: evaluar_sla_1ra(r.get("por_agente"), r.get("horario_evaluado"), r.get("primera_respuesta_min"), sla_1ra_th), axis=1
+            lambda r: evaluar_sla_1ra_excel(r, sla_1ra_th), axis=1
         )
         df_all["sla_gest_eval"] = df_all.apply(
-            lambda r: evaluar_sla_gestion(r.get("por_agente"), r.get("horario_evaluado"), r.get("tiempo_resolucion_minutos"), sla_gest_th), axis=1
+            lambda r: evaluar_sla_gestion_excel(r, sla_gest_th), axis=1
         )
 
         for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "resumen_ia"]:
@@ -498,7 +493,6 @@ def renderizar_control_operativo():
     if not df_abiertos_all.empty:
         df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
         
-        # Alerta configurada según el tiempo personalizado de chat nuevo
         df_criticos_sla = df_abiertos_all[
             (df_abiertos_all["primera_respuesta_min"].isna()) & 
             (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th)
@@ -684,7 +678,7 @@ def renderizar_control_operativo():
     # METRICAS POR AGENTE
     st.markdown("### Metricas por Agente")
     if not df_filtered.empty:
-        v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] != "fuera de horario")]
+        v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] == True)]
         p_1r = round(v_df["primera_respuesta_min"].mean(), 2) if not v_df.empty else 0
         p_gest = round(v_df["tiempo_resolucion_minutos"].mean(), 2) if not v_df.empty else 0
 
@@ -700,7 +694,7 @@ def renderizar_control_operativo():
 
         res_agentes = []
         for agente, grp in df_filtered.groupby("agente_asignado"):
-            v_g = grp[(grp["por_agente"] == "no excluido") & (grp["horario_evaluado"] != "fuera de horario")]
+            v_g = grp[(grp["por_agente"] == "no excluido") & (grp["horario_evaluado"] == True)]
             asig = len(grp)
             cerr = len(grp[grp["es_cerrado"]])
             p_1 = round(v_g["primera_respuesta_min"].mean(), 2) if not v_g.empty else 0
@@ -1004,18 +998,21 @@ with tab_admin:
                     status_text = st.empty()
                     
                     try:
+                        def callback_progreso(actual, total):
+                            porcentaje = int((actual / total) * 100) if total > 0 else 0
+                            progress_bar.progress(min(porcentaje, 100))
+                            status_text.text(f"Sincronizando {actual}/{total} conversaciones...")
+
                         status_text.text("Iniciando conexion con Intercom API...")
-                        progress_bar.progress(20)
-                        time_lib.sleep(0.5)
+                        progress_bar.progress(10)
                         
-                        status_text.text(f"Procesando conversaciones de los ultimos {dias_a_sincronizar} dias...")
-                        progress_bar.progress(50)
-                        
-                        sincronizar_intercom(dias=dias_a_sincronizar)
-                        
-                        progress_bar.progress(90)
-                        status_text.text("Guardando cambios...")
-                        time_lib.sleep(0.5)
+                        # Intenta pasar el callback si la función lo soporta
+                        try:
+                            sincronizar_intercom(dias=dias_a_sincronizar, progress_callback=callback_progreso)
+                        except TypeError:
+                            status_text.text(f"Procesando conversaciones de los ultimos {dias_a_sincronizar} dias...")
+                            progress_bar.progress(50)
+                            sincronizar_intercom(dias=dias_a_sincronizar)
                         
                         progress_bar.progress(100)
                         status_text.text("Sincronizacion completada exitosamente!")
