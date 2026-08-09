@@ -36,7 +36,7 @@ def obtener_fecha_local_hoy():
 
 def convertir_a_minutos(val):
     """Garantiza la conversión limpia a minutos numéricos float."""
-    if pd.isna(val) or val is None:[cite: 5]
+    if pd.isnan(val) or val is None:[cite: 5]
         return None[cite: 5]
     try:
         v = float(val)[cite: 5]
