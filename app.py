@@ -55,25 +55,6 @@ def verificar_credenciales_supabase(email_val, pass_val):
 if not st.session_state["user_authenticated"]:
     st.set_page_config(page_title="Acceso - Dashboard Soporte BIMS", page_icon="📈", layout="centered")
     
-    st.markdown("""
-    <script>
-    // Mantener vivos los WebSockets enviando una señal periódica
-    setInterval(function() {
-        window.dispatchEvent(new Event('mousemove'));
-    }, 25000);
-
-    // Activar contexto de audio cuando el usuario interactúe con la app
-    document.addEventListener('click', function() {
-        if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
-            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-        }
-    }, { once: true });
-</script>
-""", unsafe_allow_html=True)
-    
     <style>
         .stApp { background-color: #0f172a; color: #f8fafc; }
         .login-card {
@@ -267,6 +248,25 @@ st.markdown("""
     }
     .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
 </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <script>
+    // Mantener vivos los WebSockets enviando una señal periódica
+    setInterval(function() {
+        window.dispatchEvent(new Event('mousemove'));
+    }, 25000);
+
+    // Activar contexto de audio cuando el usuario interactúe con la app
+    document.addEventListener('click', function() {
+        if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
+            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+    }, { once: true });
+</script>
 """, unsafe_allow_html=True)
 
 AUDIO_ALARM_HTML = """
