@@ -16,13 +16,13 @@ except ImportError:
     SYNC_AVAILABLE = False
 
 INTERCOM_APP_ID = "co9kozj6"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
 # ==========================
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fpkuulubmyxuievvfsrj.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_49BZ9GrO1-3udRQj070uLQ_tgxYV7l1")
 
 @st.cache_resource
 def init_supabase() -> Client:
@@ -116,9 +116,11 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Oculta botón Manage App, Status Widget y pie de página de Streamlit */
+    /* Oculta botón Manage App, Status Widget, Toolbar y pie de página de Streamlit */
     [data-testid="stStatusWidget"],
     [data-testid="stDecoration"],
+    [data-testid="stAppViewerBadge"],
+    .stAppToolbar,
     div[data-testid="stDecoration"],
     #MainMenu,
     footer,
@@ -554,6 +556,7 @@ def renderizar_control_operativo():
     if not df_abiertos_all.empty:
         df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
         
+        # Alerta configurada según el tiempo personalizado de chat nuevo
         df_criticos_sla = df_abiertos_all[
             (df_abiertos_all["primera_respuesta_min"].isna()) & 
             (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th)
@@ -741,7 +744,6 @@ def renderizar_control_operativo():
     if not df_filtered.empty:
         v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] != "fuera de horario")]
         
-        # Filtro de promedio en dashboard tomando valores numéricos válidos
         p_1r_series = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
         p_gest_series = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
 
