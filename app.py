@@ -39,14 +39,10 @@ def procesar_fechas_df(df):
     if df.empty or "created_at" not in df.columns:
         return df
     
-    # 1. Parsear a datetime UTC
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
-    
-    # 2. Convertir a hora local Paraguay / UTC-3
     local_dt = created_dt.dt.tz_convert("America/Asuncion")
     
     df["created_at_dt"] = local_dt
-    # Formato limpio YYYY-MM-DD HH:MM para mostrar en pantalla
     df["created_at_fmt"] = local_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
@@ -383,11 +379,10 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte = pd.DataFrame()
     df_reporte["Conversacion ID"] = df_exp.get("id", "")
     df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
-    df_reporte["Canal de contacto"] = df_exp.get("canal", "")
+    df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
     df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
     df_reporte["Company"] = df_exp.get("company", "Sin datos")
     df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
-    df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Horario Evaluado"] = df_exp.get("horario_evaluado", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
@@ -408,7 +403,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Cliente"] = df_exp.get("cliente", "")
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
-    df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
     df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
@@ -638,7 +632,7 @@ def renderizar_control_operativo():
         df_csat_det = obtener_df_csat_valido(df_filtered)
         if not df_csat_det.empty:
             with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
-                df_csat_det["Acceso Directo"] = df_csat_det["id"].apply(
+                df_csat_det["Intercom Link"] = df_csat_det["id"].apply(
                     lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
                 )
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
@@ -646,12 +640,11 @@ def renderizar_control_operativo():
 
                 st.dataframe(
                     df_csat_det[[
-                        "id", "Acceso Directo", "created_at_fmt", "Calificacion", "feedback", 
+                        "Intercom Link", "created_at_fmt", "Calificacion", "feedback", 
                         "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
                     ]],
                     column_config={
-                        "id": "ID Chat",
-                        "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
+                        "Intercom Link": st.column_config.LinkColumn("ID Chat", display_text=r"(\d+)"),
                         "created_at_fmt": "Fecha/Hora Creacion",
                         "Calificacion": "Puntaje",
                         "feedback": "Comentario / Feedback",
@@ -735,28 +728,25 @@ def renderizar_control_operativo():
         df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
         df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
-        df_abiertos_filtrados["Acceso Directo"] = df_abiertos_filtrados["id"].apply(
+        df_abiertos_filtrados["Intercom Link"] = df_abiertos_filtrados["id"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
 
-        cols_mostrar_filt = ["id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
-                             "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"]
+        cols_mostrar_filt = ["Intercom Link", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+                             "nombre_contacto", "tenant", "company"]
         if "resumen_ia" in df_abiertos_filtrados.columns:
             cols_mostrar_filt.append("resumen_ia")
 
         st.dataframe(
             df_abiertos_filtrados[cols_mostrar_filt],
             column_config={
-                "id": "ID Conversacion",
-                "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
+                "Intercom Link": st.column_config.LinkColumn("ID Conversacion", display_text=r"(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
+                "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
                 "company": "Company",
-                "canal": "Canal", 
-                "agente_asignado": "Agente Asignado", 
-                "motivo_normalizado": "Motivo Normalizado",
                 "resumen_ia": "Resumen IA"
             },
             hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_filtrados"
@@ -775,34 +765,85 @@ def renderizar_control_operativo():
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
         df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
 
-        df_rank["Acceso Directo"] = df_rank["id"].apply(
+        df_rank["Intercom Link"] = df_rank["id"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
 
-        cols_mostrar_gen = ["id", "Acceso Directo", "created_at_fmt", "Horas Transcurridas", 
-                            "nombre_contacto", "tenant", "company", "canal", "agente_asignado", "motivo_normalizado"]
+        cols_mostrar_gen = ["Intercom Link", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+                            "nombre_contacto", "tenant", "company"]
         if "resumen_ia" in df_rank.columns:
             cols_mostrar_gen.append("resumen_ia")
 
         st.dataframe(
             df_rank[cols_mostrar_gen],
             column_config={
-                "id": "ID Conversacion",
-                "Acceso Directo": st.column_config.LinkColumn("Intercom Link", display_text="Abrir Chat"),
+                "Intercom Link": st.column_config.LinkColumn("ID Conversacion", display_text=r"(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
+                "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
                 "company": "Company",
-                "canal": "Canal", 
-                "agente_asignado": "Agente Asignado", 
-                "motivo_normalizado": "Motivo Normalizado",
                 "resumen_ia": "Resumen IA"
             },
             hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_unica"
         )
     else:
         st.info("No hay chats abiertos pendientes en este momento.")
+
+    st.markdown("---")
+
+    # SECCIÓN DE BÚSQUEDA DINÁMICA POR TENANT O AGENTE
+    st.markdown("### Buscador Especifico de Chats (Por Tenant / Agente)")
+    
+    if not df_all.empty:
+        col_b1, col_b2 = st.columns(2)
+        
+        tenants_unicos = sorted([str(x) for x in df_all["tenant"].dropna().unique() if str(x).strip() != ""])
+        agentes_unicos = sorted([str(x) for x in df_all["agente_asignado"].dropna().unique() if str(x).strip() != ""])
+        
+        tenant_sel = col_b1.multiselect("Filtrar por Tenant(s):", options=tenants_unicos)
+        agente_sel = col_b2.multiselect("Filtrar por Agente(s):", options=agentes_unicos)
+        
+        df_busqueda = df_all.copy()
+        
+        if tenant_sel:
+            df_busqueda = df_busqueda[df_busqueda["tenant"].isin(tenant_sel)]
+        if agente_sel:
+            df_busqueda = df_busqueda[df_busqueda["agente_asignado"].isin(agente_sel)]
+            
+        if tenant_sel or agente_sel:
+            st.markdown(f"#### Resultados de la Busqueda ({len(df_busqueda)} chats encontrados)")
+            if not df_busqueda.empty:
+                df_busqueda["Intercom Link"] = df_busqueda["id"].apply(
+                    lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+                )
+                df_busqueda["Estado_Texto"] = df_busqueda["es_cerrado"].apply(lambda x: "Cerrado" if x else "Abierto")
+                df_busqueda = df_busqueda.sort_values(by="created_at_dt", ascending=False)
+                
+                cols_search = ["Intercom Link", "Estado_Texto", "created_at_fmt", "agente_asignado", 
+                               "nombre_contacto", "tenant", "company"]
+                if "resumen_ia" in df_busqueda.columns:
+                    cols_search.append("resumen_ia")
+                
+                st.dataframe(
+                    df_busqueda[cols_search],
+                    column_config={
+                        "Intercom Link": st.column_config.LinkColumn("ID Conversacion", display_text=r"(\d+)"),
+                        "Estado_Texto": "Estado",
+                        "created_at_fmt": "Fecha Creacion",
+                        "agente_asignado": "Agente Asignado",
+                        "nombre_contacto": "Contacto",
+                        "tenant": "Tenant",
+                        "company": "Company",
+                        "resumen_ia": "Resumen IA"
+                    },
+                    hide_index=True, use_container_width=True, key="tabla_busqueda_tenant_agente"
+                )
+            else:
+                st.info("No se encontraron registros que coincidan exactamente con la seleccion.")
+        else:
+            st.caption("Selecciona al menos un Tenant o Agente arriba para desplegar los resultados.")
 
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
