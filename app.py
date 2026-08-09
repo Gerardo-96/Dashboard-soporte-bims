@@ -105,9 +105,23 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
     }
     
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
+    /* ✅ Mantiene visible solo el botón para abrir/cerrar el sidebar */
+header[data-testid="stHeader"] {
+    background-color: transparent !important;
+}
+
+/* Ocultar botones no deseados de la barra superior */
+header[data-testid="stHeader"] > div:first-child {
+    visibility: hidden;
+}
+
+/* Asegurar que el botón del sidebar permanezca visible y accesible */
+[data-testid="stSidebarCollapseButton"], 
+[data-testid="collapsedControl"] {
+    visibility: visible !important;
+    display: flex !important;
+    color: #f8fafc !important;
+}
     
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
