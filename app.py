@@ -72,21 +72,31 @@ if not st.session_state["user_authenticated"]:
     st.markdown("<h2 style='text-align: center; color: #38bdf8;'>Dashboard Soporte BIMS</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #94a3b8;'>Ingresa tus credenciales autorizadas para acceder al Dashboard.</p>", unsafe_allow_html=True)
     
-    with st.form("form_login_global"):
-        input_user_email = st.text_input("Correo Electrónico")
-        input_user_pass = st.text_input("Contraseña", type="password")
-        btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
-        
-        if btn_login_user:
-            valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
-            if valido:
-                st.session_state["user_authenticated"] = True
-                st.session_state["user_email"] = datos_user.get("email")
-                st.session_state["user_name"] = datos_user.get("nombre")
-                st.success("Acceso concedido.")
-                st.rerun()
-            else:
-                st.error("Credenciales incorrectas o usuario no activo.")
+    # Uso de columnas centradas para reducir el ancho del formulario
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    
+    with col_l2:
+        with st.form("form_login_global"):
+            input_user_email = st.text_input("Correo Electrónico")
+            input_user_pass = st.text_input("Contraseña", type="password")
+            btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
+            
+            if btn_login_user:
+                if not input_user_email.strip() or not input_user_pass.strip():
+                    st.warning("Por favor ingresa tu correo y contraseña.")
+                else:
+                    # Animación de carga explícita mientras consulta Supabase
+                    with st.spinner("Verificando credenciales..."):
+                        valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                        
+                    if valido:
+                        st.session_state["user_authenticated"] = True
+                        st.session_state["user_email"] = datos_user.get("email")
+                        st.session_state["user_name"] = datos_user.get("nombre")
+                        st.success("Acceso concedido.")
+                        st.rerun()
+                    else:
+                        st.error("Credenciales incorrectas o usuario no activo.")
                 
     st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
 
