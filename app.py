@@ -1,7 +1,7 @@
 import os
 import io
 import time as time_lib
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, date
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -1171,51 +1171,81 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tarjeta 1: Sincronización
+        # Tarjeta 1: Sincronización y Poblamiento por Lotes con Contador
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">1. Forzar Sincronización de Intercom</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Sincroniza directamente los registros desde Intercom a la base de datos.</p>
+                <h4 style="margin-top:0; color:#38bdf8;">1. Poblamiento Masivo de Datos por Meses (Segundo Plano)</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Descarga todo el histórico de conversaciones desde el 01/01/2026 hasta hoy en lotes progresivos. 
+                    El proceso se ejecuta en el servidor en segundo plano, por lo que <b>puedes cerrar esta pestaña sin interrumpir la carga</b>.
+                </p>
             </div>
             """, unsafe_allow_html=True)
+
+            # Consulta el total de registros en Supabase en tiempo real
+            try:
+                res_count = supabase.table("conversaciones").select("id", count="exact").execute()
+                total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
+            except Exception:
+                total_registros_db = 0
+
+            # Muestra de métrica y estado en pantalla
+            c_meta1, c_meta2 = st.columns([1, 2], vertical_alignment="center")
+            with c_meta1:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #10b981;">
+                    <div class="metric-card-title">Total Registros en Supabase</div>
+                    <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
+                    <div class="metric-card-sub">Conversaciones guardadas</div>
+                </div>
+                """, unsafe_allow_html=True)
             
+            with c_meta2:
+                if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Selector de tipo de carga y botón de ejecución
             c_sync1, c_sync2 = st.columns([2, 1], vertical_alignment="bottom")
-            dias_a_sincronizar = c_sync1.number_input("Dias hacia atras a consultar:", min_value=1, max_value=365, value=2)
             
-            if c_sync2.button("Iniciar Sincronizacion Manual", use_container_width=True):
+            modo_sync = c_sync1.selectbox(
+                "Selecciona el modo de descarga:", 
+                options=["Historico Completo 2026 (Por meses)", "Ultimos X Dias (Rapido)"],
+                key="sb_modo_sync"
+            )
+            
+            if modo_sync == "Ultimos X Dias (Rapido)":
+                dias_a_sincronizar = c_sync1.number_input("Dias hacia atras a consultar:", min_value=1, max_value=90, value=2, key="ni_dias_sync")
+            else:
+                dias_a_sincronizar = (pd.Timestamp.now(tz="America/Asuncion").date() - date(2026, 1, 1)).days + 1
+            
+            if c_sync2.button("Iniciar Descarga", use_container_width=True, key="btn_iniciar_poblamiento"):
                 if SYNC_AVAILABLE:
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+                    import threading
                     
-                    try:
-                        def callback_progreso(actual, total):
-                            porcentaje = int((actual / total) * 100) if total > 0 else 0
-                            progress_bar.progress(min(porcentaje, 100))
-                            status_text.text(f"Sincronizando {actual}/{total} conversaciones...")
-
-                        status_text.text("Iniciando conexión con Intercom API...")
-                        progress_bar.progress(10)
-                        
+                    def tarea_poblamiento_lotes(dias_totales):
+                        """Función que ejecuta la descarga progresiva sin bloquear la app."""
                         try:
-                            sincronizar_intercom(dias=dias_a_sincronizar, progress_callback=callback_progreso)
-                        except TypeError:
-                            status_text.text(f"Procesando conversaciones de los últimos {dias_a_sincronizar} dias...")
-                            progress_bar.progress(50)
-                            sincronizar_intercom(dias=dias_a_sincronizar)
-                        
-                        progress_bar.progress(100)
-                        status_text.text("Sincronización completada exitosamente!")
-                        st.cache_data.clear()
-                        st.success("La base de datos fue actualizada. Recargando la vista...")
-                        time_lib.sleep(1)
-                        st.rerun()
-                    except Exception as e:
-                        status_text.text("Ocurrió un error durante la sincronización.")
-                        st.error(f"Detalle del error: {str(e)}")
-                else:
-                    st.error("No se encontro el modulo `sync_intercom.py` en el proyecto.")
+                            # Divide los días totales en bloques de 30 días
+                            bloques = list(range(30, dias_totales + 30, 30))
+                            for d in bloques:
+                                dias_efectivos = min(d, dias_totales)
+                                sincronizar_intercom(dias=dias_efectivos)
+                                time_lib.sleep(3)  # Pausa de seguridad
+                        except Exception as err:
+                            print(f"Error en descarga en segundo plano: {err}")
 
+                    # Dispara el proceso en un hilo independiente
+                    hilo = threading.Thread(target=tarea_poblamiento_lotes, args=(dias_a_sincronizar,))
+                    hilo.start()
+                    
+                    st.success("🚀 ¡Proceso iniciado en segundo plano! Usa el botón 'Actualizar Contador en Vivo' para monitorear el progreso.")
+                else:
+                    st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
+                    
         st.markdown("<br>", unsafe_allow_html=True)
 
         # Tarjeta 2: Parámetros Globales
