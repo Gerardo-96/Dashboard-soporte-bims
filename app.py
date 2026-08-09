@@ -53,7 +53,7 @@ def verificar_credenciales_supabase(email_val, pass_val):
 
 # PANTALLA DE LOGIN
 if not st.session_state["user_authenticated"]:
-    st.set_page_config(page_title="Acceso - Executive Control Center", layout="centered")
+    st.set_page_config(page_title="Acceso - Dashboard Soporte BIMS", layout="centered")
     
     st.markdown("""
     <style>
