@@ -123,8 +123,11 @@ st.markdown("""
         padding-top: 1.5rem !important;
         padding-bottom: 1.5rem !important;
     }
-    
-    
+
+    /* Ajusta el fondo de la barra superior para coincidir exactamente con el de la app (#0f172a) */
+    header[data-testid="stHeader"] {
+        background-color: #0f172a !important;
+    }
 
     [data-testid="stSidebarHeader"] {
         padding-top: 0px !important;
