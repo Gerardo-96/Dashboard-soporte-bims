@@ -569,7 +569,7 @@ st.title("Dashboard Soporte BIMS")
 tab_operativo, tab_resumen, tab_admin = st.tabs([
     "Control Operativo & SLA", 
     "Resumen de Chats & Agentes", 
-    "Administracion & Configuracion"
+    "Administración & Configuracion"
 ])
 
 # =========================================================
