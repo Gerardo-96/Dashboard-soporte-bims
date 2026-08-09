@@ -111,7 +111,8 @@ def obtener_datos_supabase():
     return procesar_fechas_df(df)
 
 st.set_page_config(
-    page_title="Executive Operations Control Center", 
+    page_title="Dashboard Soporte BIMS",
+    page_icon="📊",  # Puedes usar 📈, 💬, 🏢, 🛠️, etc.
     layout="wide"
 )
 
@@ -510,6 +511,20 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 # =========================================================
 # FRAGMENTO SIN PARPADEO PARA LA PESTAÑA DE CONTROL OPERATIVO
 # =========================================================
+
+# ==============================================================================
+# NOTA DE ARQUITECTURA: LÓGICA DE CÁLCULO DE PROMEDIOS Y SLA
+# ==============================================================================
+# 1. EN PANTALLA (DASHBOARD):
+#    - Promedio 1ª Resp = mean(primera_respuesta_min) donde horario_evaluado != 'fuera de horario'
+#    - Promedio Gestión = mean(tiempo_resolucion_minutos) donde horario_evaluado != 'fuera de horario'
+#    - Se excluyen agentes con etiqueta 'excluido' (por_agente == 'excluido').
+#
+# 2. EN EXPORTACIÓN A EXCEL:
+#    - Horario Estricto = Lunes a Viernes de 08:00 a 17:00 hs (sin feriados).
+#    - SLA 1ª Respuesta = Cumple / No cumple en horario estricto. Fuera de hora = 'excluido por filtro'.
+#    - SLA Gestión = Cumple / No cumple en horario estricto. Si posee etiqueta 'sin respuesta' = 'excluido por filtro'.
+# ==============================================================================
 
 refresh_sec = timedelta(seconds=st.session_state["refresh_interval"]) if st.session_state["auto_refresh"] else None
 
@@ -1018,14 +1033,14 @@ with tab_resumen:
         st.info("No hay chats registrados para el rango de fechas seleccionado en la barra lateral.")
 
 with tab_admin:
-    st.markdown("### Panel de Administracion y Configuracion")
+    st.markdown("### Panel de Administración y Configuración")
 
     if not st.session_state["admin_authenticated"]:
         
         col_pass1, col_pass2 = st.columns([2, 1])
         with col_pass1:
             with st.form("form_login_admin"):
-                input_pass = st.text_input("Contrasena de Administrador", type="password")
+                input_pass = st.text_input("Contraseña de Administrador", type="password")
                 btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
                 
                 if btn_login:
@@ -1034,10 +1049,10 @@ with tab_admin:
                         st.success("Acceso concedido.")
                         st.rerun()
                     else:
-                        st.error("Contrasena incorrecta.")
+                        st.error("Contraseña incorrecta.")
     else:
-        st.success("Sesion de administracion activa.")
-        if st.button("Cerrar Sesion Admin"):
+        st.success("Sesión de administracion activa.")
+        if st.button("Cerrar Sesión Admin"):
             st.session_state["admin_authenticated"] = False
             st.rerun()
 
@@ -1046,7 +1061,7 @@ with tab_admin:
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">ℹ️ Criterios de Cálculo de Tiempos y SLA</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">Criterios de Cálculo de Tiempos y SLA</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
                     <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
                     <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
@@ -1060,8 +1075,8 @@ with tab_admin:
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">1. Forzar Sincronizacion Manual de Intercom</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.</p>
+                <h4 style="margin-top:0; color:#38bdf8;">1. Forzar Sincronización de Intercom</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Sincroniza directamente los registros desde Intercom a la base de datos.</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -1079,24 +1094,24 @@ with tab_admin:
                             progress_bar.progress(min(porcentaje, 100))
                             status_text.text(f"Sincronizando {actual}/{total} conversaciones...")
 
-                        status_text.text("Iniciando conexion con Intercom API...")
+                        status_text.text("Iniciando conexión con Intercom API...")
                         progress_bar.progress(10)
                         
                         try:
                             sincronizar_intercom(dias=dias_a_sincronizar, progress_callback=callback_progreso)
                         except TypeError:
-                            status_text.text(f"Procesando conversaciones de los ultimos {dias_a_sincronizar} dias...")
+                            status_text.text(f"Procesando conversaciones de los últimos {dias_a_sincronizar} dias...")
                             progress_bar.progress(50)
                             sincronizar_intercom(dias=dias_a_sincronizar)
                         
                         progress_bar.progress(100)
-                        status_text.text("Sincronizacion completada exitosamente!")
+                        status_text.text("Sincronización completada exitosamente!")
                         st.cache_data.clear()
                         st.success("La base de datos fue actualizada. Recargando la vista...")
                         time_lib.sleep(1)
                         st.rerun()
                     except Exception as e:
-                        status_text.text("Ocurrio un error durante la sincronizacion.")
+                        status_text.text("Ocurrió un error durante la sincronización.")
                         st.error(f"Detalle del error: {str(e)}")
                 else:
                     st.error("No se encontro el modulo `sync_intercom.py` en el proyecto.")
@@ -1108,7 +1123,7 @@ with tab_admin:
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y limites objetivo para los SLA de atencion.</p>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -1129,7 +1144,7 @@ with tab_admin:
                 cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Guardar Configuracion de Parametros", use_container_width=True):
+            if st.button("Guardar Configuración de Parámetros", use_container_width=True):
                 st.session_state["auto_refresh"] = cfg_auto
                 st.session_state["refresh_interval"] = cfg_interval
                 st.session_state["sla_1ra_th"] = cfg_sla_1ra
@@ -1145,7 +1160,7 @@ with tab_admin:
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">3. Descarga Masiva de Reportes Excel</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Genera y descarga el archivo Excel completo con el formato formateado de los registros filtrados.</p>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Genera y descarga el archivo Excel completo de los registros filtrados.</p>
             </div>
             """, unsafe_allow_html=True)
             
