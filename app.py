@@ -56,7 +56,6 @@ def procesar_fechas_df(df):
         updated_dt = pd.to_datetime(df["updated_at"], errors="coerce", utc=True)
         df["updated_at_local"] = updated_dt.dt.tz_convert("America/Asuncion")
 
-    # Asegurar id como string limpio para visualización y URL
     if "id" in df.columns:
         df["id_str"] = df["id"].astype(str).str.strip()
         df["intercom_url"] = df["id_str"].apply(
@@ -649,7 +648,7 @@ def renderizar_control_operativo():
                         "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
                     ]],
                     column_config={
-                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=None),
+                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
                         "created_at_fmt": "Fecha/Hora Creacion",
                         "Calificacion": "Puntaje",
                         "feedback": "Comentario / Feedback",
@@ -741,7 +740,7 @@ def renderizar_control_operativo():
         st.dataframe(
             df_abiertos_filtrados[cols_mostrar_filt],
             column_config={
-                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=None),
+                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
@@ -774,7 +773,7 @@ def renderizar_control_operativo():
         st.dataframe(
             df_rank[cols_mostrar_gen],
             column_config={
-                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=None),
+                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
@@ -823,7 +822,7 @@ def renderizar_control_operativo():
                 st.dataframe(
                     df_busqueda[cols_search],
                     column_config={
-                        "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=None),
+                        "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                         "Estado_Texto": "Estado",
                         "created_at_fmt": "Fecha Creacion",
                         "agente_asignado": "Agente Asignado",
