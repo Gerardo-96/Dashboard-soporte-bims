@@ -56,6 +56,13 @@ def procesar_fechas_df(df):
         updated_dt = pd.to_datetime(df["updated_at"], errors="coerce", utc=True)
         df["updated_at_local"] = updated_dt.dt.tz_convert("America/Asuncion")
 
+    # Asegurar id como string limpio para visualización y URL
+    if "id" in df.columns:
+        df["id_str"] = df["id"].astype(str).str.strip()
+        df["intercom_url"] = df["id_str"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+        )
+
     return df
 
 @st.cache_data(ttl=10)
@@ -377,7 +384,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
 
     df_reporte = pd.DataFrame()
-    df_reporte["Conversacion ID"] = df_exp.get("id", "")
+    df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
     df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
     df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
     df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
@@ -403,6 +410,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Cliente"] = df_exp.get("cliente", "")
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
+    df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
     df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
@@ -632,19 +640,16 @@ def renderizar_control_operativo():
         df_csat_det = obtener_df_csat_valido(df_filtered)
         if not df_csat_det.empty:
             with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
-                df_csat_det["Intercom Link"] = df_csat_det["id"].apply(
-                    lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-                )
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
                 df_csat_det = df_csat_det.sort_values(by=["rating_num", "created_at_dt"], ascending=[True, False])
 
                 st.dataframe(
                     df_csat_det[[
-                        "Intercom Link", "created_at_fmt", "Calificacion", "feedback", 
+                        "intercom_url", "created_at_fmt", "Calificacion", "feedback", 
                         "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
                     ]],
                     column_config={
-                        "Intercom Link": st.column_config.LinkColumn("ID Chat", display_text=r"(\d+)"),
+                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=None),
                         "created_at_fmt": "Fecha/Hora Creacion",
                         "Calificacion": "Puntaje",
                         "feedback": "Comentario / Feedback",
@@ -728,11 +733,7 @@ def renderizar_control_operativo():
         df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
         df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
-        df_abiertos_filtrados["Intercom Link"] = df_abiertos_filtrados["id"].apply(
-            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-        )
-
-        cols_mostrar_filt = ["Intercom Link", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+        cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
                              "nombre_contacto", "tenant", "company"]
         if "resumen_ia" in df_abiertos_filtrados.columns:
             cols_mostrar_filt.append("resumen_ia")
@@ -740,7 +741,7 @@ def renderizar_control_operativo():
         st.dataframe(
             df_abiertos_filtrados[cols_mostrar_filt],
             column_config={
-                "Intercom Link": st.column_config.LinkColumn("ID Conversacion", display_text=r"(\d+)"),
+                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=None),
                 "created_at_fmt": "Fecha Creacion", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
@@ -765,11 +766,7 @@ def renderizar_control_operativo():
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
         df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
 
-        df_rank["Intercom Link"] = df_rank["id"].apply(
-            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-        )
-
-        cols_mostrar_gen = ["Intercom Link", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+        cols_mostrar_gen = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
                             "nombre_contacto", "tenant", "company"]
         if "resumen_ia" in df_rank.columns:
             cols_mostrar_gen.append("resumen_ia")
@@ -777,7 +774,7 @@ def renderizar_control_operativo():
         st.dataframe(
             df_rank[cols_mostrar_gen],
             column_config={
-                "Intercom Link": st.column_config.LinkColumn("ID Conversacion", display_text=r"(\d+)"),
+                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=None),
                 "created_at_fmt": "Fecha Creacion", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
@@ -815,13 +812,10 @@ def renderizar_control_operativo():
         if tenant_sel or agente_sel:
             st.markdown(f"#### Resultados de la Busqueda ({len(df_busqueda)} chats encontrados)")
             if not df_busqueda.empty:
-                df_busqueda["Intercom Link"] = df_busqueda["id"].apply(
-                    lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-                )
                 df_busqueda["Estado_Texto"] = df_busqueda["es_cerrado"].apply(lambda x: "Cerrado" if x else "Abierto")
                 df_busqueda = df_busqueda.sort_values(by="created_at_dt", ascending=False)
                 
-                cols_search = ["Intercom Link", "Estado_Texto", "created_at_fmt", "agente_asignado", 
+                cols_search = ["intercom_url", "Estado_Texto", "created_at_fmt", "agente_asignado", 
                                "nombre_contacto", "tenant", "company"]
                 if "resumen_ia" in df_busqueda.columns:
                     cols_search.append("resumen_ia")
@@ -829,7 +823,7 @@ def renderizar_control_operativo():
                 st.dataframe(
                     df_busqueda[cols_search],
                     column_config={
-                        "Intercom Link": st.column_config.LinkColumn("ID Conversacion", display_text=r"(\d+)"),
+                        "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=None),
                         "Estado_Texto": "Estado",
                         "created_at_fmt": "Fecha Creacion",
                         "agente_asignado": "Agente Asignado",
