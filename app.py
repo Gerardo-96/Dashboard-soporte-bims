@@ -69,7 +69,7 @@ if not st.session_state["user_authenticated"]:
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("<h2 style='text-align: center; color: #38bdf8;'>Executive Control Center</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #38bdf8;'>Dashboard Soporte BIMS</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #94a3b8;'>Ingresa tus credenciales autorizadas para acceder al Dashboard.</p>", unsafe_allow_html=True)
     
     with st.form("form_login_global"):
