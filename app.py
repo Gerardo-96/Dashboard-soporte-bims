@@ -125,11 +125,7 @@ st.markdown("""
     /* Configuración del header: oculta animaciones y menús superiores */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
-        z-index: 99999 !important;
-    }
-
-    header[data-testid="stHeader"] > div:first-child {
-        display: none !important;
+        pointer-events: none !important;
     }
 
     /* Oculta botón Manage App, Badges, Status Widget, Toolbar y Footer de Streamlit */
@@ -156,10 +152,16 @@ st.markdown("""
     [data-testid="collapsedControl"] {
         visibility: visible !important;
         display: flex !important;
+        pointer-events: auto !important;
+        position: fixed !important;
+        top: 0.5rem !important;
+        left: 0.5rem !important;
+        z-index: 999999 !important;
         color: #f8fafc !important;
         background-color: #1e293b !important;
         border-radius: 6px !important;
         border: 1px solid #334155 !important;
+        padding: 4px !important;
     }
 
     [data-testid="stSidebarHeader"] {
