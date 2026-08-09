@@ -112,7 +112,7 @@ def obtener_datos_supabase():
 
 st.set_page_config(
     page_title="Dashboard Soporte BIMS",
-    page_icon="📊",  # Puedes usar 📈, 💬, 🏢, 🛠️, etc.
+    page_icon="📈",  # Puedes usar 📈, 💬, 🏢, 🛠️, etc.
     layout="wide"
 )
 
