@@ -16,19 +16,23 @@ except ImportError:
     SYNC_AVAILABLE = False
 
 INTERCOM_APP_ID = "co9kozj6"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
 # ==========================
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fpkuulubmyxuievvfsrj.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_49BZ9GrO1-3udRQj070uLQ_tgxYV7l1")
 
 @st.cache_resource
 def init_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase = init_supabase()
+
+def obtener_fecha_local_hoy():
+    """Retorna la fecha actual en la zona horaria de Paraguay (America/Asuncion)."""
+    return pd.Timestamp.now(tz="America/Asuncion").date()
 
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y crea las columnas auxiliares."""
@@ -290,7 +294,9 @@ def calcular_csat(df_sub):
 def tiempo_hace(dt_obj):
     if not isinstance(dt_obj, datetime) or pd.isna(dt_obj):
         return "Desconocido"
-    diff = datetime.now() - dt_obj.replace(tzinfo=None)
+    now_local = pd.Timestamp.now(tz="America/Asuncion").replace(tzinfo=None)
+    dt_clean = dt_obj.replace(tzinfo=None)
+    diff = now_local - dt_clean
     secs = int(diff.total_seconds())
     if secs < 60:
         return f"Hace {secs} seg"
@@ -315,11 +321,11 @@ if "sla_gest_th" not in st.session_state:
 if "admin_authenticated" not in st.session_state:
     st.session_state["admin_authenticated"] = False
 
-hoy = datetime.now().date()
+hoy_local = obtener_fecha_local_hoy()
 if "input_f_desde" not in st.session_state:
-    st.session_state["input_f_desde"] = hoy
+    st.session_state["input_f_desde"] = hoy_local
 if "input_f_hasta" not in st.session_state:
-    st.session_state["input_f_hasta"] = hoy
+    st.session_state["input_f_hasta"] = hoy_local
 
 # ==========================
 # SIDEBAR / ESTADO & FILTROS DINÁMICOS
@@ -362,8 +368,8 @@ with st.sidebar.form("form_filtros"):
     btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
 
 if st.sidebar.button("Establecer Fecha de Hoy", use_container_width=True):
-    st.session_state["input_f_desde"] = datetime.now().date()
-    st.session_state["input_f_hasta"] = datetime.now().date()
+    st.session_state["input_f_desde"] = obtener_fecha_local_hoy()
+    st.session_state["input_f_hasta"] = obtener_fecha_local_hoy()
     st.rerun()
 
 st.session_state["f_desde_key"] = fecha_desde
@@ -466,14 +472,14 @@ def renderizar_control_operativo():
     if usar_filtro_hora and not df_filtered.empty:
         df_filtered = df_filtered[(df_filtered["hora_solo"] >= hora_inicio) & (df_filtered["hora_solo"] <= hora_fin)]
 
-    now_dt = datetime.now()
+    now_dt = pd.Timestamp.now(tz="America/Asuncion")
     
     df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty else pd.DataFrame()
     if not df_abiertos_all.empty:
         df_abiertos_all = df_abiertos_all.drop_duplicates(subset=["id"])
 
     if not df_abiertos_all.empty:
-        df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"].dt.tz_localize(None)).dt.total_seconds() / 60).round(1)
+        df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
         
         df_criticos_sla = df_abiertos_all[
             (df_abiertos_all["primera_respuesta_min"].isna()) & 
@@ -493,7 +499,7 @@ def renderizar_control_operativo():
 
     # CSAT SCORECARD
     st.markdown("### CSAT Performance")
-    now_date = datetime.now().date()
+    now_date = obtener_fecha_local_hoy()
 
     c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_solo"] == now_date]) if not df_all.empty else (0.0, 0)
     c_ayer, _ = calcular_csat(df_all[df_all["fecha_solo"] == (now_date - timedelta(days=1))]) if not df_all.empty else (0.0, 0)
@@ -556,7 +562,7 @@ def renderizar_control_operativo():
     # EVOLUCIÓN HISTÓRICA DE CSAT
     with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
         if not df_all.empty:
-            fecha_6m_atras = (datetime.now() - timedelta(days=180)).date()
+            fecha_6m_atras = (pd.Timestamp.now(tz="America/Asuncion") - timedelta(days=180)).date()
             df_6m = df_all[df_all["fecha_solo"] >= fecha_6m_atras].copy()
             df_csat_6m = obtener_df_csat_valido(df_6m)
 
@@ -725,7 +731,7 @@ def renderizar_control_operativo():
     
     if not df_abiertos_filtrados.empty:
         df_abiertos_filtrados = df_abiertos_filtrados.drop_duplicates(subset=["id"])
-        df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at_dt"].dt.tz_localize(None)).dt.total_seconds() / 60).round(1)
+        df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at_dt"]).dt.total_seconds() / 60).round(1)
         df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
         df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
