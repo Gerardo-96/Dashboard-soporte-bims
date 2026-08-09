@@ -151,7 +151,6 @@ st.markdown("""
     #MainMenu,
     footer,
     .stApp > footer {
-        display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         height: 0px !important;
