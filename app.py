@@ -125,33 +125,6 @@ st.markdown("""
     }
     
     
-    header[data-testid="stHeader"] .stDeployButton,
-    header[data-testid="stHeader"] #MainMenu,
-    [data-testid="stStatusWidget"],
-    [data-testid="stDecoration"],
-    [data-testid="stAppViewerBadge"],
-    .stAppViewerBadge,
-    div[class*="stAppViewerBadge"],
-    .stAppToolbar,
-    footer,
-    .stApp > footer {
-        display: none !important;
-        visibility: hidden !important;
-    }
-
-    /* RELLAVE DE VISIBILIDAD: Mantiene la flecha por defecto del sidebar siempre accesible */
-    [data-testid="stSidebarCollapseButton"], 
-    [data-testid="collapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        z-index: 999999 !important;
-        color: #f8fafc !important;
-        background-color: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-radius: 6px !important;
-    }
 
     [data-testid="stSidebarHeader"] {
         padding-top: 0px !important;
