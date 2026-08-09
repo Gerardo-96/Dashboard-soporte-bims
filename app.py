@@ -47,8 +47,10 @@ def procesar_fechas_df(df):
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
 
-    if "fecha_cierre" in df.columns:
-        cierre_dt = pd.to_datetime(df["fecha_cierre"], errors="coerce", utc=True)
+    # Priorizar fecha de primer cierre si existe, de lo contrario usar fecha_cierre general
+    col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
+    if col_cierre in df.columns:
+        cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
         local_cierre = cierre_dt.dt.tz_convert("America/Asuncion")
         df["fecha_cierre_fmt"] = local_cierre.dt.strftime("%Y-%m-%d %H:%M").fillna("")
 
@@ -105,23 +107,28 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
     }
     
-    /* ✅ Mantiene visible solo el botón para abrir/cerrar el sidebar */
-header[data-testid="stHeader"] {
-    background-color: transparent !important;
-}
+    /* Configuración limpia de la barra superior */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+        z-index: 99999 !important;
+    }
 
-/* Ocultar botones no deseados de la barra superior */
-header[data-testid="stHeader"] > div:first-child {
-    visibility: hidden;
-}
+    /* Ocultar elementos de Deploy / Menú no deseados */
+    header[data-testid="stHeader"] .stDeployButton,
+    header[data-testid="stHeader"] #MainMenu {
+        display: none !important;
+    }
 
-/* Asegurar que el botón del sidebar permanezca visible y accesible */
-[data-testid="stSidebarCollapseButton"], 
-[data-testid="collapsedControl"] {
-    visibility: visible !important;
-    display: flex !important;
-    color: #f8fafc !important;
-}
+    /* Garantizar visibilidad del botón de colapso y apertura del sidebar */
+    [data-testid="stSidebarCollapseButton"], 
+    [data-testid="collapsedControl"] {
+        visibility: visible !important;
+        display: flex !important;
+        color: #f8fafc !important;
+        background-color: #1e293b !important;
+        border-radius: 6px !important;
+        border: 1px solid #334155 !important;
+    }
     
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
@@ -134,10 +141,6 @@ header[data-testid="stHeader"] > div:first-child {
     
     [data-testid="stSidebarUserContent"] {
         padding-top: 0.2rem !important;
-    }
-    
-    [data-testid="stSidebarCollapseButton"] {
-        margin-top: -0.6rem !important;
     }
 
     .metric-card {
@@ -274,7 +277,7 @@ def calificacion_a_estrellas(x):
 
 def es_chat_cerrado(row):
     estado = str(row.get("estado", "")).strip().lower()
-    fecha_cierre = str(row.get("fecha_cierre", "")).strip().lower()
+    fecha_cierre = str(row.get("fecha_primer_cierre", row.get("fecha_cierre", ""))).strip().lower()
     
     if estado in ["cerrado", "closed", "resolved", "resuelto", "snoozed"]:
         return True
@@ -416,7 +419,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Feedback"] = df_exp.get("feedback", "")
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
-    df_reporte["Fecha cierre"] = df_exp.get("fecha_cierre_fmt", "")
+    df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
 
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
     df_reporte["Modulo"] = df_exp.get("modulo", "")
