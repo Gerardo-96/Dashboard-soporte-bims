@@ -538,6 +538,21 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 # =========================================================
 # FRAGMENTO SIN PARPADEO PARA LA PESTAÑA DE CONTROL OPERATIVO
 # =========================================================
+
+# ==============================================================================
+# NOTA DE ARQUITECTURA: LÓGICA DE CÁLCULO DE PROMEDIOS Y SLA
+# ==============================================================================
+# 1. EN PANTALLA (DASHBOARD):
+#    - Promedio 1ª Resp = mean(primera_respuesta_min) donde horario_evaluado != 'fuera de horario'
+#    - Promedio Gestión = mean(tiempo_resolucion_minutos) donde horario_evaluado != 'fuera de horario'
+#    - Se excluyen agentes con etiqueta 'excluido' (por_agente == 'excluido').
+#
+# 2. EN EXPORTACIÓN A EXCEL:
+#    - Horario Estricto = Lunes a Viernes de 08:00 a 17:00 hs (sin feriados).
+#    - SLA 1ª Respuesta = Cumple / No cumple en horario estricto. Fuera de hora = 'excluido por filtro'.
+#    - SLA Gestión = Cumple / No cumple en horario estricto. Si posee etiqueta 'sin respuesta' = 'excluido por filtro'.
+# ==============================================================================
+
 refresh_sec = timedelta(seconds=st.session_state["refresh_interval"]) if st.session_state["auto_refresh"] else None
 
 @st.fragment(run_every=refresh_sec)
@@ -1068,6 +1083,19 @@ with tab_admin:
         if st.button("Cerrar Sesion Admin"):
             st.session_state["admin_authenticated"] = False
             st.rerun()
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">ℹ️ Criterios de Cálculo de Tiempos y SLA</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
+                    <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
+                    <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         
