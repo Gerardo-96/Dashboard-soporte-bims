@@ -16,7 +16,7 @@ except ImportError:
     SYNC_AVAILABLE = False
 
 INTERCOM_APP_ID = "co9kozj6"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
@@ -47,7 +47,6 @@ def procesar_fechas_df(df):
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
 
-    # Priorizar fecha de primer cierre si existe, de lo contrario usar fecha_cierre general
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
         cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
@@ -107,19 +106,16 @@ st.markdown("""
         padding-bottom: 1.5rem !important;
     }
     
-    /* Configuración limpia de la barra superior */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
         z-index: 99999 !important;
     }
 
-    /* Ocultar elementos de Deploy / Menú no deseados */
     header[data-testid="stHeader"] .stDeployButton,
     header[data-testid="stHeader"] #MainMenu {
         display: none !important;
     }
 
-    /* Garantizar visibilidad del botón de colapso y apertura del sidebar */
     [data-testid="stSidebarCollapseButton"], 
     [data-testid="collapsedControl"] {
         visibility: visible !important;
@@ -337,6 +333,8 @@ if "sla_1ra_th" not in st.session_state:
     st.session_state["sla_1ra_th"] = 1.5
 if "sla_gest_th" not in st.session_state:
     st.session_state["sla_gest_th"] = 60.0
+if "alerta_nuevo_th" not in st.session_state:
+    st.session_state["alerta_nuevo_th"] = 1.5
 if "admin_authenticated" not in st.session_state:
     st.session_state["admin_authenticated"] = False
 
@@ -468,6 +466,7 @@ def renderizar_control_operativo():
     df_all = obtener_datos_supabase()
     sla_1ra_th = st.session_state["sla_1ra_th"]
     sla_gest_th = st.session_state["sla_gest_th"]
+    alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
 
     if not df_all.empty:
         df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario)
@@ -499,16 +498,17 @@ def renderizar_control_operativo():
     if not df_abiertos_all.empty:
         df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
         
+        # Alerta configurada según el tiempo personalizado de chat nuevo
         df_criticos_sla = df_abiertos_all[
             (df_abiertos_all["primera_respuesta_min"].isna()) & 
-            (df_abiertos_all["min_transcurridos"] >= (sla_1ra_th * 0.8))
+            (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th)
         ]
 
         if not df_criticos_sla.empty:
             st.markdown(f"""
             <div class="alert-card-critical">
                 <b>ALERTA CRITICA DE SLA EN VIVO</b><br>
-                Hay <b>{len(df_criticos_sla)} chat(s) en espera</b> sin respuesta rozando o superando el limite de SLA ({sla_1ra_th} min).
+                Hay <b>{len(df_criticos_sla)} chat(s) en espera</b> sin respuesta superando el limite configurado ({alerta_nuevo_th} min).
             </div>
             """, unsafe_allow_html=True)
 
@@ -991,7 +991,7 @@ with tab_admin:
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">1. Forzar Sincronizacion Manual de Intercom</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Sincroniza directamente los registros desde Intercom a la base de datos.</p>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Sincroniza directamente los registros desde Intercom a la base de datos de Supabase.</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -1036,11 +1036,11 @@ with tab_admin:
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo y los limites objetivo para los SLA de atencion.</p>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y limites objetivo para los SLA de atencion.</p>
             </div>
             """, unsafe_allow_html=True)
             
-            col_cfg1, col_cfg2 = st.columns(2)
+            col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
             
             with col_cfg1:
                 st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
@@ -1052,12 +1052,17 @@ with tab_admin:
                 cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
                 cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
 
+            with col_cfg3:
+                st.markdown("<b>Alerta de Chat Nuevo</b>", unsafe_allow_html=True)
+                cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
+
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Guardar Configuracion de Parametros", use_container_width=True):
                 st.session_state["auto_refresh"] = cfg_auto
                 st.session_state["refresh_interval"] = cfg_interval
                 st.session_state["sla_1ra_th"] = cfg_sla_1ra
                 st.session_state["sla_gest_th"] = cfg_sla_gest
+                st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
                 st.success("Configuracion actualizada correctamente.")
                 st.rerun()
 
