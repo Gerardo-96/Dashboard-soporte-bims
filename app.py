@@ -16,7 +16,7 @@ except ImportError:
     SYNC_AVAILABLE = False
 
 INTERCOM_APP_ID = "co9kozj6"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
@@ -116,13 +116,16 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Oculta botón Manage App y pie de página de Streamlit */
+    /* Oculta botón Manage App, Status Widget y pie de página de Streamlit */
     [data-testid="stStatusWidget"],
+    [data-testid="stDecoration"],
+    div[data-testid="stDecoration"],
     #MainMenu,
     footer,
     .stApp > footer {
         display: none !important;
         visibility: hidden !important;
+        height: 0px !important;
     }
 
     /* Botón flotante para el despliegue del sidebar */
@@ -208,11 +211,56 @@ FERIADOS = [
     "2026-12-08", "2026-12-25"
 ]
 
+DIAS_NORMAL_L_V = [0, 1, 2, 3, 4]
+NORMAL_L_V_INICIO = time(8, 0, 0)
+NORMAL_L_V_FIN = time(18, 0, 0)
+
+DIAS_NORMAL_SABADO = [5]
+NORMAL_SABADO_INICIO = time(9, 0, 0)
+NORMAL_SABADO_FIN = time(12, 0, 0)
+
+DIAS_EXTENDIDO_L_J = [0, 1, 2, 3]
+EXTENDIDO_L_J_INICIO = time(19, 0, 0)
+EXTENDIDO_L_J_FIN = time(2, 0, 0)
+
+DIAS_EXTENDIDO_V_S = [4, 5]
+EXTENDIDO_V_S_INICIO = time(18, 0, 0)
+EXTENDIDO_V_S_FIN = time(3, 0, 0)
+
+def evaluar_horario_dashboard(dt_objeto):
+    """Evalúa horario operativo estándar para el Dashboard en pantalla."""
+    if pd.isna(dt_objeto):
+        return "fuera de horario"
+    fecha_str = dt_objeto.strftime("%Y-%m-%d")
+    dia_semana = dt_objeto.weekday()
+    hora_actual = dt_objeto.time()
+
+    dt_ayer = dt_objeto - timedelta(days=1)
+    dia_ayer = dt_ayer.weekday()
+    fecha_ayer_str = dt_ayer.strftime("%Y-%m-%d")
+
+    if dia_ayer in DIAS_EXTENDIDO_L_J and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_L_J_FIN:
+        return "extendido"
+    if dia_ayer in DIAS_EXTENDIDO_V_S and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_V_S_FIN:
+        return "extendido"
+
+    if fecha_str in FERIADOS:
+        return "fuera de horario"
+
+    if dia_semana in DIAS_NORMAL_L_V and NORMAL_L_V_INICIO <= hora_actual <= NORMAL_L_V_FIN:
+        return "normal"
+    if dia_semana in DIAS_NORMAL_SABADO and NORMAL_SABADO_INICIO <= hora_actual <= NORMAL_SABADO_FIN:
+        return "normal"
+
+    if dia_semana in DIAS_EXTENDIDO_L_J and hora_actual >= EXTENDIDO_L_J_INICIO:
+        return "extendido"
+    if dia_semana in DIAS_EXTENDIDO_V_S and hora_actual >= EXTENDIDO_V_S_INICIO:
+        return "extendido"
+
+    return "fuera de horario"
+
 def evaluar_horario_estricto(dt_objeto):
-    """
-    Evalúa si la fecha/hora corresponde a Lunes-Viernes de 08:00 a 17:00 hs
-    (sin contar feriados).
-    """
+    """Evalúa estricto L-V de 08:00 a 17:00 para la exportación a Excel."""
     if pd.isna(dt_objeto):
         return False
     fecha_str = dt_objeto.strftime("%Y-%m-%d")
@@ -222,7 +270,6 @@ def evaluar_horario_estricto(dt_objeto):
     if fecha_str in FERIADOS:
         return False
     
-    # Lunes (0) a Viernes (4) entre 08:00 y 17:00 hs
     if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 0, 0):
         return True
     return False
@@ -250,6 +297,20 @@ def evaluar_sla_gestion_excel(row, threshold_gest):
     if pd.isna(min_gest):
         return "sin cerrar"
     return "cumple" if min_gest <= threshold_gest else "no cumple"
+
+def evaluar_sla_1ra(por_agente, horario, min_1ra, threshold):
+    if por_agente == "excluido" or horario == "fuera de horario":
+        return "excluido"
+    if pd.isna(min_1ra):
+        return "no cumple"
+    return "cumple" if min_1ra <= threshold else "no cumple"
+
+def evaluar_sla_gestion(por_agente, horario, min_gest, threshold):
+    if por_agente == "excluido" or horario == "fuera de horario":
+        return "excluido"
+    if pd.isna(min_gest):
+        return "sin cerrar"
+    return "cumple" if min_gest <= threshold else "no cumple"
 
 def calificacion_a_estrellas(x):
     if pd.isna(x) or str(x).strip() in ["", "None", "nan", "null"]:
@@ -399,7 +460,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
     
-    # SLA 1ª Respuesta calculado según panel Admin y ventana 08:00 a 17:00 L-V
+    # SLA 1ª Respuesta para Excel
     df_reporte["SLA 1a Resp"] = df_exp.apply(lambda r: evaluar_sla_1ra_excel(r, sla_1ra_threshold), axis=1)
     
     if "rating" in df_exp:
@@ -422,7 +483,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
     
-    # SLA Gestión calculado según panel Admin, ventana 08:00 a 17:00 L-V y exclusión por "sin respuesta"
+    # SLA Gestión para Excel
     df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1)
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -464,14 +525,14 @@ def renderizar_control_operativo():
     alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
 
     if not df_all.empty:
-        df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_estricto)
+        df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_dashboard)
         df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
 
         df_all["sla_1ra_eval"] = df_all.apply(
-            lambda r: evaluar_sla_1ra_excel(r, sla_1ra_th), axis=1
+            lambda r: evaluar_sla_1ra(r.get("por_agente"), r.get("horario_evaluado"), r.get("primera_respuesta_min"), sla_1ra_th), axis=1
         )
         df_all["sla_gest_eval"] = df_all.apply(
-            lambda r: evaluar_sla_gestion_excel(r, sla_gest_th), axis=1
+            lambda r: evaluar_sla_gestion(r.get("por_agente"), r.get("horario_evaluado"), r.get("tiempo_resolucion_minutos"), sla_gest_th), axis=1
         )
 
         for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "resumen_ia"]:
@@ -675,12 +736,17 @@ def renderizar_control_operativo():
 
     st.markdown("---")
 
-    # METRICAS POR AGENTE
+    # METRICAS POR AGENTE EN DASHBOARD
     st.markdown("### Metricas por Agente")
     if not df_filtered.empty:
-        v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] == True)]
-        p_1r = round(v_df["primera_respuesta_min"].mean(), 2) if not v_df.empty else 0
-        p_gest = round(v_df["tiempo_resolucion_minutos"].mean(), 2) if not v_df.empty else 0
+        v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] != "fuera de horario")]
+        
+        # Filtro de promedio en dashboard tomando valores numéricos válidos
+        p_1r_series = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
+        p_gest_series = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
+
+        p_1r = round(p_1r_series.mean(), 2) if not p_1r_series.dropna().empty else 0
+        p_gest = round(p_gest_series.mean(), 2) if not p_gest_series.dropna().empty else 0
 
         df_cerrados = df_filtered[df_filtered["es_cerrado"]]
 
@@ -694,21 +760,23 @@ def renderizar_control_operativo():
 
         res_agentes = []
         for agente, grp in df_filtered.groupby("agente_asignado"):
-            v_g = grp[(grp["por_agente"] == "no excluido") & (grp["horario_evaluado"] == True)]
+            v_g = grp[(grp["por_agente"] == "no excluido") & (grp["horario_evaluado"] != "fuera de horario")]
             asig = len(grp)
             cerr = len(grp[grp["es_cerrado"]])
-            p_1 = round(v_g["primera_respuesta_min"].mean(), 2) if not v_g.empty else 0
             
-            v_g_1ra = v_g[v_g["primera_respuesta_min"].notna()]
+            p_1_s = pd.to_numeric(v_g["primera_respuesta_min"], errors="coerce")
+            p_1 = round(p_1_s.mean(), 2) if not p_1_s.dropna().empty else 0
+            
+            v_g_1ra = v_g[p_1_s.notna()]
             if not v_g_1ra.empty:
-                cumplen_1ra = len(v_g_1ra[v_g_1ra["primera_respuesta_min"] <= sla_1ra_th])
+                cumplen_1ra = len(v_g_1ra[pd.to_numeric(v_g_1ra["primera_respuesta_min"], errors="coerce") <= sla_1ra_th])
                 sla_1 = round((cumplen_1ra / len(v_g_1ra)) * 100, 1)
             else:
                 sla_1 = 0.0
 
-            v_g_gest = v_g[v_g["tiempo_resolucion_minutos"].notna()]
+            v_g_gest = v_g[pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce").notna()]
             if not v_g_gest.empty:
-                cumplen_gest = len(v_g_gest[v_g_gest["tiempo_resolucion_minutos"] <= sla_gest_th])
+                cumplen_gest = len(v_g_gest[pd.to_numeric(v_g_gest["tiempo_resolucion_minutos"], errors="coerce") <= sla_gest_th])
                 sla_g = round((cumplen_gest / len(v_g_gest)) * 100, 1)
             else:
                 sla_g = 0.0
@@ -1006,7 +1074,6 @@ with tab_admin:
                         status_text.text("Iniciando conexion con Intercom API...")
                         progress_bar.progress(10)
                         
-                        # Intenta pasar el callback si la función lo soporta
                         try:
                             sincronizar_intercom(dias=dias_a_sincronizar, progress_callback=callback_progreso)
                         except TypeError:
