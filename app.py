@@ -979,7 +979,7 @@ def renderizar_control_operativo():
     st.markdown("---")
 
     # SECCIÓN DE BÚSQUEDA DINÁMICA POR TENANT O AGENTE
-    st.markdown("### Buscador Especifico de Chats (Por Tenant / Agente)")
+    st.markdown("### Buscador de Chats (Por Tenant / Agente)")
     
     if not df_all.empty:
         col_b1, col_b2 = st.columns(2)
