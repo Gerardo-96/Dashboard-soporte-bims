@@ -83,7 +83,7 @@ if not st.session_state["user_authenticated"]:
 
         /* Fuerza que el contenedor principal del login sea compacto */
         .block-container {
-            max-width: 420px !important;
+            max-width: 520px !important;
             padding-top: 5rem !important;
             margin: 0 auto !important;
         }
