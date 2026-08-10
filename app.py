@@ -126,13 +126,18 @@ if not st.session_state["user_authenticated"]:
             width: 100% !important;
         }
 
-        /* Oculta la leyenda "Press Enter to submit" de los campos del formulario */
-        div[data-testid="stTextInput"] small, 
-        div[data-testid="stInputInstructions"], 
-        .st-emotion-cache-12w0q3e, 
-        [data-testid="stFormSubmitButton"] + div {
+        /* OCULTA DEFINITIVAMENTE LA LEYENDA "PRESS ENTER TO SUBMIT" Y SUBTEXTOS */
+        div[data-testid="InputInstructions"],
+        div[data-testid="stFieldInstructions"],
+        div[data-testid="stTextInput"] small,
+        div[data-testid="stTextInput"] span:contains("Press Enter"),
+        .st-emotion-cache-11002id,
+        .st-emotion-cache-1wivap2 {
             display: none !important;
             visibility: hidden !important;
+            height: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
         }
 
         div[data-testid="stTextInput"] input {
@@ -215,6 +220,7 @@ if not st.session_state["user_authenticated"]:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
 
     st.stop()  # Detiene la ejecución aquí. Nada de la base de datos corre sin login.
+    
 # ==========================================
 # CÓDIGO PRINCIPAL DEL DASHBOARD
 # ==========================================
