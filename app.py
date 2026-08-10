@@ -722,7 +722,7 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# 1. FRAGMENTO RÁPIDO DE ALERTAS EN VIVO (SE EJECUTA CADA 10 SECONDS)
+# FRAGMENTO DE ALERTAS EN VIVO (ÚNICO BLOQUE CON AUTO-REFRESCO RÁPIDO)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
@@ -740,7 +740,6 @@ def renderizar_alertas_en_vivo():
             df_abiertos_all = df_abiertos_all.drop_duplicates(subset=["id"])
             df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
-            # Evalúa solo chats sin respuesta dentro del horario hábil operativo
             df_criticos_sla = df_abiertos_all[
                 (df_abiertos_all["primera_respuesta_min"].isna()) & 
                 (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th) &
@@ -758,14 +757,19 @@ def renderizar_alertas_en_vivo():
                 if act_sonido:
                     st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
-# =========================================================================
-# 2. FRAGMENTO DEL DASHBOARD GENERAL (SE EJECUTA CADA 5 MINUTOS / 300 SEG)
-# =========================================================================
-@st.fragment(run_every=300)
-def renderizar_metricas_y_tablas():
+# ==========================================
+# RENDERIZADO DE PESTAÑAS
+# ==========================================
+
+with tab_operativo:
+    # 1. Alertas en Vivo (Refresco automático de 10 segundos)
+    renderizar_alertas_en_vivo()
+
+    # 2. Métricas Generales y Reportes
     df_all = obtener_datos()
     sla_1ra_th = st.session_state["sla_1ra_th"]
     sla_gest_th = st.session_state["sla_gest_th"]
+    alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
 
     if not df_all.empty:
         df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_dashboard)
@@ -1061,6 +1065,9 @@ def renderizar_metricas_y_tablas():
     
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
+        if "min_transcurridos" not in df_rank.columns:
+            df_rank["min_transcurridos"] = ((now_dt - df_rank["created_at_dt"]).dt.total_seconds() / 60).round(1)
+            
         df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
         df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
 
@@ -1081,7 +1088,7 @@ def renderizar_metricas_y_tablas():
                 "company": "Company",
                 "resumen_ia": "Resumen IA"
             },
-            hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_unica"
+            hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_historico_general"
         )
     else:
         st.info("No hay chats abiertos pendientes en este momento.")
@@ -1136,17 +1143,6 @@ def renderizar_metricas_y_tablas():
                 st.info("No se encontraron registros que coincidan exactamente con la seleccion.")
         else:
             st.caption("Selecciona al menos un Tenant o Agente arriba para desplegar los resultados.")
-
-# ==========================================
-# RENDERIZADO DE PESTAÑAS
-# ==========================================
-
-with tab_operativo:
-    # 1. Alertas en vivo (actualiza silenciosamente cada 10 segundos)
-    renderizar_alertas_en_vivo()
-    
-    # 2. Métricas, CSAT y Tablas (se actualizan cada 5 minutos sin parpadeo)
-    renderizar_metricas_y_tablas()
 
 with tab_resumen:
     df_all_r = obtener_datos()
