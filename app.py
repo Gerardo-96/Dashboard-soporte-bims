@@ -271,7 +271,7 @@ def procesar_fechas_df(df):
     return df
 
 @st.cache_data(ttl=10)
-def obtener_datos_supabase():
+def obtener_datos():
     """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
     todos_los_datos = []
     lote = 0
@@ -596,7 +596,7 @@ if "input_f_hasta" not in st.session_state:
 # ==========================
 # SIDEBAR / ESTADO & FILTROS DINÁMICOS
 # ==========================
-df_all_init = obtener_datos_supabase()
+df_all_init = obtener_datos()
 
 if not df_all_init.empty and "created_at_dt" in df_all_init.columns:
     min_created_dt = df_all_init["created_at_dt"].min()
@@ -718,7 +718,7 @@ refresh_sec = timedelta(seconds=st.session_state["refresh_interval"]) if st.sess
 
 @st.fragment(run_every=refresh_sec)
 def renderizar_control_operativo():
-    df_all = obtener_datos_supabase()
+    df_all = obtener_datos()
     sla_1ra_th = st.session_state["sla_1ra_th"]
     sla_gest_th = st.session_state["sla_gest_th"]
     alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
@@ -1123,7 +1123,7 @@ with tab_operativo:
     renderizar_control_operativo()
 
 with tab_resumen:
-    df_all_r = obtener_datos_supabase()
+    df_all_r = obtener_datos()
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
     if not df_all_r.empty:
@@ -1371,7 +1371,7 @@ with tab_admin:
             </div>
             """, unsafe_allow_html=True)
             
-            df_all_exp = obtener_datos_supabase()
+            df_all_exp = obtener_datos()
             if not df_all_exp.empty:
                 df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
                 if usar_filtro_hora and not df_exp_filt.empty:
