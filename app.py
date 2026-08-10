@@ -66,10 +66,12 @@ if not st.session_state["user_authenticated"]:
     <style>
         .stApp { background-color: #0f172a; color: #f8fafc; }
         
-        /* Ocultar el widget de estado 'Running...' en la pantalla de acceso */
-        [data-testid="stStatusWidget"] { display: none !important; }
+        /* Ocultar notificación emergente flotante 'Running...' de Streamlit */
+        [data-testid="stStatusWidget"], header[data-testid="stHeader"] { 
+            display: none !important; 
+        }
 
-        /* Contenedor estático rígido para el formulario */
+        /* Contenedor estático rígido con dimensiones fijas */
         .login-card-container {
             max-width: 400px;
             margin: 60px auto 0 auto;
@@ -110,6 +112,18 @@ if not st.session_state["user_authenticated"]:
             height: 42px !important;
             margin-top: 12px !important;
         }
+
+        /* Estilo para la caja de estado y animación */
+        .loading-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 10px;
+            color: #38bdf8;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
     </style>
 
     <div class="login-card-container">
@@ -128,10 +142,16 @@ if not st.session_state["user_authenticated"]:
             if not input_user_email.strip() or not input_user_pass.strip():
                 status_box.warning("Por favor ingresa tu correo y contraseña.")
             else:
+                # Renderiza la animación dentro del contenedor reservado
                 with status_box.container():
-                    with st.spinner("Verificando credenciales..."):
-                        time_lib.sleep(0.4)
-                        valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                    st.markdown("""
+                    <div class="loading-box">
+                        <div class="stSpinner">⏳ Verificando credenciales...</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    time_lib.sleep(0.6)  # Pausa visual garantizada para ver la animación
+                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
                     st.session_state["user_authenticated"] = True
