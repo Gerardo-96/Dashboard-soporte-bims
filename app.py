@@ -909,7 +909,7 @@ def renderizar_control_operativo():
     if not df_filtered.empty:
         df_csat_det = obtener_df_csat_valido(df_filtered)
         if not df_csat_det.empty:
-            with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
+            with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
                 df_csat_det = df_csat_det.sort_values(by=["rating_num", "created_at_dt"], ascending=[True, False])
 
