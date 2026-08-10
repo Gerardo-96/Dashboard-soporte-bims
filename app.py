@@ -1172,6 +1172,7 @@ with tab_admin:
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Tarjeta 1: Sincronización y Poblamiento por Lotes con Contador
+        # Tarjeta 1: Poblamiento Masivo de Datos por Meses con Diagnóstico de Errores
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -1187,7 +1188,7 @@ with tab_admin:
             try:
                 res_count = supabase.table("conversaciones").select("id", count="exact").execute()
                 total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
-            except Exception:
+            except Exception as e_count:
                 total_registros_db = 0
 
             # Muestra de métrica y estado en pantalla
@@ -1202,47 +1203,45 @@ with tab_admin:
                 """, unsafe_allow_html=True)
             
             with c_meta2:
-                if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True):
+                if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
                     st.cache_data.clear()
                     st.rerun()
 
             st.markdown("<br>", unsafe_allow_html=True)
-            
+
+            # Visualización de logs de la última sincronización en caso de fallo
+            if "last_sync_log" in st.session_state:
+                st.info(f"📋 **Estado del último intento:** {st.session_state['last_sync_log']}")
+
             # Selector de tipo de carga y botón de ejecución
             c_sync1, c_sync2 = st.columns([2, 1], vertical_alignment="bottom")
             
             modo_sync = c_sync1.selectbox(
                 "Selecciona el modo de descarga:", 
-                options=["Historico Completo 2026 (Por meses)", "Ultimos X Dias (Rapido)"],
+                options=["Ultimos X Dias (Prueba Rapida)", "Historico Completo 2026 (Por meses)"],
                 key="sb_modo_sync"
             )
             
-            if modo_sync == "Ultimos X Dias (Rapido)":
+            if modo_sync == "Ultimos X Dias (Prueba Rapida)":
                 dias_a_sincronizar = c_sync1.number_input("Dias hacia atras a consultar:", min_value=1, max_value=90, value=2, key="ni_dias_sync")
             else:
                 dias_a_sincronizar = (pd.Timestamp.now(tz="America/Asuncion").date() - date(2026, 1, 1)).days + 1
             
             if c_sync2.button("Iniciar Descarga", use_container_width=True, key="btn_iniciar_poblamiento"):
                 if SYNC_AVAILABLE:
-                    import threading
-                    
-                    def tarea_poblamiento_lotes(dias_totales):
-                        """Función que ejecuta la descarga progresiva sin bloquear la app."""
+                    # Prueba directa de sincronización en primer plano para capturar excepciones exactas
+                    with st.spinner(f"Ejecutando prueba de sincronización para {dias_a_sincronizar} días..."):
                         try:
-                            # Divide los días totales en bloques de 30 días
-                            bloques = list(range(30, dias_totales + 30, 30))
-                            for d in bloques:
-                                dias_efectivos = min(d, dias_totales)
-                                sincronizar_intercom(dias=dias_efectivos)
-                                time_lib.sleep(3)  # Pausa de seguridad
+                            # Intentamos sincronizar los días seleccionados
+                            sincronizar_intercom(dias=dias_a_sincronizar)
+                            st.session_state["last_sync_log"] = f"✅ Sincronización de {dias_a_sincronizar} días finalizada correctamente a las {datetime.now().strftime('%H:%M:%S')}."
+                            st.cache_data.clear()
+                            st.success("Sincronización completada exitosamente.")
+                            st.rerun()
                         except Exception as err:
-                            print(f"Error en descarga en segundo plano: {err}")
-
-                    # Dispara el proceso en un hilo independiente
-                    hilo = threading.Thread(target=tarea_poblamiento_lotes, args=(dias_a_sincronizar,))
-                    hilo.start()
-                    
-                    st.success("🚀 ¡Proceso iniciado en segundo plano! Usa el botón 'Actualizar Contador en Vivo' para monitorear el progreso.")
+                            error_detalle = str(err)
+                            st.session_state["last_sync_log"] = f"❌ Error: {error_detalle}"
+                            st.error(f"Fallo al sincronizar con Intercom/Supabase: {error_detalle}")
                 else:
                     st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
                     
