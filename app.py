@@ -83,23 +83,22 @@ if not st.session_state["user_authenticated"]:
 
         /* Fuerza que el contenedor principal del login sea compacto */
         .block-container {
-            max-width: 520px !important;
+            max-width: 420px !important;
             padding-top: 5rem !important;
             margin: 0 auto !important;
         }
 
-        /* Estilo de la tarjeta de Login */
-        .login-card-header {
+        /* Tarjeta contenedora de Login */
+        .login-card-box {
             background-color: #1e293b;
             border: 1px solid #334155;
-            border-bottom: none;
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-            padding: 28px 24px 10px 24px;
-            text-align: center;
+            border-radius: 16px;
+            padding: 28px 24px;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
         }
 
         .login-title {
+            text-align: center;
             color: #38bdf8;
             font-size: 1.45rem;
             font-weight: 700;
@@ -107,37 +106,25 @@ if not st.session_state["user_authenticated"]:
         }
 
         .login-subtitle {
+            text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
+            margin-bottom: 20px;
         }
 
-        /* Envoltorio del formulario */
-        div[data-testid="stForm"] {
-            background-color: #1e293b !important;
-            border: 1px solid #334155 !important;
-            border-top: none !important;
-            border-bottom-left-radius: 16px !important;
-            border-bottom-right-radius: 16px !important;
-            padding: 0 24px 28px 24px !important;
-            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
-        }
-
+        /* Estilizado interno de los campos de texto */
         div[data-testid="stTextInput"] {
             width: 100% !important;
+            margin-bottom: 12px;
         }
 
-        /* OCULTA DEFINITIVAMENTE LA LEYENDA "PRESS ENTER TO SUBMIT" Y SUBTEXTOS */
-        div[data-testid="InputInstructions"],
-        div[data-testid="stFieldInstructions"],
+        /* Oculta cualquier subtítulo, leyenda o instrucción residual */
         div[data-testid="stTextInput"] small,
-        div[data-testid="stTextInput"] span:contains("Press Enter"),
-        .st-emotion-cache-11002id,
-        .st-emotion-cache-1wivap2 {
+        div[data-testid="stTextInput"] [data-testid="stCaptionContainer"],
+        div[data-testid="stInputInstructions"] {
             display: none !important;
             visibility: hidden !important;
             height: 0px !important;
-            margin: 0px !important;
-            padding: 0px !important;
         }
 
         div[data-testid="stTextInput"] input {
@@ -148,7 +135,7 @@ if not st.session_state["user_authenticated"]:
             padding: 10px 12px !important;
         }
 
-        /* Elimina el icono de contraseña duplicado del navegador (Edge / Chrome / Safari) */
+        /* Oculta el icono de la contraseña nativo de navegadores Chromium/Edge */
         input::-ms-reveal,
         input::-ms-clear {
             display: none !important;
@@ -183,43 +170,42 @@ if not st.session_state["user_authenticated"]:
         }
     </style>
 
-    <div class="login-card-header">
+    <div class="login-card-box">
         <div class="login-title">Dashboard Soporte BIMS</div>
         <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
-    </div>
     """, unsafe_allow_html=True)
 
-    with st.form("form_login_global", clear_on_submit=False):
-        input_user_email = st.text_input("Correo Electrónico")
-        input_user_pass = st.text_input("Contraseña", type="password")
-        
-        status_box = st.empty()
-        btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
+    input_user_email = st.text_input("Correo Electrónico", key="login_email_clean")
+    input_user_pass = st.text_input("Contraseña", type="password", key="login_pass_clean")
+    
+    status_box = st.empty()
+    btn_login_user = st.button("Iniciar Sesión", use_container_width=True, key="btn_login_submit")
 
-        if btn_login_user:
-            if not input_user_email.strip() or not input_user_pass.strip():
-                status_box.warning("Por favor ingresa tu correo y contraseña.")
+    if btn_login_user:
+        if not input_user_email.strip() or not input_user_pass.strip():
+            status_box.warning("Por favor ingresa tu correo y contraseña.")
+        else:
+            with status_box.container():
+                st.markdown("""
+                <div class="loading-badge">
+                    ⏳ Verificando credenciales...
+                </div>
+                """, unsafe_allow_html=True)
+                
+                time_lib.sleep(0.5)
+                valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                
+            if valido:
+                st.session_state["user_authenticated"] = True
+                st.session_state["user_email"] = datos_user.get("email")
+                st.session_state["user_name"] = datos_user.get("nombre")
+                status_box.success("Acceso concedido.")
+                st.rerun()
             else:
-                with status_box.container():
-                    st.markdown("""
-                    <div class="loading-badge">
-                        ⏳ Verificando credenciales...
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    time_lib.sleep(0.5)
-                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
-                    
-                if valido:
-                    st.session_state["user_authenticated"] = True
-                    st.session_state["user_email"] = datos_user.get("email")
-                    st.session_state["user_name"] = datos_user.get("nombre")
-                    status_box.success("Acceso concedido.")
-                    st.rerun()
-                else:
-                    status_box.error("Credenciales incorrectas o usuario no activo.")
+                status_box.error("Credenciales incorrectas o usuario no activo.")
 
-    st.stop()  # Detiene la ejecución aquí. Nada de la base de datos corre sin login.
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
     
 # ==========================================
 # CÓDIGO PRINCIPAL DEL DASHBOARD
