@@ -70,288 +70,151 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# LOGIN - DASHBOARD SOPORTE BIMS
-# Diseño SaaS / Fintech profesional (Corregido)
+# PANTALLA DE LOGIN CENTRADA Y ACO TADA
 # ==========================================
-
 if not st.session_state["user_authenticated"]:
-
     st.markdown("""
     <style>
-    /* ==========================================
-       VARIABLES VISUALES
-       ========================================== */
-    :root {
-        --bg-primary: #0b1120;
-        --bg-secondary: #111827;
-        --card-bg: rgba(17, 24, 39, 0.92);
-        --border: rgba(148, 163, 184, 0.14);
+        .stApp { background-color: #0f172a; color: #f8fafc; }
 
-        --text-primary: #f8fafc;
-        --text-secondary: #94a3b8;
-        --text-muted: #64748b;
+        header[data-testid="stHeader"] {
+            background-color: #0f172a !important;
+        }
 
-        --brand: #10b981;
-        --brand-hover: #059669;
-        --brand-light: #34d399;
-    }
+        /* Fuerza que el contenedor principal del login sea compacto */
+        .block-container {
+            max-width: 420px !important;
+            padding-top: 5rem !important;
+            margin: 0 auto !important;
+        }
 
-    /* ==========================================
-       FONDO GENERAL & HEADER
-       ========================================== */
-    .stApp {
-        background:
-            radial-gradient(
-                circle at 50% -10%,
-                rgba(16, 185, 129, 0.10),
-                transparent 40%
-            ),
-            linear-gradient(
-                180deg,
-                #0b1120 0%,
-                #0f172a 100%
-            );
-        color: var(--text-primary);
-    }
+        /* Estilo de la tarjeta de Login */
+        .login-card-header {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-bottom: none;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            padding: 28px 24px 10px 24px;
+            text-align: center;
+        }
 
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-    }
+        .login-title {
+            color: #38bdf8;
+            font-size: 1.45rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
 
-    [data-testid="stStatusWidget"], #MainMenu, footer {
-        display: none !important;
-        visibility: hidden !important;
-    }
+        .login-subtitle {
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
 
-    /* ==========================================
-       CONTENEDOR PRINCIPAL
-       ========================================== */
-    .block-container {
-        max-width: 440px !important;
-        padding-top: 5rem !important;
-        padding-bottom: 3rem !important;
-        margin: 0 auto !important;
-    }
+        /* Envoltorio del formulario */
+        div[data-testid="stForm"] {
+            background-color: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-top: none !important;
+            border-bottom-left-radius: 16px !important;
+            border-bottom-right-radius: 16px !important;
+            padding: 0 24px 28px 24px !important;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
+        }
 
-    /* ==========================================
-       MARCA SUPERIOR
-       ========================================== */
-    .login-brand {
-        text-align: center;
-        margin-bottom: 24px;
-    }
+        div[data-testid="stTextInput"] {
+            width: 100% !important;
+        }
 
-    .brand-icon {
-        width: 46px;
-        height: 46px;
-        margin: 0 auto 12px auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 13px;
-        background: linear-gradient(135deg, rgba(16, 185, 129, 0.20), rgba(16, 185, 129, 0.05));
-        border: 1px solid rgba(52, 211, 153, 0.25);
-        color: var(--brand-light);
-        font-size: 21px;
-        font-weight: 700;
-        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.08);
-    }
+        /* Oculta la leyenda "Press Enter to submit" de los campos del formulario */
+        div[data-testid="stTextInput"] small, 
+        div[data-testid="stInputInstructions"], 
+        .st-emotion-cache-12w0q3e, 
+        [data-testid="stFormSubmitButton"] + div {
+            display: none !important;
+            visibility: hidden !important;
+        }
 
-    .brand-name {
-        color: var(--text-primary);
-        font-size: 1rem;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-    }
+        div[data-testid="stTextInput"] input {
+            background-color: #0f172a !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155 !important;
+            border-radius: 8px !important;
+            padding: 10px 12px !important;
+        }
 
-    .brand-label {
-        color: var(--text-muted);
-        font-size: 0.75rem;
-        margin-top: 2px;
-    }
+        /* Elimina el icono de contraseña duplicado del navegador (Edge / Chrome / Safari) */
+        input::-ms-reveal,
+        input::-ms-clear {
+            display: none !important;
+        }
 
-    /* ==========================================
-       TARJETA ENCAPSULADA NATIVA
-       ========================================== */
-    div[data-testid="stContainer"] {
-        background: var(--card-bg) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: 20px !important;
-        padding: 28px 26px !important;
-        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35), 0 8px 25px rgba(0, 0, 0, 0.20) !important;
-        backdrop-filter: blur(14px) !important;
-        -webkit-backdrop-filter: blur(14px) !important;
-    }
+        div[data-testid="stTextInput"] input:focus {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 0 1px #38bdf8 !important;
+        }
 
-    /* Línea verde decorativa superior */
-    div[data-testid="stContainer"]::before {
-        content: "";
-        display: block;
-        width: 42px;
-        height: 3px;
-        margin: 0 auto 20px auto;
-        border-radius: 20px;
-        background: var(--brand);
-    }
+        /* Botón Iniciar Sesión */
+        .stButton>button { 
+            background-color: #0284c7 !important; 
+            color: white !important; 
+            font-weight: bold !important; 
+            border-radius: 8px !important; 
+            border: none !important;
+            height: 44px !important;
+            margin-top: 8px !important;
+        }
 
-    .login-title {
-        text-align: center;
-        color: var(--text-primary);
-        font-size: 1.45rem;
-        font-weight: 750;
-        letter-spacing: -0.025em;
-        margin-bottom: 6px;
-    }
-
-    .login-subtitle {
-        text-align: center;
-        color: var(--text-secondary);
-        font-size: 0.85rem;
-        line-height: 1.4;
-        margin-bottom: 22px;
-    }
-
-    /* ==========================================
-       INPUTS & BOTÓN
-       ========================================== */
-    div[data-testid="stTextInput"] {
-        margin-bottom: 12px !important;
-    }
-
-    div[data-testid="stTextInput"] label {
-        color: #cbd5e1 !important;
-        font-size: 0.78rem !important;
-        font-weight: 600 !important;
-    }
-
-    div[data-testid="stTextInput"] input {
-        width: 100% !important;
-        height: 44px !important;
-        background: #0b1220 !important;
-        color: var(--text-primary) !important;
-        border: 1px solid #263244 !important;
-        border-radius: 10px !important;
-        padding: 0 13px !important;
-        font-size: 0.88rem !important;
-    }
-
-    div[data-testid="stTextInput"] input:focus {
-        background: #0d1525 !important;
-        border-color: var(--brand) !important;
-        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.10) !important;
-        outline: none !important;
-    }
-
-    /* Botón de Inicio de Sesión */
-    div.stButton > button {
-        width: 100% !important;
-        height: 44px !important;
-        border: none !important;
-        border-radius: 10px !important;
-        background: linear-gradient(135deg, var(--brand), var(--brand-hover)) !important;
-        color: white !important;
-        font-size: 0.88rem !important;
-        font-weight: 700 !important;
-        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.18) !important;
-        margin-top: 6px !important;
-    }
-
-    .loading-badge {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        margin-top: 14px;
-        padding: 10px 14px;
-        background: rgba(16, 185, 129, 0.06);
-        border: 1px solid rgba(16, 185, 129, 0.18);
-        border-radius: 10px;
-        color: var(--brand-light);
-        font-size: 0.80rem;
-        font-weight: 600;
-    }
-
-    .login-footer {
-        text-align: center;
-        color: #475569;
-        font-size: 0.72rem;
-        margin-top: 22px;
-    }
+        .loading-badge {
+            background-color: #0f172a;
+            border: 1px solid #0284c7;
+            border-radius: 8px;
+            padding: 10px;
+            color: #38bdf8;
+            font-size: 0.88rem;
+            font-weight: 600;
+            text-align: center;
+            margin-top: 10px;
+        }
     </style>
+
+    <div class="login-card-header">
+        <div class="login-title">Dashboard Soporte BIMS</div>
+        <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
+    </div>
     """, unsafe_allow_html=True)
 
-    # Marca Superior
-    st.markdown("""
-        <div class="login-brand">
-            <div class="brand-name">BIMS</div>
-            <div class="brand-label">Plataforma de soporte</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # Tarjeta que agrupa verdaderamente a los componentes
-    with st.container(border=True):
-        st.markdown("""
-            <div class="login-title">Bienvenido</div>
-            <div class="login-subtitle">Ingresa tus credenciales para acceder al dashboard de soporte.</div>
-        """, unsafe_allow_html=True)
-
-        input_user_email = st.text_input(
-            "Correo electrónico",
-            placeholder="nombre@empresa.com",
-            key="login_email_card"
-        )
-
-        input_user_pass = st.text_input(
-            "Contraseña",
-            type="password",
-            placeholder="Ingresa tu contraseña",
-            key="login_pass_card"
-        )
-
-        btn_login_user = st.button(
-            "Iniciar sesión",
-            use_container_width=True,
-            key="btn_login_card"
-        )
-
+    with st.form("form_login_global", clear_on_submit=False):
+        input_user_email = st.text_input("Correo Electrónico")
+        input_user_pass = st.text_input("Contraseña", type="password")
+        
         status_box = st.empty()
+        btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
 
         if btn_login_user:
-            email = input_user_email.strip()
-            password = input_user_pass.strip()
-
-            if not email or not password:
-                status_box.warning("Por favor completa todos los campos.")
+            if not input_user_email.strip() or not input_user_pass.strip():
+                status_box.warning("Por favor ingresa tu correo y contraseña.")
             else:
                 with status_box.container():
                     st.markdown("""
-                        <div class="loading-badge">
-                            <span>⏳</span>
-                            <span>Verificando credenciales...</span>
-                        </div>
+                    <div class="loading-badge">
+                        ⏳ Verificando credenciales...
+                    </div>
                     """, unsafe_allow_html=True)
-
+                    
                     time_lib.sleep(0.5)
-                    valido, datos_user = verificar_credenciales_supabase(email, password)
-
+                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                    
                 if valido:
                     st.session_state["user_authenticated"] = True
                     st.session_state["user_email"] = datos_user.get("email")
                     st.session_state["user_name"] = datos_user.get("nombre")
-                    status_box.success("Acceso concedido. Cargando panel...")
-                    time_lib.sleep(0.3)
+                    status_box.success("Acceso concedido.")
                     st.rerun()
                 else:
-                    status_box.error("Correo o contraseña incorrectos.")
+                    status_box.error("Credenciales incorrectas o usuario no activo.")
 
-    # Footer
-    st.markdown("""
-        <div class="login-footer">
-            Acceso protegido · <span>BIMS Support</span>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.stop()
+    st.stop()  # Detiene la ejecución aquí. Nada de la base de datos corre sin login.
     
 # ==========================================
 # CÓDIGO PRINCIPAL DEL DASHBOARD
