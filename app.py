@@ -70,21 +70,20 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# PANTALLA DE LOGIN CENTRADA Y ACOTADA
+# PANTALLA DE LOGIN CENTRADA Y ACO TADA
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
         .stApp { background-color: #0f172a; color: #f8fafc; }
 
-        /* Mantiene el header visible pero con el mismo fondo oscuro */
         header[data-testid="stHeader"] {
             background-color: #0f172a !important;
         }
 
-        /* Fuerza que el contenedor principal del login no se expanda horizontalmente */
+        /* Fuerza que el contenedor principal del login sea compacto */
         .block-container {
-            max-width: 520px !important;
+            max-width: 420px !important;
             padding-top: 5rem !important;
             margin: 0 auto !important;
         }
@@ -123,9 +122,17 @@ if not st.session_state["user_authenticated"]:
             box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
         }
 
-        /* Estilizado interno de los campos de texto */
         div[data-testid="stTextInput"] {
             width: 100% !important;
+        }
+
+        /* Oculta la leyenda "Press Enter to submit" de los campos del formulario */
+        div[data-testid="stTextInput"] small, 
+        div[data-testid="stInputInstructions"], 
+        .st-emotion-cache-12w0q3e, 
+        [data-testid="stFormSubmitButton"] + div {
+            display: none !important;
+            visibility: hidden !important;
         }
 
         div[data-testid="stTextInput"] input {
@@ -134,6 +141,12 @@ if not st.session_state["user_authenticated"]:
             border: 1px solid #334155 !important;
             border-radius: 8px !important;
             padding: 10px 12px !important;
+        }
+
+        /* Elimina el icono de contraseña duplicado del navegador (Edge / Chrome / Safari) */
+        input::-ms-reveal,
+        input::-ms-clear {
+            display: none !important;
         }
 
         div[data-testid="stTextInput"] input:focus {
@@ -201,8 +214,7 @@ if not st.session_state["user_authenticated"]:
                 else:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
 
-    st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
-
+    st.stop()  # Detiene la ejecución aquí. Nada de la base de datos corre sin login.
 # ==========================================
 # CÓDIGO PRINCIPAL DEL DASHBOARD
 # ==========================================
