@@ -70,7 +70,7 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# PANTALLA DE LOGIN CENTRADA Y ACO TADA
+# PANTALLA DE LOGIN CON CAMPOS DENTRO DE LA TARJETA
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
@@ -81,20 +81,21 @@ if not st.session_state["user_authenticated"]:
             background-color: #0f172a !important;
         }
 
-        /* Fuerza que el contenedor principal del login sea compacto */
+        /* Fuerza que el contenedor principal del login sea compacto y centrado */
         .block-container {
-            max-width: 520px !important;
+            max-width: 420px !important;
             padding-top: 5rem !important;
             margin: 0 auto !important;
         }
 
-        /* Tarjeta contenedora de Login */
-        .login-card-box {
+        /* Estilos para encapsular todo en una tarjeta unica */
+        .login-card {
             background-color: #1e293b;
             border: 1px solid #334155;
             border-radius: 16px;
-            padding: 28px 24px;
+            padding: 30px 24px;
             box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
+            margin-bottom: 20px;
         }
 
         .login-title {
@@ -109,28 +110,13 @@ if not st.session_state["user_authenticated"]:
             text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
-        /* Estilizado interno de los campos de texto */
+        /* Estilizado interno de las cajas de texto */
         div[data-testid="stTextInput"] {
             width: 100% !important;
-            margin-bottom: 12px;
-        }
-
-        /* OCULTA EL TEXTO "PRESS ENTER TO SUBMIT" EN CUALQUIER VERSIÓN DE STREAMLIT */
-        [data-testid="stInputInstructions"],
-        [data-testid="stInputInstructions"] *,
-        div[data-testid="stTextInput"] p,
-        div[data-testid="stTextInput"] caption,
-        div[data-testid="stTextInput"] small {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            height: 0px !important;
-            font-size: 0px !important;
-            margin: 0px !important;
-            padding: 0px !important;
+            margin-bottom: 8px;
         }
 
         div[data-testid="stTextInput"] input {
@@ -139,12 +125,6 @@ if not st.session_state["user_authenticated"]:
             border: 1px solid #334155 !important;
             border-radius: 8px !important;
             padding: 10px 12px !important;
-        }
-
-        /* Oculta el icono de la contraseña nativo de navegadores Chromium/Edge */
-        input::-ms-reveal,
-        input::-ms-clear {
-            display: none !important;
         }
 
         div[data-testid="stTextInput"] input:focus {
@@ -160,7 +140,7 @@ if not st.session_state["user_authenticated"]:
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 8px !important;
+            margin-top: 12px !important;
         }
 
         .loading-badge {
@@ -172,21 +152,29 @@ if not st.session_state["user_authenticated"]:
             font-size: 0.88rem;
             font-weight: 600;
             text-align: center;
-            margin-top: 10px;
+            margin-top: 12px;
         }
     </style>
+    """, unsafe_allow_html=True)
 
-    <div class="login-card-box">
+    # 1. Inicio de la tarjeta HTML y encabezado
+    st.markdown("""
+    <div class="login-card">
         <div class="login-title">Dashboard Soporte BIMS</div>
         <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
     """, unsafe_allow_html=True)
 
-    input_user_email = st.text_input("Correo Electrónico", key="login_email_clean")
-    input_user_pass = st.text_input("Contraseña", type="password", key="login_pass_clean")
+    # 2. Componentes de entrada e interactividad
+    input_user_email = st.text_input("Correo Electrónico", key="login_email_card")
+    input_user_pass = st.text_input("Contraseña", type="password", key="login_pass_card")
     
     status_box = st.empty()
-    btn_login_user = st.button("Iniciar Sesión", use_container_width=True, key="btn_login_submit")
+    btn_login_user = st.button("Iniciar Sesión", use_container_width=True, key="btn_login_card")
 
+    # 3. Cierre estricto de la tarjeta HTML
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Lógica de validación
     if btn_login_user:
         if not input_user_email.strip() or not input_user_pass.strip():
             status_box.warning("Por favor ingresa tu correo y contraseña.")
@@ -210,7 +198,6 @@ if not st.session_state["user_authenticated"]:
             else:
                 status_box.error("Credenciales incorrectas o usuario no activo.")
 
-    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
     
 # ==========================================
