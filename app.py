@@ -283,7 +283,6 @@ if not st.session_state["user_authenticated"]:
     # Marca Superior
     st.markdown("""
         <div class="login-brand">
-            <div class="brand-icon">✓</div>
             <div class="brand-name">BIMS</div>
             <div class="brand-label">Plataforma de soporte</div>
         </div>
