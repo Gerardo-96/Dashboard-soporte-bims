@@ -1,7 +1,7 @@
 import os
 import argparse
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from supabase import create_client, Client
 
 # ==========================================
@@ -12,7 +12,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-ACCESS_TOKEN = os.environ.get("INTERCOM_ACCESS_TOKEN", "")
+ACCESS_TOKEN = os.environ.get("INTERCOM_ACCESS_TOKEN", "") or os.environ.get("INTERCOM_TOKEN", "")
 
 tz_local = timezone(timedelta(hours=-3))
 
@@ -92,18 +92,42 @@ def extraer_motivo_normalizado(modulo, tipo_contacto, etiquetas, cx_explanation)
             return tags_list[0].replace("_", " ").title()
     return "Consulta General"
 
-def sincronizar_intercom(dias=3):
+def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None):
+    """
+    Sincroniza conversaciones de Intercom hacia Supabase.
+    Soporta el cálculo por 'dias' o por rango explícito con 'fecha_desde' y 'fecha_hasta'.
+    """
     ahora_local = datetime.now(tz=tz_local)
-    fecha_inicio_dt = (ahora_local - timedelta(days=dias)).replace(hour=0, minute=0, second=0, microsecond=0)
-    start_ts = int(fecha_inicio_dt.timestamp())
-    end_ts = int(ahora_local.timestamp())
+    
+    # Evaluar si se recibió rango explícito de fechas
+    if fecha_desde and fecha_hasta:
+        if isinstance(fecha_desde, str):
+            fecha_desde = datetime.strptime(fecha_desde, "%Y-%m-%d").date()
+        elif isinstance(fecha_desde, datetime):
+            fecha_desde = fecha_desde.date()
+
+        if isinstance(fecha_hasta, str):
+            fecha_hasta = datetime.strptime(fecha_hasta, "%Y-%m-%d").date()
+        elif isinstance(fecha_hasta, datetime):
+            fecha_hasta = fecha_hasta.date()
+
+        dt_inicio = datetime.combine(fecha_desde, datetime.min.time()).replace(tzinfo=tz_local)
+        dt_fin = datetime.combine(fecha_hasta, datetime.max.time()).replace(tzinfo=tz_local)
+    else:
+        # Modo por días
+        dias_val = dias if dias is not None else 3
+        dt_inicio = (ahora_local - timedelta(days=dias_val)).replace(hour=0, minute=0, second=0, microsecond=0)
+        dt_fin = ahora_local
+
+    start_ts = int(dt_inicio.timestamp())
+    end_ts = int(dt_fin.timestamp())
 
     agentes = obtener_agentes()
     conversations_url = "https://api.intercom.io/conversations/search"
     starting_after = None
     total_procesadas = 0
 
-    print(f"🔄 Sincronizando conversaciones ACTUALIZADAS en Supabase desde {fecha_inicio_dt.strftime('%Y-%m-%d %H:%M:%S')}...")
+    print(f"🔄 Sincronizando conversaciones de Intercom desde {dt_inicio.strftime('%Y-%m-%d %H:%M:%S')} hasta {dt_fin.strftime('%Y-%m-%d %H:%M:%S')}...")
 
     while True:
         payload = {
@@ -121,8 +145,8 @@ def sincronizar_intercom(dias=3):
 
         r = requests.post(conversations_url, headers=headers, json=payload)
         if r.status_code != 200:
-            print(f"❌ Error al consultar Intercom API: {r.status_code}")
-            break
+            print(f"❌ Error al consultar Intercom API ({r.status_code}): {r.text}")
+            raise Exception(f"Intercom API Error {r.status_code}: {r.text}")
 
         data = r.json()
         convs = data.get("conversations") or data.get("data", [])
@@ -230,15 +254,22 @@ def sincronizar_intercom(dias=3):
             supabase.table("conversaciones").upsert(lote_registros).execute()
             total_procesadas += len(lote_registros)
 
+        if progress_callback:
+            progress_callback(total_procesadas, total_procesadas)
+
         next_page = data.get("pages", {}).get("next", {}).get("starting_after")
         if not next_page:
             break
         starting_after = next_page
 
     print(f"✅ Sincronización completada en Supabase. Total procesadas: {total_procesadas}")
+    return total_procesadas
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sincronizador incremental Intercom -> Supabase")
     parser.add_argument("--dias", type=int, default=3, help="Días a sincronizar hacia atrás")
+    parser.add_argument("--desde", type=str, default=None, help="Fecha inicio en formato YYYY-MM-DD")
+    parser.add_argument("--hasta", type=str, default=None, help="Fecha fin en formato YYYY-MM-DD")
     args = parser.parse_args()
-    sincronizar_intercom(dias=args.dias)
+    
+    sincronizar_intercom(dias=args.dias, fecha_desde=args.desde, fecha_hasta=args.hasta)
