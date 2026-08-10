@@ -1,6 +1,7 @@
 import os
 import io
 import time as time_lib
+import threading
 from datetime import datetime, timedelta, time, date
 import pandas as pd
 import streamlit as st
@@ -28,7 +29,6 @@ st.markdown("""
         height: 0 !important;
     }
 
-    /* No ocultar la barra superior completa: solo el indicador de ejecución. */
     [data-testid="stStatusWidget"] * {
         visibility: hidden !important;
     }
@@ -57,15 +57,16 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
-# AUTENTICACIÓN Y CONTROL DE ACCESO GLOBAL
+# ESTADOS PARA CONTROL DE HILOS PARALELOS
 # ==========================================
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
+if "sync_state" not in st.session_state:
+    st.session_state["sync_state"] = {"status": "idle", "processed": 0, "log": "", "error": None}
 
 def verificar_credenciales_supabase(email_val, pass_val):
-    """Consulta la tabla 'usuarios_autorizados' en Supabase para validar el ingreso."""
     try:
         res = supabase.table("usuarios_autorizados")\
             .select("*")\
@@ -78,114 +79,35 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# PANTALLA DE LOGIN CENTRADA Y ACO TADA
+# PANTALLA DE LOGIN
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
         .stApp { background-color: #0f172a; color: #f8fafc; }
-
-        header[data-testid="stHeader"] {
-            background-color: #0f172a !important;
-        }
-
-        /* Fuerza que el contenedor principal del login sea compacto */
-        .block-container {
-            max-width: 520px !important;
-            padding-top: 5rem !important;
-            margin: 0 auto !important;
-        }
-
-        /* Estilo de la tarjeta de Login */
+        header[data-testid="stHeader"] { background-color: #0f172a !important; }
+        .block-container { max-width: 520px !important; padding-top: 5rem !important; margin: 0 auto !important; }
         .login-card-header {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-bottom: none;
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-            padding: 28px 24px 10px 24px;
-            text-align: center;
+            background-color: #1e293b; border: 1px solid #334155; border-bottom: none;
+            border-top-left-radius: 16px; border-top-right-radius: 16px; padding: 28px 24px 10px 24px; text-align: center;
         }
-
-        .login-title {
-            color: #38bdf8;
-            font-size: 1.45rem;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-
-        .login-subtitle {
-            color: #94a3b8;
-            font-size: 0.85rem;
-        }
-
-        /* Envoltorio del formulario */
+        .login-title { color: #38bdf8; font-size: 1.45rem; font-weight: 700; margin-bottom: 4px; }
+        .login-subtitle { color: #94a3b8; font-size: 0.85rem; }
         div[data-testid="stForm"] {
-            background-color: #1e293b !important;
-            border: 1px solid #334155 !important;
-            border-top: none !important;
-            border-bottom-left-radius: 16px !important;
-            border-bottom-right-radius: 16px !important;
-            padding: 0 24px 28px 24px !important;
+            background-color: #1e293b !important; border: 1px solid #334155 !important;
+            border-top: none !important; border-bottom-left-radius: 16px !important;
+            border-bottom-right-radius: 16px !important; padding: 0 24px 28px 24px !important;
             box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
         }
-
-        div[data-testid="stTextInput"] {
-            width: 100% !important;
-        }
-
-        /* Oculta la leyenda "Press Enter to submit" de los campos del formulario */
-        div[data-testid="stTextInput"] small, 
-        div[data-testid="stInputInstructions"], 
-        .st-emotion-cache-12w0q3e, 
-        [data-testid="stFormSubmitButton"] + div {
-            display: none !important;
-            visibility: hidden !important;
-        }
-
         div[data-testid="stTextInput"] input {
-            background-color: #0f172a !important;
-            color: #f8fafc !important;
-            border: 1px solid #334155 !important;
-            border-radius: 8px !important;
-            padding: 10px 12px !important;
+            background-color: #0f172a !important; color: #f8fafc !important;
+            border: 1px solid #334155 !important; border-radius: 8px !important; padding: 10px 12px !important;
         }
-
-        /* Elimina el icono de contraseña duplicado del navegador (Edge / Chrome / Safari) */
-        input::-ms-reveal,
-        input::-ms-clear {
-            display: none !important;
-        }
-
-        div[data-testid="stTextInput"] input:focus {
-            border-color: #38bdf8 !important;
-            box-shadow: 0 0 0 1px #38bdf8 !important;
-        }
-
-        /* Botón Iniciar Sesión */
         .stButton>button { 
-            background-color: #0284c7 !important; 
-            color: white !important; 
-            font-weight: bold !important; 
-            border-radius: 8px !important; 
-            border: none !important;
-            height: 44px !important;
-            margin-top: 8px !important;
-        }
-
-        .loading-badge {
-            background-color: #0f172a;
-            border: 1px solid #0284c7;
-            border-radius: 8px;
-            padding: 10px;
-            color: #38bdf8;
-            font-size: 0.88rem;
-            font-weight: 600;
-            text-align: center;
-            margin-top: 10px;
+            background-color: #0284c7 !important; color: white !important; 
+            font-weight: bold !important; border-radius: 8px !important; border: none !important; height: 44px !important;
         }
     </style>
-
     <div class="login-card-header">
         <div class="login-title">Dashboard Soporte BIMS</div>
         <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
@@ -195,7 +117,6 @@ if not st.session_state["user_authenticated"]:
     with st.form("form_login_global", clear_on_submit=False):
         input_user_email = st.text_input("Correo Electrónico")
         input_user_pass = st.text_input("Contraseña", type="password")
-        
         status_box = st.empty()
         btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
 
@@ -203,47 +124,53 @@ if not st.session_state["user_authenticated"]:
             if not input_user_email.strip() or not input_user_pass.strip():
                 status_box.warning("Por favor ingresa tu correo y contraseña.")
             else:
-                with status_box.container():
-                    st.markdown("""
-                    <div class="loading-badge">
-                        ⏳ Verificando credenciales...
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    time_lib.sleep(0.5)
-                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
-                    
+                valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                 if valido:
                     st.session_state["user_authenticated"] = True
                     st.session_state["user_email"] = datos_user.get("email")
                     st.session_state["user_name"] = datos_user.get("nombre")
-                    status_box.success("Acceso concedido.")
                     st.rerun()
                 else:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
 
-    st.stop()  # Detiene la ejecución aquí. Nada de la base de datos corre sin login.
-    
+    st.stop()
+
 # ==========================================
-# CÓDIGO PRINCIPAL DEL DASHBOARD
+# FUNCIONES AUXILIARES DE PROCESAMIENTO
 # ==========================================
 
 def obtener_fecha_local_hoy():
-    """Retorna la fecha actual en la zona horaria de Paraguay (America/Asuncion)."""
     return pd.Timestamp.now(tz="America/Asuncion").date()
 
 def convertir_a_minutos(val):
-    """Garantiza la conversión limpia a minutos numéricos float."""
     if pd.isna(val) or val is None:
         return None
     try:
-        v = float(val)
-        return round(v, 2)
+        return round(float(val), 2)
     except (ValueError, TypeError):
         return None
 
+def obtener_tiempo_transcurrido(fecha_dt):
+    if pd.isna(fecha_dt) or fecha_dt is None:
+        return "Sin registros"
+    now_local = pd.Timestamp.now(tz="America/Asuncion")
+    if fecha_dt.tzinfo is None:
+        fecha_dt = fecha_dt.tz_localize("America/Asuncion")
+    else:
+        fecha_dt = fecha_dt.tz_convert("America/Asuncion")
+    
+    diff = now_local - fecha_dt
+    secs = int(diff.total_seconds())
+    if secs < 60:
+        return "hace un momento"
+    elif secs < 3600:
+        return f"hace {secs // 60} min"
+    elif secs < 86400:
+        return f"hace {secs // 3600} h"
+    else:
+        return f"hace {secs // 86400} días"
+
 def procesar_fechas_df(df):
-    """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas numéricas."""
     if df.empty or "created_at" not in df.columns:
         return df
     
@@ -280,7 +207,6 @@ def procesar_fechas_df(df):
 
 @st.cache_data(ttl=10, show_spinner=False)
 def obtener_datos():
-    """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
     todos_los_datos = []
     lote = 0
     tamanio_lote = 1000
@@ -288,21 +214,16 @@ def obtener_datos():
     while True:
         inicio = lote * tamanio_lote
         fin = inicio + tamanio_lote - 1
-        
         try:
             response = supabase.table("conversaciones").select("*").range(inicio, fin).execute()
             datos = response.data
         except Exception:
             break
-        
         if not datos:
             break
-            
         todos_los_datos.extend(datos)
-        
         if len(datos) < tamanio_lote:
             break
-            
         lote += 1
 
     df = pd.DataFrame(todos_los_datos)
@@ -311,104 +232,30 @@ def obtener_datos():
 st.markdown("""
 <style>
     .stApp { background-color: #0f172a; color: #f8fafc; }
-    
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 1.5rem !important;
-    }
-
-    /* Ajusta el fondo de la barra superior para coincidir exactamente con el de la app (#0f172a) */
-    header[data-testid="stHeader"] {
-        background-color: #0f172a !important;
-    }
-
-    [data-testid="stSidebarHeader"] {
-        padding-top: 0px !important;
-        padding-bottom: 0px !important;
-        height: 1.8rem !important;
-    }
-    
-    [data-testid="stSidebarUserContent"] {
-        padding-top: 0.2rem !important;
-    }
-
+    .block-container { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+    header[data-testid="stHeader"] { background-color: #0f172a !important; }
     .metric-card {
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        color: #f8fafc;
-        padding: 16px;
-        border-radius: 10px;
-        border: 1px solid #334155;
-        border-left: 4px solid #0284c7;
+        color: #f8fafc; padding: 16px; border-radius: 10px;
+        border: 1px solid #334155; border-left: 4px solid #0284c7;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
-    .metric-card-title {
-        font-size: 0.78rem;
-        color: #94a3b8;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .metric-card-value {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: #f8fafc;
-        margin-top: 4px;
-    }
-    .metric-card-sub {
-        font-size: 0.75rem;
-        color: #38bdf8;
-        margin-top: 2px;
-    }
-
-    .db-info-box {
-        background-color: #1e293b; color: #94a3b8; padding: 12px;
-        border-radius: 8px; border: 1px solid #334155; font-size: 0.85rem; margin-bottom: 12px;
-    }
-    .alert-card-critical {
-        background-color: #451a03; color: #fef3c7; padding: 16px;
-        border-radius: 8px; border-left: 6px solid #d97706; margin-bottom: 15px;
-    }
-    .admin-card {
-        background-color: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 18px;
-        margin-bottom: 15px;
-    }
+    .metric-card-title { font-size: 0.78rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+    .metric-card-value { font-size: 1.5rem; font-weight: 700; color: #f8fafc; margin-top: 4px; }
+    .metric-card-sub { font-size: 0.75rem; color: #38bdf8; margin-top: 2px; }
+    .db-info-box { background-color: #1e293b; color: #94a3b8; padding: 12px; border-radius: 8px; border: 1px solid #334155; font-size: 0.85rem; margin-bottom: 12px; }
+    .alert-card-critical { background-color: #451a03; color: #fef3c7; padding: 16px; border-radius: 8px; border-left: 6px solid #d97706; margin-bottom: 15px; }
+    .admin-card { background-color: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 18px; margin-bottom: 15px; }
     .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
 </style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-    <script>
-    // Mantener vivos los WebSockets enviando una señal periódica
-    setInterval(function() {
-        window.dispatchEvent(new Event('mousemove'));
-    }, 25000);
-
-    // Activar contexto de audio cuando el usuario interactúe con la app
-    document.addEventListener('click', function() {
-        if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
-            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-        }
-    }, { once: true });
-</script>
 """, unsafe_allow_html=True)
 
 AUDIO_ALARM_HTML = """
 <script>
 (function() {
-    // Cada iframe de alarma se ejecuta una sola vez.
-    // El refresh del fragmento controla el siguiente aviso, evitando
-    // acumular setInterval() en el navegador.
     var audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
     audio.volume = 0.75;
-    audio.play().catch(function(e) {
-        console.log("Audio bloqueado por navegador:", e);
-    });
+    audio.play().catch(function(e) { console.log("Audio bloqueado por navegador:", e); });
 })();
 </script>
 """
@@ -487,7 +334,6 @@ def evaluar_sla_1ra_excel(row, threshold_1ra):
     dt_obj = row.get("created_at_dt")
     if not evaluar_horario_estricto(dt_obj):
         return "excluido por filtro"
-    
     min_1ra = row.get("primera_respuesta_min")
     if pd.isna(min_1ra):
         return "no cumple"
@@ -497,11 +343,9 @@ def evaluar_sla_gestion_excel(row, threshold_gest):
     dt_obj = row.get("created_at_dt")
     if not evaluar_horario_estricto(dt_obj):
         return "excluido por filtro"
-    
     etiquetas = str(row.get("etiquetas", "")).lower()
     if "sin respuesta" in etiquetas:
         return "excluido por filtro"
-    
     min_gest = row.get("tiempo_resolucion_minutos")
     if pd.isna(min_gest):
         return "sin cerrar"
@@ -533,7 +377,6 @@ def calificacion_a_estrellas(x):
 def es_chat_cerrado(row):
     estado = str(row.get("estado", "")).strip().lower()
     fecha_cierre = str(row.get("fecha_primer_cierre", row.get("fecha_cierre", ""))).strip().lower()
-    
     if estado in ["cerrado", "closed", "resolved", "resuelto", "snoozed"]:
         return True
     if fecha_cierre not in ["", "none", "nan", "nat", "null"]:
@@ -544,17 +387,14 @@ def obtener_df_csat_valido(df_sub):
     if df_sub.empty:
         return pd.DataFrame()
     df_c = df_sub.copy()
-    
     df_c["rating_num"] = pd.to_numeric(df_c["rating"], errors="coerce")
-    
-    df_csat = df_c[
+    return df_c[
         df_c["rating_num"].notna() &
         (df_c["rating_num"] >= 1) & (df_c["rating_num"] <= 5) &
         (df_c["canal"] != "Correo electrónico") &
         (df_c["agente_asignado"].fillna("").str.strip() != "") &
         (df_c["agente_asignado"] != "Sin asignar")
     ]
-    return df_csat
 
 def calcular_csat(df_sub):
     df_valid = obtener_df_csat_valido(df_sub)
@@ -565,24 +405,8 @@ def calcular_csat(df_sub):
     total = len(ratings)
     return round((positivas / total) * 100, 1), total
 
-def tiempo_hace(dt_obj):
-    if not isinstance(dt_obj, datetime) or pd.isna(dt_obj):
-        return "Desconocido"
-    now_local = pd.Timestamp.now(tz="America/Asuncion").replace(tzinfo=None)
-    dt_clean = dt_obj.replace(tzinfo=None)
-    diff = now_local - dt_clean
-    secs = int(diff.total_seconds())
-    if secs < 60:
-        return f"Hace {secs} seg"
-    elif secs < 3600:
-        return f"Hace {secs // 60} min"
-    elif secs < 86400:
-        return f"Hace {secs // 3600} hora(s)"
-    else:
-        return f"Hace {secs // 86400} dia(s)"
-
 # ==========================
-# ESTADO DE SESIÓN Y PARÁMETROS
+# ESTADO DE SESIÓN
 # ==========================
 if "auto_refresh" not in st.session_state:
     st.session_state["auto_refresh"] = True
@@ -604,25 +428,27 @@ if "input_f_hasta" not in st.session_state:
     st.session_state["input_f_hasta"] = hoy_local
 
 # ==========================
-# SIDEBAR / ESTADO & FILTROS DINÁMICOS
+# SIDEBAR & INDICADOR BD
 # ==========================
 df_all_init = obtener_datos()
 
 if not df_all_init.empty and "created_at_dt" in df_all_init.columns:
     min_created_dt = df_all_init["created_at_dt"].min()
     max_updated_dt = df_all_init["updated_at_local"].max() if "updated_at_local" in df_all_init.columns else min_created_dt
+    
+    # Muestra exactamente cuánto tiempo hace que Supabase se actualizó
+    tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
     min_created_str = min_created_dt.strftime('%d/%m/%Y') if pd.notna(min_created_dt) else "N/A"
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
         <b>Estado Base de Datos:</b><br>
-        • <b>Ultima sincronizacion:</b> {tiempo_hace(max_updated_dt)}<br>
+        • <b>Ultima sincronizacion:</b> {tiempo_hace_str}<br>
         • <b>Registros desde:</b> {min_created_str}
     </div>
     """, unsafe_allow_html=True)
 
 st.sidebar.markdown("### Filtros de Consulta")
-
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
 
 def set_fechas_hoy():
@@ -635,7 +461,6 @@ st.sidebar.button("Establecer Fecha de Hoy", on_click=set_fechas_hoy, use_contai
 with st.sidebar.form("form_filtros"):
     st.caption("Rango de Fechas")
     f_col1, f_col2 = st.columns(2)
-    
     val_desde = st.session_state.get("input_f_desde", hoy_local)
     val_hasta = st.session_state.get("input_f_hasta", hoy_local)
 
@@ -651,7 +476,6 @@ with st.sidebar.form("form_filtros"):
         hora_inicio, hora_fin = time(8, 0), time(18, 0)
 
     act_sonido = st.checkbox("Alertas Sonoras", value=True)
-
     btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
 
 st.session_state["f_desde_key"] = fecha_desde
@@ -660,7 +484,6 @@ st.session_state["f_hasta_key"] = fecha_hasta
 def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
     output = io.BytesIO()
     horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
-
     sla_1ra_threshold = st.session_state.get("sla_1ra_th", 1.5)
     sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
 
@@ -673,29 +496,20 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
-    
     df_reporte["SLA 1a Resp"] = df_exp.apply(lambda r: evaluar_sla_1ra_excel(r, sla_1ra_threshold), axis=1)
-    
-    if "rating" in df_exp:
-        df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
-    else:
-        df_reporte["Calificacion"] = ""
-        
+    df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas) if "rating" in df_exp else ""
     df_reporte["Feedback"] = df_exp.get("feedback", "")
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
     df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
-
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
     df_reporte["Modulo"] = df_exp.get("modulo", "")
     df_reporte["Cliente"] = df_exp.get("cliente", "")
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
     df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
-    df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
-    
     df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1)
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -708,7 +522,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
         ])
         df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
         df_reporte.to_excel(writer, index=False, sheet_name="Detalle", startrow=6)
-        
         ws = writer.sheets["Detalle"]
         for i, col in enumerate(df_reporte.columns, 1):
             ws.column_dimensions[get_column_letter(i)].width = 24
@@ -724,8 +537,11 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
     "Administración & Configuracion"
 ])
 
-refresh_sec = timedelta(seconds=st.session_state["refresh_interval"]) if st.session_state["auto_refresh"] else None
+refresh_sec = st.session_state["refresh_interval"] if st.session_state["auto_refresh"] else None
 
+# ==========================================
+# FRAGMENTO DE REFRESCADO EN VIVO SIN PARPADEO
+# ==========================================
 @st.fragment(run_every=refresh_sec)
 def renderizar_control_operativo():
     df_all = obtener_datos()
@@ -737,17 +553,6 @@ def renderizar_control_operativo():
         df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_dashboard)
         df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
 
-        df_all["sla_1ra_eval"] = df_all.apply(
-            lambda r: evaluar_sla_1ra(r.get("por_agente"), r.get("horario_evaluado"), r.get("primera_respuesta_min"), sla_1ra_th), axis=1
-        )
-        df_all["sla_gest_eval"] = df_all.apply(
-            lambda r: evaluar_sla_gestion(r.get("por_agente"), r.get("horario_evaluado"), r.get("tiempo_resolucion_minutos"), sla_gest_th), axis=1
-        )
-
-        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "resumen_ia"]:
-            if col not in df_all.columns:
-                df_all[col] = "Sin datos" if col not in ["motivo_normalizado", "resumen_ia"] else ("Consulta General" if col == "motivo_normalizado" else "Pendiente de procesamiento")
-
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     df_filtered = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy() if not df_all.empty else pd.DataFrame()
 
@@ -755,31 +560,31 @@ def renderizar_control_operativo():
         df_filtered = df_filtered[(df_filtered["hora_solo"] >= hora_inicio) & (df_filtered["hora_solo"] <= hora_fin)]
 
     now_dt = pd.Timestamp.now(tz="America/Asuncion")
-    
     df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty else pd.DataFrame()
+    
     if not df_abiertos_all.empty:
         df_abiertos_all = df_abiertos_all.drop_duplicates(subset=["id"])
-
-    if not df_abiertos_all.empty:
         df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
         
+        # Evalúa alertas filtrando por horario laboral y superando el tiempo tras la derivación
         df_criticos_sla = df_abiertos_all[
             (df_abiertos_all["primera_respuesta_min"].isna()) & 
-            (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th)
+            (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th) &
+            (df_abiertos_all["horario_evaluado"] != "fuera de horario")
         ]
 
         if not df_criticos_sla.empty:
             st.markdown(f"""
             <div class="alert-card-critical">
                 <b>ALERTA CRITICA DE SLA EN VIVO</b><br>
-                Hay <b>{len(df_criticos_sla)} chat(s) en espera</b> sin respuesta superando el limite configurado ({alerta_nuevo_th} min).
+                Hay <b>{len(df_criticos_sla)} chat(s) en espera</b> sin respuesta superando el limite configurado ({alerta_nuevo_th} min en horario laboral).
             </div>
             """, unsafe_allow_html=True)
 
             if act_sonido:
                 st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
-    # CSAT SCORECARD
+    # CSAT PERFORMANCE
     st.markdown("### CSAT Performance")
     now_date = obtener_fecha_local_hoy()
 
@@ -841,121 +646,15 @@ def renderizar_control_operativo():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # EVOLUCIÓN HISTÓRICA DE CSAT
-    with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
-        if not df_all.empty:
-            fecha_6m_atras = (pd.Timestamp.now(tz="America/Asuncion") - timedelta(days=180)).date()
-            df_6m = df_all[df_all["fecha_solo"] >= fecha_6m_atras].copy()
-            df_csat_6m = obtener_df_csat_valido(df_6m)
-
-            if not df_csat_6m.empty:
-                df_csat_6m["Periodo_Sort"] = df_csat_6m["created_at_dt"].dt.to_period("M")
-                df_csat_6m["Mes_Nombre"] = df_csat_6m["created_at_dt"].dt.strftime("%b %Y").fillna("")
-
-                res_csat_mensual = []
-                for period, grp in df_csat_6m.groupby("Periodo_Sort"):
-                    tot = len(grp)
-                    pos = len(grp[grp["rating_num"] >= 4])
-                    val_csat = round((pos / tot) * 100, 1)
-                    res_csat_mensual.append({
-                        "Periodo_Sort": period,
-                        "Mes": grp["Mes_Nombre"].iloc[0],
-                        "CSAT %": val_csat,
-                        "Encuestas": tot
-                    })
-
-                df_evo_csat = pd.DataFrame(res_csat_mensual).sort_values("Periodo_Sort")
-
-                fig_csat = go.Figure()
-
-                fig_csat.add_trace(go.Scatter(
-                    x=df_evo_csat["Mes"],
-                    y=df_evo_csat["CSAT %"],
-                    mode="lines+markers+text",
-                    name="CSAT (%)",
-                    text=[f"<b>{v}%</b><br>({n} enc.)" for v, n in zip(df_evo_csat["CSAT %"], df_evo_csat["Encuestas"])],
-                    textposition="top center",
-                    line=dict(color="#38bdf8", width=3, shape="spline"),
-                    marker=dict(size=8, color="#0284c7", symbol="circle", line=dict(color="#ffffff", width=1.5)),
-                    fill="tozeroy",
-                    fillcolor="rgba(56, 189, 248, 0.08)"
-                ))
-
-                fig_csat.add_shape(
-                    type="line",
-                    x0=0, x1=1, xref="paper",
-                    y0=90, y1=90, yref="y",
-                    line=dict(color="#34d399", width=2, dash="dash")
-                )
-
-                fig_csat.add_annotation(
-                    x=1, y=90, xref="paper", yref="y",
-                    text="<b>Meta Objetivo (90%)</b>",
-                    showarrow=False,
-                    yshift=12,
-                    font=dict(color="#34d399", size=12)
-                )
-
-                fig_csat.update_layout(
-                    title="<b>Evolucion Mensual de Satisfaccion al Cliente (CSAT)</b>",
-                    xaxis_title="Mes",
-                    yaxis_title="Satisfaccion Positiva (%)",
-                    yaxis=dict(range=[0, 105], gridcolor="#334155"),
-                    xaxis=dict(gridcolor="#334155"),
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
-                    font=dict(color="#f8fafc"),
-                    margin=dict(t=50, b=40, l=40, r=40),
-                    height=380
-                )
-
-                st.plotly_chart(fig_csat, use_container_width=True)
-            else:
-                st.info("No hay suficientes encuestas validadas en los ultimos 6 meses para generar el grafico.")
-        else:
-            st.info("Sin registros en la base de datos.")
-
-    # DETALLE DE CSAT
-    if not df_filtered.empty:
-        df_csat_det = obtener_df_csat_valido(df_filtered)
-        if not df_csat_det.empty:
-            with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
-                df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-                df_csat_det = df_csat_det.sort_values(by=["rating_num", "created_at_dt"], ascending=[True, False])
-
-                st.dataframe(
-                    df_csat_det[[
-                        "intercom_url", "created_at_fmt", "Calificacion", "feedback", 
-                        "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
-                    ]],
-                    column_config={
-                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                        "created_at_fmt": "Fecha/Hora Creacion",
-                        "Calificacion": "Puntaje",
-                        "feedback": "Comentario / Feedback",
-                        "nombre_contacto": "Contacto",
-                        "tenant": "Tenant",
-                        "company": "Company",
-                        "agente_evaluado": "Agente Evaluado",
-                        "cx_score_explanation": "Explicacion CX"
-                    },
-                    hide_index=True,
-                    use_container_width=True
-                )
-
-    st.markdown("---")
-
-    # METRICAS POR AGENTE EN DASHBOARD
+    # MÉTRICAS POR AGENTE
     st.markdown("### Metricas por Agente")
     if not df_filtered.empty:
         v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] != "fuera de horario")]
-        
         p_1r_series = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
         p_gest_series = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
 
         p_1r = round(p_1r_series.mean(), 2) if not p_1r_series.dropna().empty else 0
         p_gest = round(p_gest_series.mean(), 2) if not p_gest_series.dropna().empty else 0
-
         df_cerrados = df_filtered[df_filtered["es_cerrado"]]
 
         k1, k2, k3, k4 = st.columns(4)
@@ -976,154 +675,43 @@ def renderizar_control_operativo():
             p_1 = round(p_1_s.mean(), 2) if not p_1_s.dropna().empty else 0
             
             v_g_1ra = v_g[p_1_s.notna()]
-            if not v_g_1ra.empty:
-                cumplen_1ra = len(v_g_1ra[pd.to_numeric(v_g_1ra["primera_respuesta_min"], errors="coerce") <= sla_1ra_th])
-                sla_1 = round((cumplen_1ra / len(v_g_1ra)) * 100, 1)
-            else:
-                sla_1 = 0.0
+            sla_1 = round((len(v_g_1ra[pd.to_numeric(v_g_1ra["primera_respuesta_min"], errors="coerce") <= sla_1ra_th]) / len(v_g_1ra)) * 100, 1) if not v_g_1ra.empty else 0.0
 
             v_g_gest = v_g[pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce").notna()]
-            if not v_g_gest.empty:
-                cumplen_gest = len(v_g_gest[pd.to_numeric(v_g_gest["tiempo_resolucion_minutos"], errors="coerce") <= sla_gest_th])
-                sla_g = round((cumplen_gest / len(v_g_gest)) * 100, 1)
-            else:
-                sla_g = 0.0
+            sla_g = round((len(v_g_gest[pd.to_numeric(v_g_gest["tiempo_resolucion_minutos"], errors="coerce") <= sla_gest_th]) / len(v_g_gest)) * 100, 1) if not v_g_gest.empty else 0.0
 
             res_agentes.append({
-                "Agente": agente, 
-                "Asignados": asig, 
-                "Cerrados": cerr,
+                "Agente": agente, "Asignados": asig, "Cerrados": cerr,
                 "Prom. 1a Resp (min)": p_1, 
                 f"% SLA 1a Resp (<= {sla_1ra_th}m)": f"{sla_1}%", 
                 f"% SLA Gestion (<= {sla_gest_th}m)": f"{sla_g}%"
             })
-        
         st.dataframe(pd.DataFrame(res_agentes), use_container_width=True)
 
     st.markdown("---")
 
-    # RANKING DE CHATS ABIERTOS FILTRADO POR FECHA DE CONSULTA
-    if f_desde_v == f_hasta_v:
-        texto_rango_abiertos = f"del dia {f_desde_v}"
-    else:
-        texto_rango_abiertos = f"del periodo {f_desde_v} al {f_hasta_v}"
-
+    # RANKING DE CHATS ABIERTOS
     df_abiertos_filtrados = df_filtered[~df_filtered["es_cerrado"]].copy() if not df_filtered.empty else pd.DataFrame()
     cant_abiertos_filtrados = len(df_abiertos_filtrados.drop_duplicates(subset=["id"])) if not df_abiertos_filtrados.empty else 0
 
-    st.markdown(f"### Ranking de Chats Abiertos ({texto_rango_abiertos}) — {cant_abiertos_filtrados} chats")
-    
+    st.markdown(f"### Ranking de Chats Abiertos del Periodo — {cant_abiertos_filtrados} chats")
     if not df_abiertos_filtrados.empty:
         df_abiertos_filtrados = df_abiertos_filtrados.drop_duplicates(subset=["id"])
         df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at_dt"]).dt.total_seconds() / 60).round(1)
         df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
         df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
-        cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                             "nombre_contacto", "tenant", "company"]
-        if "resumen_ia" in df_abiertos_filtrados.columns:
-            cols_mostrar_filt.append("resumen_ia")
-
         st.dataframe(
-            df_abiertos_filtrados[cols_mostrar_filt],
+            df_abiertos_filtrados[["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", "nombre_contacto", "tenant", "company"]],
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
-                "nombre_contacto": "Contacto",
-                "tenant": "Tenant",
-                "company": "Company",
-                "resumen_ia": "Resumen IA"
+                "nombre_contacto": "Contacto", "tenant": "Tenant", "company": "Company"
             },
-            hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_filtrados"
+            hide_index=True, use_container_width=True
         )
-    else:
-        st.info(f"No hay chats abiertos pendientes creados en el rango {texto_rango_abiertos}.")
-
-    st.markdown("---")
-
-    # RANKING DE CHATS ABIERTOS GENERAL (TODOS LOS PENDIENTES HISTÓRICOS)
-    cant_abiertos_gen = len(df_abiertos_all) if not df_abiertos_all.empty else 0
-    st.markdown(f"### Ranking General de Chats Abiertos (Historico Pendiente) — {cant_abiertos_gen} chats")
-    
-    if not df_abiertos_all.empty:
-        df_rank = df_abiertos_all.copy()
-        df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
-        df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
-
-        cols_mostrar_gen = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                            "nombre_contacto", "tenant", "company"]
-        if "resumen_ia" in df_rank.columns:
-            cols_mostrar_gen.append("resumen_ia")
-
-        st.dataframe(
-            df_rank[cols_mostrar_gen],
-            column_config={
-                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
-                "created_at_fmt": "Fecha Creacion", 
-                "agente_asignado": "Agente Asignado",
-                "Horas Transcurridas": "Horas Abierto",
-                "nombre_contacto": "Contacto",
-                "tenant": "Tenant",
-                "company": "Company",
-                "resumen_ia": "Resumen IA"
-            },
-            hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_unica"
-        )
-    else:
-        st.info("No hay chats abiertos pendientes en este momento.")
-
-    st.markdown("---")
-
-    # SECCIÓN DE BÚSQUEDA DINÁMICA POR TENANT O AGENTE
-    st.markdown("### Buscador de Chats (Por Tenant / Agente)")
-    
-    if not df_all.empty:
-        col_b1, col_b2 = st.columns(2)
-        
-        tenants_unicos = sorted([str(x) for x in df_all["tenant"].dropna().unique() if str(x).strip() != ""])
-        agentes_unicos = sorted([str(x) for x in df_all["agente_asignado"].dropna().unique() if str(x).strip() != ""])
-        
-        tenant_sel = col_b1.multiselect("Filtrar por Tenant(s):", options=tenants_unicos)
-        agente_sel = col_b2.multiselect("Filtrar por Agente(s):", options=agentes_unicos)
-        
-        df_busqueda = df_all.copy()
-        
-        if tenant_sel:
-            df_busqueda = df_busqueda[df_busqueda["tenant"].isin(tenant_sel)]
-        if agente_sel:
-            df_busqueda = df_busqueda[df_busqueda["agente_asignado"].isin(agente_sel)]
-            
-        if tenant_sel or agente_sel:
-            st.markdown(f"#### Resultados de la Busqueda ({len(df_busqueda)} chats encontrados)")
-            if not df_busqueda.empty:
-                df_busqueda["Estado_Texto"] = df_busqueda["es_cerrado"].apply(lambda x: "Cerrado" if x else "Abierto")
-                df_busqueda = df_busqueda.sort_values(by="created_at_dt", ascending=False)
-                
-                cols_search = ["intercom_url", "Estado_Texto", "created_at_fmt", "agente_asignado", 
-                               "nombre_contacto", "tenant", "company"]
-                if "resumen_ia" in df_busqueda.columns:
-                    cols_search.append("resumen_ia")
-                
-                st.dataframe(
-                    df_busqueda[cols_search],
-                    column_config={
-                        "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
-                        "Estado_Texto": "Estado",
-                        "created_at_fmt": "Fecha Creacion",
-                        "agente_asignado": "Agente Asignado",
-                        "nombre_contacto": "Contacto",
-                        "tenant": "Tenant",
-                        "company": "Company",
-                        "resumen_ia": "Resumen IA"
-                    },
-                    hide_index=True, use_container_width=True, key="tabla_busqueda_tenant_agente"
-                )
-            else:
-                st.info("No se encontraron registros que coincidan exactamente con la seleccion.")
-        else:
-            st.caption("Selecciona al menos un Tenant o Agente arriba para desplegar los resultados.")
 
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
@@ -1135,259 +723,149 @@ with tab_operativo:
 with tab_resumen:
     df_all_r = obtener_datos()
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
-    
-    if not df_all_r.empty:
-        df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy()
-        
-        if usar_filtro_hora and not df_filtered_r.empty:
-            df_filtered_r = df_filtered_r[(df_filtered_r["hora_solo"] >= hora_inicio) & (df_filtered_r["hora_solo"] <= hora_fin)]
-    else:
-        df_filtered_r = pd.DataFrame()
+    df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy() if not df_all_r.empty else pd.DataFrame()
 
     st.markdown(f"### Analisis de Chats por Agente (`{f_desde_v}` al `{f_hasta_v}`)")
-    
     if not df_filtered_r.empty:
-        df_res = df_filtered_r.copy()
-        df_res = df_res.sort_values(by="created_at_dt", ascending=True)
-
-        df_res["Dia"] = df_res["created_at_dt"].dt.strftime("%Y-%m-%d").fillna("Sin fecha")
-
-        df_agentes_total = df_res["agente_asignado"].value_counts().reset_index()
+        df_agentes_total = df_filtered_r["agente_asignado"].value_counts().reset_index()
         df_agentes_total.columns = ["Agente", "Cantidad de Chats"]
 
-        total_chats_periodo = len(df_res)
-        num_dias = df_res["Dia"].nunique()
-        promedio_diario = round(total_chats_periodo / num_dias, 1) if num_dias > 0 else 0
-        top_agente = df_agentes_total.iloc[0]["Agente"] if not df_agentes_total.empty else "N/A"
-        top_agente_count = df_agentes_total.iloc[0]["Cantidad de Chats"] if not df_agentes_total.empty else 0
-        pct_top = round((top_agente_count / total_chats_periodo) * 100, 1) if total_chats_periodo > 0 else 0
-
-        r1, r2, r3, r4 = st.columns(4)
-        r1.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats en Rango</div><div class="metric-card-value">{total_chats_periodo}</div></div>', unsafe_allow_html=True)
-        r2.markdown(f'<div class="metric-card"><div class="metric-card-title">Promedio Diario</div><div class="metric-card-value">{promedio_diario}</div></div>', unsafe_allow_html=True)
-        r3.markdown(f'<div class="metric-card"><div class="metric-card-title">Agente con Mas Chats</div><div class="metric-card-value" style="font-size:1.2rem;">{top_agente}</div><div class="metric-card-sub">{top_agente_count} chats</div></div>', unsafe_allow_html=True)
-        r4.markdown(f'<div class="metric-card"><div class="metric-card-title">Participacion Top Agente</div><div class="metric-card-value">{pct_top}%</div></div>', unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        palette_e = ["#0284c7", "#6366f1", "#10b981", "#f59e0b", "#e11d48", "#8b5cf6", "#14b8a6"]
-
         g_pie, g_bar = st.columns([1, 1])
-
         with g_pie:
-            st.markdown("#### Distribucion de Chats por Agente")
-            fig_pie = px.pie(
-                df_agentes_total, 
-                values="Cantidad de Chats", 
-                names="Agente",
-                hole=0.5,
-                color_discrete_sequence=palette_e
-            )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0f172a', width=1.5)))
-            fig_pie.update_layout(
-                showlegend=True, 
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#1e293b",
-                font=dict(color="#f8fafc"),
-                margin=dict(t=30, b=30, l=30, r=30)
-            )
+            fig_pie = px.pie(df_agentes_total, values="Cantidad de Chats", names="Agente", hole=0.5)
+            fig_pie.update_layout(paper_bgcolor="#1e293b", plot_bgcolor="#1e293b", font=dict(color="#f8fafc"))
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with g_bar:
-            st.markdown("#### Evolucion Diaria por Agente")
-            df_dia_agente = df_res.groupby(["Dia", "agente_asignado"]).size().reset_index(name="Cantidad")
-            fig_bar = px.bar(
-                df_dia_agente,
-                x="Dia",
-                y="Cantidad",
-                color="agente_asignado",
-                barmode="stack",
-                title="Volumen de Chats por Dia",
-                color_discrete_sequence=palette_e
-            )
-            fig_bar.update_layout(
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#1e293b",
-                font=dict(color="#f8fafc"),
-                xaxis=dict(gridcolor="#334155"),
-                yaxis=dict(gridcolor="#334155"),
-                margin=dict(t=30, b=30, l=30, r=30)
-            )
+            df_dia_agente = df_filtered_r.groupby(["fecha_solo", "agente_asignado"]).size().reset_index(name="Cantidad")
+            fig_bar = px.bar(df_dia_agente, x="fecha_solo", y="Cantidad", color="agente_asignado", barmode="stack")
+            fig_bar.update_layout(paper_bgcolor="#1e293b", plot_bgcolor="#1e293b", font=dict(color="#f8fafc"))
             st.plotly_chart(fig_bar, use_container_width=True)
-
-        st.markdown("---")
-
-        st.markdown("#### Tabla Desglosada por Dia y Agente")
-        df_pivot = df_res.pivot_table(
-            index="Dia", 
-            columns="agente_asignado", 
-            values="id", 
-            aggfunc="count", 
-            fill_value=0
-        )
-        df_pivot["TOTAL CHATS"] = df_pivot.sum(axis=1)
-        st.dataframe(df_pivot, use_container_width=True)
-    else:
-        st.info("No hay chats registrados para el rango de fechas seleccionado en la barra lateral.")
 
 with tab_admin:
     st.markdown("### Panel de Administración y Configuración")
 
     if not st.session_state["admin_authenticated"]:
-        col_pass1, col_pass2 = st.columns([2, 1])
-        with col_pass1:
-            with st.form("form_login_admin"):
-                input_pass = st.text_input("Contraseña de Administrador", type="password")
-                btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
-                
-                if btn_login:
-                    if input_pass == ADMIN_PASSWORD:
-                        st.session_state["admin_authenticated"] = True
-                        st.success("Acceso concedido.")
-                        st.rerun()
-                    else:
-                        st.error("Contraseña incorrecta.")
+        with st.form("form_login_admin"):
+            input_pass = st.text_input("Contraseña de Administrador", type="password")
+            btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
+            if btn_login:
+                if input_pass == ADMIN_PASSWORD:
+                    st.session_state["admin_authenticated"] = True
+                    st.rerun()
+                else:
+                    st.error("Contraseña incorrecta.")
     else:
-        st.success("Sesión de administracion activa.")
+        st.success("Sesión de administración activa.")
         if st.button("Cerrar Sesión Admin"):
             st.session_state["admin_authenticated"] = False
             st.rerun()
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Criterios de Cálculo de Tiempos y SLA</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
-                    <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
-                    <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Tarjeta 1: Sincronización por Rango de Fechas Exacto en Hilo Paralelo
+        # ==========================================
+        # CONTROL DE SINCRONIZACIÓN EN SEGUNDO PLANO
+        # ==========================================
         with st.container():
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas (Segundo Plano)</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Selecciona el rango de fechas. El proceso se ejecutara en un <b>hilo paralelo en el servidor</b>, por lo que <b>puedes cerrar la pestaña o apagar la PC</b> sin interrumpir la carga.
+                    El proceso se ejecuta en un <b>hilo secundario libre de desconexión</b>.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-            # Consulta del total de registros en Supabase
             try:
                 res_count = supabase.table("conversaciones").select("id", count="exact").execute()
                 total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
             except Exception:
                 total_registros_db = 0
 
-            # Métrica y botón de refresco en vivo
             c_meta1, c_meta2 = st.columns([1, 2], vertical_alignment="center")
             with c_meta1:
                 st.markdown(f"""
                 <div class="metric-card" style="border-left: 4px solid #10b981;">
                     <div class="metric-card-title">Total Registros en Supabase</div>
                     <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
-                    <div class="metric-card-sub">Conversaciones guardadas</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with c_meta2:
-                if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
+                if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True):
                     st.cache_data.clear()
                     st.rerun()
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            # CAJA DE ESTADO DINÁMICO DEL HILO PARALELO
+            sync_info = st.session_state["sync_state"]
+            if sync_info["status"] == "running":
+                st.warning(f"⏳ **Sincronización en proceso...** Conversaciones guardadas: `{sync_info['processed']}`. Puedes seguir navegando por la app.")
+            elif sync_info["status"] == "completed":
+                st.success(f"✅ ¡Sincronización finalizada! {sync_info['log']}")
+            elif sync_info["status"] == "error":
+                st.error(f"❌ Error en hilo paralelo: {sync_info['error']}")
 
-            if "last_sync_log" in st.session_state:
-                st.info(f"📋 **Estado de la última orden:** {st.session_state['last_sync_log']}")
-
-            # Formulario de Rango de Fechas
             col_f1, col_f2, col_f3 = st.columns([1, 1, 1], vertical_alignment="bottom")
-            
             f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
             f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
             
-            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango"):
+            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, disabled=(sync_info["status"] == "running")):
                 if SYNC_AVAILABLE:
-                    import threading
+                    st.session_state["sync_state"] = {"status": "running", "processed": 0, "log": "", "error": None}
 
                     def tarea_sync_paralela(f_inicio, f_final):
                         try:
-                            sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final)
-                            print(f"✅ Hilo paralelo completado para rango {f_inicio} a {f_final}")
+                            def cb_progreso(proc, tot):
+                                st.session_state["sync_state"]["processed"] = proc
+
+                            tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
+                            st.session_state["sync_state"]["status"] = "completed"
+                            st.session_state["sync_state"]["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {datetime.now().strftime('%H:%M:%S')}."
                         except Exception as ex_thread:
-                            print(f"❌ Error en hilo paralelo de sincronización: {ex_thread}")
+                            st.session_state["sync_state"]["status"] = "error"
+                            st.session_state["sync_state"]["error"] = str(ex_thread)
 
-                    # Disparar hilo secundario independiente
-                    hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta))
+                    hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta), daemon=True)
                     hilo_sync.start()
+                    st.rerun()
 
-                    st.session_state["last_sync_log"] = f"🚀 Sincronización del rango {f_sync_desde} al {f_sync_hasta} iniciada en segundo plano a las {datetime.now().strftime('%H:%M:%S')}."
-                    st.success("¡Sincronización iniciada en segundo plano! Puedes cerrar esta ventana. Usa 'Actualizar Contador en Vivo' para monitorear el progreso.")
-                else:
-                    st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
-                    
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tarjeta 2: Parámetros Globales
+        # PARÁMETROS GLOBALES
         with st.container():
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
             </div>
             """, unsafe_allow_html=True)
-            
             col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
-            
             with col_cfg1:
-                st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
                 cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
                 cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
-            
             with col_cfg2:
-                st.markdown("<b>Umbrales de SLA (Minutos)</b>", unsafe_allow_html=True)
                 cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
                 cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
-
             with col_cfg3:
-                st.markdown("<b>Alerta de Chat Nuevo</b>", unsafe_allow_html=True)
                 cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
 
-            st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Guardar Configuración de Parámetros", use_container_width=True):
                 st.session_state["auto_refresh"] = cfg_auto
                 st.session_state["refresh_interval"] = cfg_interval
                 st.session_state["sla_1ra_th"] = cfg_sla_1ra
                 st.session_state["sla_gest_th"] = cfg_sla_gest
                 st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
-                st.success("Configuracion actualizada correctamente.")
+                st.success("Configuración actualizada.")
                 st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tarjeta 3: Descarga Masiva
+        # DESCARGA DE EXCEL
         with st.container():
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">3. Descarga Masiva de Reportes Excel</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Genera y descarga el archivo Excel completo de los registros filtrados.</p>
             </div>
             """, unsafe_allow_html=True)
-            
             df_all_exp = obtener_datos()
-            if not df_all_exp.empty:
-                df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
-                if usar_filtro_hora and not df_exp_filt.empty:
-                    df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
-            else:
-                df_exp_filt = pd.DataFrame()
+            df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy() if not df_all_exp.empty else pd.DataFrame()
 
             if not df_exp_filt.empty:
                 st.download_button(
@@ -1397,76 +875,3 @@ with tab_admin:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
-            else:
-                st.info("No hay datos filtrados para descargar actualmente.")
-
-        # Tarjeta 4: Gestión de Usuarios Autorizados
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">4. Gestion de Usuarios Autorizados</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Formulario para registrar un nuevo usuario
-            with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
-                with st.form("form_nuevo_usuario"):
-                    col_u1, col_u2, col_u3 = st.columns(3)
-                    n_nombre = col_u1.text_input("Nombre / Agente:")
-                    n_email = col_u2.text_input("Correo Electronico:")
-                    n_pass = col_u3.text_input("Contraseña de Acceso:")
-                    btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
-
-                    if btn_crear_u:
-                        if n_email.strip() and n_pass.strip() and n_nombre.strip():
-                            try:
-                                supabase.table("usuarios_autorizados").insert({
-                                    "email": n_email.strip().lower(),
-                                    "password": n_pass.strip(),
-                                    "nombre": n_nombre.strip(),
-                                    "activo": True
-                                }).execute()
-                                st.success(f"Usuario {n_email} creado exitosamente.")
-                                st.rerun()
-                            except Exception as ex:
-                                st.error(f"Error al registrar usuario: {str(ex)}")
-                        else:
-                            st.warning("Completa todos los campos obligatorios.")
-
-            # Tabla de Usuarios Actuales
-            try:
-                res_users = supabase.table("usuarios_autorizados").select("*").order("created_at", desc=True).execute()
-                df_users = pd.DataFrame(res_users.data)
-                
-                if not df_users.empty:
-                    st.markdown("<b>Listado de Usuarios Registrados:</b>", unsafe_allow_html=True)
-                    st.dataframe(
-                        df_users[["id", "nombre", "email", "password", "activo", "created_at"]],
-                        column_config={
-                            "id": "ID",
-                            "nombre": "Nombre",
-                            "email": "Correo",
-                            "password": "Contraseña",
-                            "activo": st.column_config.CheckboxColumn("Acceso Activo"),
-                            "created_at": "Fecha Alta"
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-
-                    col_edit1, col_edit2 = st.columns(2)
-                    id_toggle = col_edit1.number_input("ID de usuario a activar/desactivar:", min_value=1, step=1)
-                    if col_edit2.button("Alternar Estado (Activo/Inactivo)", use_container_width=True):
-                        usr_actual = df_users[df_users["id"] == id_toggle]
-                        if not usr_actual.empty:
-                            nuevo_estado = not bool(usr_actual.iloc[0]["activo"])
-                            supabase.table("usuarios_autorizados").update({"activo": nuevo_estado}).eq("id", id_toggle).execute()
-                            st.success(f"Estado del usuario ID {id_toggle} actualizado.")
-                            st.rerun()
-                        else:
-                            st.error("ID de usuario no encontrado.")
-                else:
-                    st.info("No hay usuarios registrados aún en la base de datos.")
-            except Exception as e:
-                st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
