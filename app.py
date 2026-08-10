@@ -1171,13 +1171,13 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tarjeta 1: Sincronización por Rango de Fechas Exacto
+        # Tarjeta 1: Sincronización por Rango de Fechas Exacto en Hilo Paralelo
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas Exacto</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas (Segundo Plano)</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Selecciona la fecha de inicio y fin para sincronizar un periodo especifico (ej: un mes completo).
+                    Selecciona el rango de fechas. El proceso se ejecutara en un <b>hilo paralelo en el servidor</b>, por lo que <b>puedes cerrar la pestaña o apagar la PC</b> sin interrumpir la carga.
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -1189,7 +1189,7 @@ with tab_admin:
             except Exception:
                 total_registros_db = 0
 
-            # Métrica en pantalla
+            # Métrica y botón de refresco en vivo
             c_meta1, c_meta2 = st.columns([1, 2], vertical_alignment="center")
             with c_meta1:
                 st.markdown(f"""
@@ -1208,29 +1208,33 @@ with tab_admin:
             st.markdown("<br>", unsafe_allow_html=True)
 
             if "last_sync_log" in st.session_state:
-                st.info(f"📋 **Estado del ultimo intento:** {st.session_state['last_sync_log']}")
+                st.info(f"📋 **Estado de la última orden:** {st.session_state['last_sync_log']}")
 
             # Formulario de Rango de Fechas
             col_f1, col_f2, col_f3 = st.columns([1, 1, 1], vertical_alignment="bottom")
             
-            # Fechas por defecto: Mes de Enero 2026
             f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
             f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
             
-            if col_f3.button("Sincronizar Rango", use_container_width=True, key="btn_iniciar_rango"):
+            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango"):
                 if SYNC_AVAILABLE:
-                    with st.spinner(f"Sincronizando desde {f_sync_desde} hasta {f_sync_hasta}..."):
+                    import threading
+
+                    def tarea_sync_paralela(f_inicio, f_final):
                         try:
-                            sincronizar_intercom(fecha_desde=f_sync_desde, fecha_hasta=f_sync_hasta)
-                            st.session_state["last_sync_log"] = f"✅ Rango {f_sync_desde} al {f_sync_hasta} sincronizado con exito a las {datetime.now().strftime('%H:%M:%S')}."
-                            st.cache_data.clear()
-                            st.success(f"¡Sincronización del periodo {f_sync_desde} al {f_sync_hasta} completada!")
-                            st.rerun()
-                        except Exception as err:
-                            st.session_state["last_sync_log"] = f"❌ Error: {str(err)}"
-                            st.error(f"Fallo en la sincronizacion: {str(err)}")
+                            sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final)
+                            print(f"✅ Hilo paralelo completado para rango {f_inicio} a {f_final}")
+                        except Exception as ex_thread:
+                            print(f"❌ Error en hilo paralelo de sincronización: {ex_thread}")
+
+                    # Disparar hilo secundario independiente
+                    hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta))
+                    hilo_sync.start()
+
+                    st.session_state["last_sync_log"] = f"🚀 Sincronización del rango {f_sync_desde} al {f_sync_hasta} iniciada en segundo plano a las {datetime.now().strftime('%H:%M:%S')}."
+                    st.success("¡Sincronización iniciada en segundo plano! Puedes cerrar esta ventana. Usa 'Actualizar Contador en Vivo' para monitorear el progreso.")
                 else:
-                    st.error("No se encontro el modulo `sync_intercom.py` en el proyecto.")
+                    st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
                     
         st.markdown("<br>", unsafe_allow_html=True)
 
