@@ -9,25 +9,27 @@ import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 
-# Configuración básica de página (debe ser la primera orden Streamlit)
+# ==========================================
+# 1. CONFIGURACIÓN ÚNICA DE PÁGINA (PRIMERA LÍNEA STREAMLIT)
+# ==========================================
 st.set_page_config(
     page_title="Dashboard Soporte BIMS",
     page_icon="📈",
     layout="wide"
 )
 
-# Estilos CSS de ocultamiento de avisos y estabilización
-st.markdown("""
-<style>
-    /* Ocultar el aviso superior de 'Running...' */
-    [data-testid="stStatusWidget"], header[data-testid="stHeader"] {
-        display: none !important;
-    }
-    .stApp { background-color: #0f172a; color: #f8fafc; }
-</style>
-""", unsafe_allow_html=True)
+try:
+    from sync_intercom import sincronizar_intercom
+    SYNC_AVAILABLE = True
+except ImportError:
+    SYNC_AVAILABLE = False
 
-# Configuración de credenciales de Supabase
+INTERCOM_APP_ID = "co9kozj6"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+# ==========================
+# CONFIGURACIÓN DE SUPABASE
+# ==========================
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
@@ -37,11 +39,16 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-# Control de estado de sesión
+# ==========================================
+# AUTENTICACIÓN Y CONTROL DE ACCESO GLOBAL
+# ==========================================
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
+if "user_email" not in st.session_state:
+    st.session_state["user_email"] = ""
 
 def verificar_credenciales_supabase(email_val, pass_val):
+    """Consulta la tabla 'usuarios_autorizados' en Supabase para validar el ingreso."""
     try:
         res = supabase.table("usuarios_autorizados")\
             .select("*")\
@@ -53,22 +60,26 @@ def verificar_credenciales_supabase(email_val, pass_val):
     except Exception:
         return False, None
 
-# =========================================================
-# 1. BLOQUE DE AUTENTICACIÓN (LOGIN AISLADO Y RÍGIDO)
-# =========================================================
+# PANTALLA DE LOGIN
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
-        .login-card {
-            width: 360px !important;
-            max-width: 360px !important;
-            margin: 80px auto 0 auto !important;
-            background-color: #1e293b !important;
-            border: 1px solid #334155 !important;
-            border-radius: 12px !important;
-            padding: 30px !important;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+        .stApp { background-color: #0f172a; color: #f8fafc; }
+        
+        /* Ocultar el widget de estado 'Running...' en la pantalla de acceso */
+        [data-testid="stStatusWidget"] { display: none !important; }
+
+        /* Contenedor estático rígido para el formulario */
+        .login-card-container {
+            max-width: 400px;
+            margin: 60px auto 0 auto;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
         }
+
         .login-title {
             text-align: center;
             color: #38bdf8;
@@ -76,21 +87,20 @@ if not st.session_state["user_authenticated"]:
             font-weight: 700;
             margin-bottom: 4px;
         }
+
         .login-subtitle {
             text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
-            margin-bottom: 22px;
+            margin-bottom: 20px;
         }
+
         div[data-testid="stForm"] {
             border: none !important;
             padding: 0 !important;
             background: transparent !important;
-            width: 100% !important;
         }
-        div[data-testid="stTextInput"] {
-            width: 100% !important;
-        }
+
         .stButton>button { 
             background-color: #0284c7 !important; 
             color: white !important; 
@@ -101,8 +111,8 @@ if not st.session_state["user_authenticated"]:
             margin-top: 12px !important;
         }
     </style>
-    
-    <div class="login-card">
+
+    <div class="login-card-container">
         <div class="login-title">Dashboard Soporte BIMS</div>
         <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
     """, unsafe_allow_html=True)
@@ -120,7 +130,7 @@ if not st.session_state["user_authenticated"]:
             else:
                 with status_box.container():
                     with st.spinner("Verificando credenciales..."):
-                        time_lib.sleep(0.5)
+                        time_lib.sleep(0.4)
                         valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
@@ -133,10 +143,8 @@ if not st.session_state["user_authenticated"]:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
 
     st.markdown("</div>", unsafe_allow_html=True)
-    
-    # DETIENE AQUÍ LA EJECUCIÓN PARA EVITAR QUE SE CALE RENDERIZADO DEL DASHBOARD
-    st.stop()
-    
+    st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
+
 # ==========================================
 # CÓDIGO PRINCIPAL DEL DASHBOARD
 # ==========================================
@@ -220,12 +228,6 @@ def obtener_datos_supabase():
 
     df = pd.DataFrame(todos_los_datos)
     return procesar_fechas_df(df)
-
-st.set_page_config(
-    page_title="Dashboard Soporte BIMS",
-    page_icon="📈",  # Puedes usar 📈, 💬, 🏢, 🛠️, etc.
-    layout="wide"
-)
 
 st.markdown("""
 <style>
@@ -542,20 +544,17 @@ st.sidebar.markdown("### Filtros de Consulta")
 
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
 
-# Callback para restablecer la fecha a hoy de forma segura
 def set_fechas_hoy():
     hoy = obtener_fecha_local_hoy()
     st.session_state["input_f_desde"] = hoy
     st.session_state["input_f_hasta"] = hoy
 
-# Botón ubicado arriba o fuera del formulario con su función callback
 st.sidebar.button("Establecer Fecha de Hoy", on_click=set_fechas_hoy, use_container_width=True)
 
 with st.sidebar.form("form_filtros"):
     st.caption("Rango de Fechas")
     f_col1, f_col2 = st.columns(2)
     
-    # Se obtienen los valores actuales cargados en session_state
     val_desde = st.session_state.get("input_f_desde", hoy_local)
     val_hasta = st.session_state.get("input_f_hasta", hoy_local)
 
@@ -577,7 +576,6 @@ with st.sidebar.form("form_filtros"):
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
 
-# Exportador a Excel
 def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
     output = io.BytesIO()
     horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
@@ -644,24 +642,6 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
     "Resumen de Chats & Agentes", 
     "Administración & Configuracion"
 ])
-
-# =========================================================
-# FRAGMENTO SIN PARPADEO PARA LA PESTAÑA DE CONTROL OPERATIVO
-# =========================================================
-
-# ==============================================================================
-# NOTA DE ARQUITECTURA: LÓGICA DE CÁLCULO DE PROMEDIOS Y SLA
-# ==============================================================================
-# 1. EN PANTALLA (DASHBOARD):
-#    - Promedio 1ª Resp = mean(primera_respuesta_min) donde horario_evaluado != 'fuera de horario'
-#    - Promedio Gestión = mean(tiempo_resolucion_minutos) donde horario_evaluado != 'fuera de horario'
-#    - Se excluyen agentes con etiqueta 'excluido' (por_agente == 'excluido').
-#
-# 2. EN EXPORTACIÓN A EXCEL:
-#    - Horario Estricto = Lunes a Viernes de 08:00 a 17:00 hs (sin feriados).
-#    - SLA 1ª Respuesta = Cumple / No cumple en horario estricto. Fuera de hora = 'excluido por filtro'.
-#    - SLA Gestión = Cumple / No cumple en horario estricto. Si posee etiqueta 'sin respuesta' = 'excluido por filtro'.
-# ==============================================================================
 
 refresh_sec = timedelta(seconds=st.session_state["refresh_interval"]) if st.session_state["auto_refresh"] else None
 
@@ -1173,7 +1153,6 @@ with tab_admin:
     st.markdown("### Panel de Administración y Configuración")
 
     if not st.session_state["admin_authenticated"]:
-        
         col_pass1, col_pass2 = st.columns([2, 1])
         with col_pass1:
             with st.form("form_login_admin"):
@@ -1340,7 +1319,7 @@ with tab_admin:
             else:
                 st.info("No hay datos filtrados para descargar actualmente.")
 
-# Tarjeta 4: Gestión de Usuarios Autorizados
+        # Tarjeta 4: Gestión de Usuarios Autorizados
         with st.container():
             st.markdown("""
             <div class="admin-card">
