@@ -292,7 +292,7 @@ if not st.session_state["user_authenticated"]:
     with st.container(border=True):
         st.markdown("""
             <div class="login-title">Bienvenido</div>
-            <div class="login-subtitle">Ingresa tus credenciales para acceder al panel de soporte.</div>
+            <div class="login-subtitle">Ingresa tus credenciales para acceder al dashboard de soporte.</div>
         """, unsafe_allow_html=True)
 
         input_user_email = st.text_input(
