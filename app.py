@@ -589,7 +589,7 @@ if "auto_refresh" not in st.session_state:
 if "refresh_interval" not in st.session_state:
     st.session_state["refresh_interval"] = 10
 if "sla_1ra_th" not in st.session_state:
-    st.session_state["sla_1ra_th"] = 1.5
+    st.session_state["sla_1ra_th"] = 2.0
 if "sla_gest_th" not in st.session_state:
     st.session_state["sla_gest_th"] = 60.0
 if "alerta_nuevo_th" not in st.session_state:
