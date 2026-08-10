@@ -70,7 +70,7 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# PANTALLA DE LOGIN CON TARJETA UNIFICADA
+# PANTALLA DE LOGIN CON TARJETA UNIFICADA (NATIVA)
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
@@ -81,7 +81,7 @@ if not st.session_state["user_authenticated"]:
             background-color: #0f172a !important;
         }
 
-        /* Bloquea la columna/contenedor principal para transformarlo en la tarjeta centrada */
+        /* Centrar y acotar el ancho de la tarjeta principal */
         .block-container {
             max-width: 520px !important;
             padding-top: 5rem !important;
@@ -89,12 +89,12 @@ if not st.session_state["user_authenticated"]:
             margin: 0 auto !important;
         }
 
-        /* Aplica el estilo visual de la tarjeta directamente a la vista principal */
-        [data-testid="stVerticalBlock"] > div:has(div.login-title) {
+        /* Estilizado del contenedor de la tarjeta */
+        div[data-testid="stContainer"] {
             background-color: #1e293b !important;
             border: 1px solid #334155 !important;
             border-radius: 16px !important;
-            padding: 28px 24px !important;
+            padding: 24px !important;
             box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4) !important;
         }
 
@@ -110,10 +110,10 @@ if not st.session_state["user_authenticated"]:
             text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
-        /* Estilizado de las cajas de texto dentro de la tarjeta */
+        /* Estilizado interno de los campos de texto */
         div[data-testid="stTextInput"] {
             width: 100% !important;
             margin-bottom: 8px;
@@ -140,7 +140,7 @@ if not st.session_state["user_authenticated"]:
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 10px !important;
+            margin-top: 8px !important;
         }
 
         .loading-badge {
@@ -152,47 +152,46 @@ if not st.session_state["user_authenticated"]:
             font-size: 0.88rem;
             font-weight: 600;
             text-align: center;
-            margin-top: 12px;
+            margin-top: 10px;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # Encabezado dentro del contenedor principal
-    st.markdown("""
-        <div class="login-title">Dashboard Soporte BIMS</div>
-        <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
-    """, unsafe_allow_html=True)
+    # Contenedor nativo con borde que encapsula todo
+    with st.container(border=True):
+        st.markdown("""
+            <div class="login-title">Dashboard Soporte BIMS</div>
+            <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
+        """, unsafe_allow_html=True)
 
-    # Componentes que ahora quedan visualmente dentro del bloque estilizado
-    input_user_email = st.text_input("Correo Electrónico", key="login_email_card")
-    input_user_pass = st.text_input("Contraseña", type="password", key="login_pass_card")
-    
-    status_box = st.empty()
-    btn_login_user = st.button("Iniciar Sesión", use_container_width=True, key="btn_login_card")
+        input_user_email = st.text_input("Correo Electrónico", key="login_email_card")
+        input_user_pass = st.text_input("Contraseña", type="password", key="login_pass_card")
+        
+        status_box = st.empty()
+        btn_login_user = st.button("Iniciar Sesión", use_container_width=True, key="btn_login_card")
 
-    # Lógica de verificación
-    if btn_login_user:
-        if not input_user_email.strip() or not input_user_pass.strip():
-            status_box.warning("Por favor ingresa tu correo y contraseña.")
-        else:
-            with status_box.container():
-                st.markdown("""
-                <div class="loading-badge">
-                    ⏳ Verificando credenciales...
-                </div>
-                """, unsafe_allow_html=True)
-                
-                time_lib.sleep(0.5)
-                valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
-                
-            if valido:
-                st.session_state["user_authenticated"] = True
-                st.session_state["user_email"] = datos_user.get("email")
-                st.session_state["user_name"] = datos_user.get("nombre")
-                status_box.success("Acceso concedido.")
-                st.rerun()
+        if btn_login_user:
+            if not input_user_email.strip() or not input_user_pass.strip():
+                status_box.warning("Por favor ingresa tu correo y contraseña.")
             else:
-                status_box.error("Credenciales incorrectas o usuario no activo.")
+                with status_box.container():
+                    st.markdown("""
+                    <div class="loading-badge">
+                        ⏳ Verificando credenciales...
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    time_lib.sleep(0.5)
+                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                    
+                if valido:
+                    st.session_state["user_authenticated"] = True
+                    st.session_state["user_email"] = datos_user.get("email")
+                    st.session_state["user_name"] = datos_user.get("nombre")
+                    status_box.success("Acceso concedido.")
+                    st.rerun()
+                else:
+                    status_box.error("Credenciales incorrectas o usuario no activo.")
 
     st.stop()
     
