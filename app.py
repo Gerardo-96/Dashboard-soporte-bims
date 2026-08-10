@@ -77,11 +77,7 @@ def verificar_credenciales_supabase(email_val, pass_val):
 if not st.session_state["user_authenticated"]:
 
     st.markdown("""
-    <style>
-
-    /* ==========================================
-       VARIABLES VISUALES
-       ========================================== */
+    <style
 
     :root {
         --bg-primary: #0b1120;
@@ -101,11 +97,6 @@ if not st.session_state["user_authenticated"]:
         --warning: #fbbf24;
     }
 
-
-    /* ==========================================
-       FONDO GENERAL
-       ========================================== */
-
     .stApp {
         background:
             radial-gradient(
@@ -123,15 +114,9 @@ if not st.session_state["user_authenticated"]:
         min-height: 100vh;
     }
 
-
-    /* Header de Streamlit */
-
     header[data-testid="stHeader"] {
         background: transparent !important;
     }
-
-
-    /* Ocultar menú / footer de Streamlit */
 
     #MainMenu {
         visibility: hidden;
@@ -141,11 +126,6 @@ if not st.session_state["user_authenticated"]:
         visibility: hidden;
     }
 
-
-    /* ==========================================
-       CONTENEDOR PRINCIPAL
-       ========================================== */
-
     .block-container {
         max-width: 460px !important;
 
@@ -154,11 +134,6 @@ if not st.session_state["user_authenticated"]:
 
         margin: 0 auto !important;
     }
-
-
-    /* ==========================================
-       MARCA SUPERIOR
-       ========================================== */
 
     .login-brand {
         text-align: center;
@@ -213,11 +188,6 @@ if not st.session_state["user_authenticated"]:
         margin-top: 3px;
     }
 
-
-    /* ==========================================
-       TARJETA DE LOGIN
-       ========================================== */
-
     .login-card {
         width: 100%;
 
@@ -239,9 +209,6 @@ if not st.session_state["user_authenticated"]:
         -webkit-backdrop-filter: blur(14px);
     }
 
-
-    /* Línea superior decorativa */
-
     .login-card::before {
         content: "";
 
@@ -256,11 +223,6 @@ if not st.session_state["user_authenticated"]:
 
         background: var(--brand);
     }
-
-
-    /* ==========================================
-       TÍTULO
-       ========================================== */
 
     .login-title {
         text-align: center;
@@ -287,11 +249,6 @@ if not st.session_state["user_authenticated"]:
         margin-bottom: 27px;
     }
 
-
-    /* ==========================================
-       LABELS
-       ========================================== */
-
     div[data-testid="stTextInput"] label {
         color: #cbd5e1 !important;
 
@@ -300,11 +257,6 @@ if not st.session_state["user_authenticated"]:
 
         margin-bottom: 6px !important;
     }
-
-
-    /* ==========================================
-       INPUTS
-       ========================================== */
 
     div[data-testid="stTextInput"] {
         margin-bottom: 14px !important;
@@ -358,11 +310,6 @@ if not st.session_state["user_authenticated"]:
         color: #475569 !important;
     }
 
-
-    /* ==========================================
-       BOTÓN LOGIN
-       ========================================== */
-
     div.stButton {
         margin-top: 8px !important;
     }
@@ -415,11 +362,6 @@ if not st.session_state["user_authenticated"]:
         transform: translateY(0);
     }
 
-
-    /* ==========================================
-       MENSAJE DE CARGA
-       ========================================== */
-
     .loading-badge {
         display: flex;
 
@@ -444,11 +386,6 @@ if not st.session_state["user_authenticated"]:
         font-weight: 600;
     }
 
-
-    /* ==========================================
-       MENSAJE INFERIOR
-       ========================================== */
-
     .login-footer {
         text-align: center;
 
@@ -464,11 +401,6 @@ if not st.session_state["user_authenticated"]:
         color: #64748b;
     }
 
-
-    /* ==========================================
-       ALERTAS STREAMLIT
-       ========================================== */
-
     div[data-testid="stAlert"] {
         border-radius: 10px !important;
 
@@ -477,10 +409,6 @@ if not st.session_state["user_authenticated"]:
         margin-top: 14px !important;
     }
 
-
-    /* ==========================================
-       RESPONSIVE
-       ========================================== */
 
     @media (max-width: 600px) {
 
@@ -504,16 +432,8 @@ if not st.session_state["user_authenticated"]:
     """, unsafe_allow_html=True)
 
 
-    # ==========================================
-    # MARCA
-    # ==========================================
-
     st.markdown("""
         <div class="login-brand">
-
-            <div class="brand-icon">
-                ✓
-            </div>
 
             <div class="brand-name">
                 BIMS
@@ -525,11 +445,6 @@ if not st.session_state["user_authenticated"]:
 
         </div>
     """, unsafe_allow_html=True)
-
-
-    # ==========================================
-    # TARJETA
-    # ==========================================
 
     st.markdown("""
         <div class="login-card">
@@ -547,10 +462,6 @@ if not st.session_state["user_authenticated"]:
     """, unsafe_allow_html=True)
 
 
-    # ==========================================
-    # CAMPOS
-    # ==========================================
-
     input_user_email = st.text_input(
         "Correo electrónico",
         placeholder="nombre@empresa.com",
@@ -565,38 +476,19 @@ if not st.session_state["user_authenticated"]:
         key="login_pass_card"
     )
 
-
-    # ==========================================
-    # BOTÓN
-    # ==========================================
-
     btn_login_user = st.button(
         "Iniciar sesión",
         use_container_width=True,
         key="btn_login_card"
     )
 
-
-    # ==========================================
-    # STATUS
-    # ==========================================
-
     status_box = st.empty()
 
-
-    # ==========================================
-    # LÓGICA DE AUTENTICACIÓN
-    # ==========================================
 
     if btn_login_user:
 
         email = input_user_email.strip()
         password = input_user_pass.strip()
-
-
-        # --------------------------------------
-        # Validación
-        # --------------------------------------
 
         if not email or not password:
 
@@ -606,10 +498,6 @@ if not st.session_state["user_authenticated"]:
 
 
         else:
-
-            # ----------------------------------
-            # Estado de carga
-            # ----------------------------------
 
             with status_box.container():
 
@@ -625,19 +513,10 @@ if not st.session_state["user_authenticated"]:
                 time_lib.sleep(0.5)
 
 
-                # ----------------------------------
-                # Verificación
-                # ----------------------------------
-
                 valido, datos_user = verificar_credenciales_supabase(
                     email,
                     password
                 )
-
-
-            # ----------------------------------
-            # LOGIN CORRECTO
-            # ----------------------------------
 
             if valido:
 
@@ -660,31 +539,17 @@ if not st.session_state["user_authenticated"]:
                 st.rerun()
 
 
-            # ----------------------------------
-            # LOGIN INCORRECTO
-            # ----------------------------------
-
             else:
 
                 status_box.error(
                     "Correo o contraseña incorrectos."
                 )
 
-
-    # ==========================================
-    # FOOTER
-    # ==========================================
-
     st.markdown("""
         <div class="login-footer">
             Acceso protegido · <span>BIMS Support</span>
         </div>
     """, unsafe_allow_html=True)
-
-
-    # ==========================================
-    # DETENER EJECUCIÓN
-    # ==========================================
 
     st.stop()
     
