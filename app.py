@@ -52,29 +52,35 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# PANTALLA DE LOGIN ESTÁTICA CON SPINNER
+# PANTALLA DE LOGIN ESTÁTICA Y BLINDADA
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.set_page_config(page_title="Acceso - Dashboard Soporte BIMS", page_icon="📈", layout="centered")
 
+    # CSS Estricto: Oculta widgets de carga globales y congela dimensiones del formulario
     st.markdown("""
     <style>
-        .stApp { background-color: #0f172a; color: #f8fafc; }
-        
-        /* Ocultar el indicador flotante de ejecución para evitar el aviso 'Running...' */
-        [data-testid="stStatusWidget"] {
-            visibility: hidden;
+        /* Ocultar notificación emergente 'Running...' de Streamlit */
+        [data-testid="stStatusWidget"], header[data-testid="stHeader"] {
+            display: none !important;
         }
 
-        /* Estructura fija y centrada del contenedor de login */
-        .login-card {
-            max-width: 400px;
-            margin: 40px auto 0 auto;
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 28px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        .stApp { 
+            background-color: #0f172a !important; 
+            color: #f8fafc !important; 
+        }
+        
+        /* Contenedor central de ancho absoluto e inmutable */
+        .login-wrapper {
+            width: 380px !important;
+            max-width: 380px !important;
+            min-width: 380px !important;
+            margin: 60px auto 0 auto !important;
+            background-color: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-radius: 12px !important;
+            padding: 28px !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
         }
 
         .login-title {
@@ -89,14 +95,19 @@ if not st.session_state["user_authenticated"]:
             text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
-            margin-bottom: 20px;
+            margin-bottom: 22px;
         }
 
-        /* Eliminar bordes y fondos extra del st.form */
+        /* Limpieza de contenedores internos del formulario */
         div[data-testid="stForm"] {
             border: none !important;
             padding: 0 !important;
             background: transparent !important;
+            width: 100% !important;
+        }
+
+        div[data-testid="stTextInput"] {
+            width: 100% !important;
         }
 
         .stButton>button { 
@@ -106,19 +117,19 @@ if not st.session_state["user_authenticated"]:
             border-radius: 8px !important; 
             border: none !important;
             height: 42px !important;
-            margin-top: 12px !important;
+            margin-top: 10px !important;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # Tarjeta centrada estática
+    # Tarjeta de login encasillada en un wrapper rígido
     st.markdown("""
-    <div class="login-card">
+    <div class="login-wrapper">
         <div class="login-title">Dashboard Soporte BIMS</div>
         <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
     """, unsafe_allow_html=True)
 
-    # Formulario centralizado para interceptar la tecla Enter correctamente
+    # Formulario estricto
     with st.form("form_login_global", clear_on_submit=False):
         input_user_email = st.text_input("Correo Electrónico", key="login_email_val")
         input_user_pass = st.text_input("Contraseña", type="password", key="login_pass_val")
@@ -130,9 +141,10 @@ if not st.session_state["user_authenticated"]:
             if not input_user_email.strip() or not input_user_pass.strip():
                 status_box.warning("Por favor ingresa tu correo y contraseña.")
             else:
+                # Muestra el indicador de carga sin modificar el tamaño del formulario
                 with status_box.container():
                     with st.spinner("Verificando credenciales..."):
-                        time_lib.sleep(0.4)  # Garantiza la visualización de la animación
+                        time_lib.sleep(0.5)  # Pausa táctil asegurada para visualizar la animación
                         valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
@@ -145,7 +157,10 @@ if not st.session_state["user_authenticated"]:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
 
     st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()  # Detiene la ejecución para no cargar la base de datos sin autenticación
+    
+    # Detiene la ejecución aquí para que Streamlit NO renderice estilos del Dashboard ni ejecute consultas globales
+    st.stop()
+    
 # ==========================================
 # CÓDIGO PRINCIPAL DEL DASHBOARD
 # ==========================================
