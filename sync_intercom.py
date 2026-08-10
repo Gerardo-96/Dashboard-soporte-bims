@@ -182,17 +182,20 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             agente_eval_id = teammate_info.get("id")
             agente_evaluado = agentes.get(str(agente_eval_id).strip(), "") if agente_eval_id else ""
 
-            # Extraer estado y fecha de cierre
+            # Extraer estado y PRIMERA fecha de cierre
             state_intercom = str(conv.get("state", "")).lower()
             statistics = conv.get("statistics", {}) or {}
-            last_close_at = statistics.get("last_close_at")
             
-            fecha_cierre = datetime.fromtimestamp(last_close_at, tz=tz_local) if last_close_at else None
+            # Usamos first_close_at en lugar de last_close_at
+            first_close_at = statistics.get("first_close_at") or statistics.get("last_close_at")
+            
+            fecha_cierre = datetime.fromtimestamp(first_close_at, tz=tz_local) if first_close_at else None
             estado = "Cerrado" if (state_intercom in ["closed", "resolved"] or fecha_cierre is not None) else "Abierto"
 
             time_to_reply = statistics.get("time_to_admin_reply")
             primera_respuesta_min = round(time_to_reply / 60, 2) if time_to_reply is not None else None
 
+            # Cálculo de tiempos de gestión con respecto al PRIMER cierre
             tiempo_res_hrs, tiempo_res_min = None, None
             if fecha_cierre:
                 secs = (fecha_cierre - created_at).total_seconds()
