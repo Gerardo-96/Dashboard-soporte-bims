@@ -261,7 +261,21 @@ def obtener_tiempo_transcurrido(fecha_dt):
 
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas numéricas."""
+    # PROTECCIÓN SI EL DATAFRAME VIENE VACÍO DESDE SUPABASE
     if df.empty or "created_at" not in df.columns:
+        df["created_at_dt"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
+        df["created_at_fmt"] = pd.Series(dtype='str')
+        df["fecha_solo"] = pd.Series(dtype='object')
+        df["hora_solo"] = pd.Series(dtype='object')
+        df["updated_at_local"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
+        df["es_cerrado"] = pd.Series(dtype='bool')
+        df["por_agente"] = pd.Series(dtype='str')
+        df["agente_asignado"] = pd.Series(dtype='str')
+        df["tenant"] = pd.Series(dtype='str')
+        df["company"] = pd.Series(dtype='str')
+        df["nombre_contacto"] = pd.Series(dtype='str')
+        df["motivo_normalizado"] = pd.Series(dtype='str')
+        df["resumen_ia"] = pd.Series(dtype='str')
         return df
     
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
