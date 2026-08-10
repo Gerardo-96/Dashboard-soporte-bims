@@ -163,8 +163,27 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             conv_id = str(conv_summary.get("id"))
             conv = get_conversation_detail(conv_id) or conv_summary
 
-            created_at = datetime.fromtimestamp(conv["created_at"], tz=tz_local)
-            
+            created_at_orig = conv.get("created_at")
+            statistics = conv.get("statistics", {}) or {}
+
+            # =========================================================================
+            # 1. DEDUCCIÓN DE INICIO REAL (CUBRE LLEGADA A BANDEJA E INTERVENCIÓN MANUAL)
+            # =========================================================================
+            first_team_assign = statistics.get("first_assignment_to_team_at")
+            first_admin_assign = statistics.get("first_assignment_to_admin_at")
+            first_admin_reply = statistics.get("first_admin_reply_at")
+            last_assign = statistics.get("last_assignment_at")
+
+            # Busca el timestamp humano MÁS ANTIGUO para ignorar la interacción con el bot
+            candidatos_inicio = [ts for ts in [first_team_assign, first_admin_assign, first_admin_reply, last_assign] if ts is not None]
+
+            if candidatos_inicio:
+                ts_inicio_ref = min(candidatos_inicio)
+                inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
+            else:
+                ts_inicio_ref = created_at_orig
+                inicio_real = datetime.fromtimestamp(created_at_orig, tz=tz_local)
+
             admin_id = conv.get("admin_assignee_id")
             agente = agentes.get(str(admin_id).strip(), "Sin asignar") if admin_id else "Sin asignar"
             por_agente = "excluido" if agente.lower() == "sin asignar" else "no excluido"
@@ -182,23 +201,27 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             agente_eval_id = teammate_info.get("id")
             agente_evaluado = agentes.get(str(agente_eval_id).strip(), "") if agente_eval_id else ""
 
-            # Extraer estado y PRIMERA fecha de cierre
+            # =========================================================================
+            # 2. PRIMERA RESPUESTA HUMANA (MEDIDA DESDE EL INICIO HUMANO REAL)
+            # =========================================================================
+            if first_admin_reply and first_admin_reply >= ts_inicio_ref:
+                primera_respuesta_min = round((first_admin_reply - ts_inicio_ref) / 60, 2)
+            else:
+                time_to_reply = statistics.get("time_to_admin_reply")
+                primera_respuesta_min = round(time_to_reply / 60, 2) if time_to_reply is not None else None
+
+            # =========================================================================
+            # 3. TIEMPO DE GESTIÓN Y PRIMER CIERRE (MEDIDO DESDE EL INICIO HUMANO REAL)
+            # =========================================================================
             state_intercom = str(conv.get("state", "")).lower()
-            statistics = conv.get("statistics", {}) or {}
-            
-            # Usamos first_close_at en lugar de last_close_at
             first_close_at = statistics.get("first_close_at") or statistics.get("last_close_at")
             
             fecha_cierre = datetime.fromtimestamp(first_close_at, tz=tz_local) if first_close_at else None
             estado = "Cerrado" if (state_intercom in ["closed", "resolved"] or fecha_cierre is not None) else "Abierto"
 
-            time_to_reply = statistics.get("time_to_admin_reply")
-            primera_respuesta_min = round(time_to_reply / 60, 2) if time_to_reply is not None else None
-
-            # Cálculo de tiempos de gestión con respecto al PRIMER cierre
             tiempo_res_hrs, tiempo_res_min = None, None
-            if fecha_cierre:
-                secs = (fecha_cierre - created_at).total_seconds()
+            if fecha_cierre and fecha_cierre >= inicio_real:
+                secs = (fecha_cierre - inicio_real).total_seconds()
                 tiempo_res_hrs = round(secs / 3600, 2)
                 tiempo_res_min = round(secs / 60, 2)
 
@@ -222,7 +245,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             # Estructurar objeto compatible con la tabla PostgreSQL en Supabase
             registro = {
                 "id": conv_id,
-                "created_at": created_at.isoformat(),
+                "created_at": inicio_real.isoformat(),
                 "canal": canal,
                 "tenant": tenant,
                 "company": company,
