@@ -83,7 +83,7 @@ if not st.session_state["user_authenticated"]:
 
         /* Fuerza que el contenedor principal del login sea compacto */
         .block-container {
-            max-width: 420px !important;
+            max-width: 520px !important;
             padding-top: 5rem !important;
             margin: 0 auto !important;
         }
@@ -118,13 +118,19 @@ if not st.session_state["user_authenticated"]:
             margin-bottom: 12px;
         }
 
-        /* Oculta cualquier subtítulo, leyenda o instrucción residual */
-        div[data-testid="stTextInput"] small,
-        div[data-testid="stTextInput"] [data-testid="stCaptionContainer"],
-        div[data-testid="stInputInstructions"] {
+        /* OCULTA EL TEXTO "PRESS ENTER TO SUBMIT" EN CUALQUIER VERSIÓN DE STREAMLIT */
+        [data-testid="stInputInstructions"],
+        [data-testid="stInputInstructions"] *,
+        div[data-testid="stTextInput"] p,
+        div[data-testid="stTextInput"] caption,
+        div[data-testid="stTextInput"] small {
             display: none !important;
             visibility: hidden !important;
+            opacity: 0 !important;
             height: 0px !important;
+            font-size: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
         }
 
         div[data-testid="stTextInput"] input {
@@ -205,7 +211,7 @@ if not st.session_state["user_authenticated"]:
                 status_box.error("Credenciales incorrectas o usuario no activo.")
 
     st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
+    st.stop()
     
 # ==========================================
 # CÓDIGO PRINCIPAL DEL DASHBOARD
