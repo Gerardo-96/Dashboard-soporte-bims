@@ -21,8 +21,16 @@ st.set_page_config(
 # Oculta exclusivamente el aviso flotante 'Running...' sin ocultar el header principal
 st.markdown("""
 <style>
-    [data-testid="stStatusWidget"] { 
-        display: none !important; 
+    [data-testid="stStatusWidget"] {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+
+    /* No ocultar la barra superior completa: solo el indicador de ejecución. */
+    [data-testid="stStatusWidget"] * {
+        visibility: hidden !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -392,14 +400,16 @@ st.markdown("""
 
 AUDIO_ALARM_HTML = """
 <script>
-  function reproducirAlarma() {
+(function() {
+    // Cada iframe de alarma se ejecuta una sola vez.
+    // El refresh del fragmento controla el siguiente aviso, evitando
+    // acumular setInterval() en el navegador.
     var audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-    audio.play().catch(function(e) { console.log("Audio bloqueado por navegador:", e); });
-  }
-  // Reproducción inicial inmediata
-  reproducirAlarma();
-  // Pulso periódico cada 10 segundos
-  setInterval(reproducirAlarma, 10000);
+    audio.volume = 0.75;
+    audio.play().catch(function(e) {
+        console.log("Audio bloqueado por navegador:", e);
+    });
+})();
 </script>
 """
 
