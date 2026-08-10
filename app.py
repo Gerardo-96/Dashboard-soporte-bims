@@ -1171,26 +1171,25 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tarjeta 1: Poblamiento Masivo Definitivo
+        # Tarjeta 1: Sincronización por Rango de Fechas Exacto
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">1. Poblamiento Masivo de Datos por Meses (Segundo Plano)</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas Exacto</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Descarga todo el histórico de conversaciones desde el 01/01/2026 hasta hoy. 
-                    Las pruebas rápidas corren en pantalla y las descargas masivas corren en el servidor en segundo plano.
+                    Selecciona la fecha de inicio y fin para sincronizar un periodo especifico (ej: un mes completo).
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-            # Consulta el total de registros en Supabase en tiempo real
+            # Consulta del total de registros en Supabase
             try:
                 res_count = supabase.table("conversaciones").select("id", count="exact").execute()
                 total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
             except Exception:
                 total_registros_db = 0
 
-            # Muestra de métrica y contador en vivo
+            # Métrica en pantalla
             c_meta1, c_meta2 = st.columns([1, 2], vertical_alignment="center")
             with c_meta1:
                 st.markdown(f"""
@@ -1209,57 +1208,29 @@ with tab_admin:
             st.markdown("<br>", unsafe_allow_html=True)
 
             if "last_sync_log" in st.session_state:
-                st.info(f"📋 **Estado del último intento:** {st.session_state['last_sync_log']}")
+                st.info(f"📋 **Estado del ultimo intento:** {st.session_state['last_sync_log']}")
 
-            # Selector de tipo de carga y botón de ejecución
-            c_sync1, c_sync2 = st.columns([2, 1], vertical_alignment="bottom")
+            # Formulario de Rango de Fechas
+            col_f1, col_f2, col_f3 = st.columns([1, 1, 1], vertical_alignment="bottom")
             
-            modo_sync = c_sync1.selectbox(
-                "Selecciona el modo de descarga:", 
-                options=["Historico Completo 2026 (Segundo Plano)", "Ultimos X Dias (Prueba Rapida)"],
-                key="sb_modo_sync"
-            )
+            # Fechas por defecto: Mes de Enero 2026
+            f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
+            f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
             
-            if modo_sync == "Ultimos X Dias (Prueba Rapida)":
-                dias_a_sincronizar = c_sync1.number_input("Dias hacia atras a consultar:", min_value=1, max_value=90, value=2, key="ni_dias_sync")
-            else:
-                dias_a_sincronizar = (pd.Timestamp.now(tz="America/Asuncion").date() - date(2026, 1, 1)).days + 1
-            
-            if c_sync2.button("Iniciar Descarga", use_container_width=True, key="btn_iniciar_poblamiento"):
+            if col_f3.button("Sincronizar Rango", use_container_width=True, key="btn_iniciar_rango"):
                 if SYNC_AVAILABLE:
-                    if modo_sync == "Ultimos X Dias (Prueba Rapida)":
-                        # Prueba en primer plano con spinner
-                        with st.spinner(f"Sincronizando {dias_a_sincronizar} días..."):
-                            try:
-                                sincronizar_intercom(dias=dias_a_sincronizar)
-                                st.session_state["last_sync_log"] = f"✅ Sincronización rápida de {dias_a_sincronizar} días exitosa ({datetime.now().strftime('%H:%M:%S')})."
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as err:
-                                st.session_state["last_sync_log"] = f"❌ Error: {str(err)}"
-                                st.error(f"Error: {str(err)}")
-                    else:
-                        # Descarga masiva en segundo plano
-                        import threading
-                        
-                        def tarea_descarga_masiva(dias_totales):
-                            try:
-                                # Va procesando en bloques acumulativos de 30 días
-                                pasadas = list(range(30, dias_totales + 30, 30))
-                                for bloque_dias in pasadas:
-                                    dias_efectivos = min(bloque_dias, dias_totales)
-                                    sincronizar_intercom(dias=dias_efectivos)
-                                    time_lib.sleep(4)  # Pausa de seguridad para evitar Rate Limits
-                            except Exception as ex_bg:
-                                print(f"Error en descarga en segundo plano: {ex_bg}")
-
-                        hilo_bg = threading.Thread(target=tarea_descarga_masiva, args=(dias_a_sincronizar,))
-                        hilo_bg.start()
-                        
-                        st.session_state["last_sync_log"] = f"🚀 Descarga masiva del 2026 iniciada en segundo plano a las {datetime.now().strftime('%H:%M:%S')}. Puedes cerrar la pestaña tranquilamente."
-                        st.success("¡Descarga masiva en proceso! Presiona 'Actualizar Contador en Vivo' periódicamente para ver el progreso.")
+                    with st.spinner(f"Sincronizando desde {f_sync_desde} hasta {f_sync_hasta}..."):
+                        try:
+                            sincronizar_intercom(fecha_desde=f_sync_desde, fecha_hasta=f_sync_hasta)
+                            st.session_state["last_sync_log"] = f"✅ Rango {f_sync_desde} al {f_sync_hasta} sincronizado con exito a las {datetime.now().strftime('%H:%M:%S')}."
+                            st.cache_data.clear()
+                            st.success(f"¡Sincronización del periodo {f_sync_desde} al {f_sync_hasta} completada!")
+                            st.rerun()
+                        except Exception as err:
+                            st.session_state["last_sync_log"] = f"❌ Error: {str(err)}"
+                            st.error(f"Fallo en la sincronizacion: {str(err)}")
                 else:
-                    st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
+                    st.error("No se encontro el modulo `sync_intercom.py` en el proyecto.")
                     
         st.markdown("<br>", unsafe_allow_html=True)
 
