@@ -1156,7 +1156,7 @@ with tab_resumen:
     else:
         df_filtered_r = pd.DataFrame()
 
-    st.markdown(f"### Analisis de Chats por Agente (`{f_desde_v}` al `{f_hasta_v}`)")
+    st.markdown(f"### Análisis de Chats por Agente (`{f_desde_v}` al `{f_hasta_v}`)")
     
     if not df_filtered_r.empty:
         df_res = df_filtered_r.copy()
@@ -1177,36 +1177,42 @@ with tab_resumen:
         r1, r2, r3, r4 = st.columns(4)
         r1.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats en Rango</div><div class="metric-card-value">{total_chats_periodo}</div></div>', unsafe_allow_html=True)
         r2.markdown(f'<div class="metric-card"><div class="metric-card-title">Promedio Diario</div><div class="metric-card-value">{promedio_diario}</div></div>', unsafe_allow_html=True)
-        r3.markdown(f'<div class="metric-card"><div class="metric-card-title">Agente con Mas Chats</div><div class="metric-card-value" style="font-size:1.2rem;">{top_agente}</div><div class="metric-card-sub">{top_agente_count} chats</div></div>', unsafe_allow_html=True)
-        r4.markdown(f'<div class="metric-card"><div class="metric-card-title">Participacion Top Agente</div><div class="metric-card-value">{pct_top}%</div></div>', unsafe_allow_html=True)
+        r3.markdown(f'<div class="metric-card"><div class="metric-card-title">Agente con Más Chats</div><div class="metric-card-value" style="font-size:1.2rem;">{top_agente}</div><div class="metric-card-sub">{top_agente_count} chats</div></div>', unsafe_allow_html=True)
+        r4.markdown(f'<div class="metric-card"><div class="metric-card-title">Participación Top Agente</div><div class="metric-card-value">{pct_top}%</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        palette_e = ["#0284c7", "#6366f1", "#10b981", "#f59e0b", "#e11d48", "#8b5cf6", "#14b8a6"]
+        # PALETA DE COLORES MATE Y ELEGANTES (Gama Muted/Dark Modern)
+        palette_mate = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#2dd4bf", "#f472b6", "#94a3b8"]
 
         g_pie, g_bar = st.columns([1, 1])
 
         with g_pie:
-            st.markdown("#### Distribucion de Chats por Agente")
+            st.markdown("#### Distribución de Chats por Agente")
             fig_pie = px.pie(
                 df_agentes_total, 
                 values="Cantidad de Chats", 
                 names="Agente",
-                hole=0.5,
-                color_discrete_sequence=palette_e
+                hole=0.6,
+                color_discrete_sequence=palette_mate
             )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0f172a', width=1.5)))
+            fig_pie.update_traces(
+                textposition='inside', 
+                textinfo='percent+label',
+                marker=dict(line=dict(color='#1e293b', width=2))
+            )
             fig_pie.update_layout(
                 showlegend=True, 
                 paper_bgcolor="#1e293b",
                 plot_bgcolor="#1e293b",
-                font=dict(color="#f8fafc"),
-                margin=dict(t=30, b=30, l=30, r=30)
+                font=dict(color="#cbd5e1", family="sans-serif"),
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                margin=dict(t=30, b=40, l=30, r=30)
             )
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with g_bar:
-            st.markdown("#### Evolucion Diaria por Agente")
+            st.markdown("#### Evolución Diaria por Agente")
             df_dia_agente = df_res.groupby(["Dia", "agente_asignado"]).size().reset_index(name="Cantidad")
             fig_bar = px.bar(
                 df_dia_agente,
@@ -1214,22 +1220,26 @@ with tab_resumen:
                 y="Cantidad",
                 color="agente_asignado",
                 barmode="stack",
-                title="Volumen de Chats por Dia",
-                color_discrete_sequence=palette_e
+                title="",
+                color_discrete_sequence=palette_mate
+            )
+            fig_bar.update_traces(
+                marker=dict(line=dict(color='#1e293b', width=1))
             )
             fig_bar.update_layout(
                 paper_bgcolor="#1e293b",
                 plot_bgcolor="#1e293b",
-                font=dict(color="#f8fafc"),
-                xaxis=dict(gridcolor="#334155"),
-                yaxis=dict(gridcolor="#334155"),
-                margin=dict(t=30, b=30, l=30, r=30)
+                font=dict(color="#cbd5e1", family="sans-serif"),
+                xaxis=dict(gridcolor="#334155", title="Fecha"),
+                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats"),
+                legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
+                margin=dict(t=30, b=40, l=30, r=30)
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
         st.markdown("---")
 
-        st.markdown("#### Tabla Desglosada por Dia y Agente")
+        st.markdown("#### Tabla Desglosada por Día y Agente")
         df_pivot = df_res.pivot_table(
             index="Dia", 
             columns="agente_asignado", 
