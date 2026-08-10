@@ -167,20 +167,20 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             statistics = conv.get("statistics", {}) or {}
 
             # =========================================================================
-            # 1. DEDUCCIÓN DE INICIO REAL (CUBRE LLEGADA A BANDEJA E INTERVENCIÓN MANUAL)
+            # 1. DEDUCCIÓN DE INICIO REAL (SÓLO EVENTOS DE LLEGADA / ASIGNACIÓN)
             # =========================================================================
             first_team_assign = statistics.get("first_assignment_to_team_at")
             first_admin_assign = statistics.get("first_assignment_to_admin_at")
-            first_admin_reply = statistics.get("first_admin_reply_at")
             last_assign = statistics.get("last_assignment_at")
 
-            # Busca el timestamp humano MÁS ANTIGUO para ignorar la interacción con el bot
-            candidatos_inicio = [ts for ts in [first_team_assign, first_admin_assign, first_admin_reply, last_assign] if ts is not None]
+            # Solo tomamos eventos de asignación para saber cuándo llegó a manos humanas
+            candidatos_inicio = [ts for ts in [first_team_assign, first_admin_assign, last_assign] if ts is not None]
 
             if candidatos_inicio:
                 ts_inicio_ref = min(candidatos_inicio)
                 inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
             else:
+                # Si no hubo asignación explícita, se usa la creación original
                 ts_inicio_ref = created_at_orig
                 inicio_real = datetime.fromtimestamp(created_at_orig, tz=tz_local)
 
@@ -188,27 +188,21 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             agente = agentes.get(str(admin_id).strip(), "Sin asignar") if admin_id else "Sin asignar"
             por_agente = "excluido" if agente.lower() == "sin asignar" else "no excluido"
 
-            # Extraer calificación
-            rating_info = conv.get("conversation_rating") or {}
-            rating = rating_info.get("rating")
-            calificacion = str(rating) if rating is not None else ""
-            feedback = rating_info.get("remark", "") or ""
-
-            custom_attrs = conv.get("custom_attributes") or {}
-            cx_explanation = custom_attrs.get("CX Score explanation", "")
-
-            teammate_info = rating_info.get("teammate") or {}
-            agente_eval_id = teammate_info.get("id")
-            agente_evaluado = agentes.get(str(agente_eval_id).strip(), "") if agente_eval_id else ""
-
             # =========================================================================
-            # 2. PRIMERA RESPUESTA HUMANA (MEDIDA DESDE EL INICIO HUMANO REAL)
+            # 2. PRIMERA RESPUESTA HUMANA (MEDIDA DESDE LA LLEGADA HASTA LA RESPUESTA)
             # =========================================================================
+            first_admin_reply = statistics.get("first_admin_reply_at")
+            time_to_reply = statistics.get("time_to_admin_reply")
+
             if first_admin_reply and first_admin_reply >= ts_inicio_ref:
-                primera_respuesta_min = round((first_admin_reply - ts_inicio_ref) / 60, 2)
+                # Diferencia real entre la llegada a la bandeja y el primer mensaje del agente
+                secs_espera = first_admin_reply - ts_inicio_ref
+                primera_respuesta_min = round(secs_espera / 60, 2)
+            elif time_to_reply is not None:
+                # Respaldo nativo de Intercom si no se puede calcular la diferencia
+                primera_respuesta_min = round(time_to_reply / 60, 2)
             else:
-                time_to_reply = statistics.get("time_to_admin_reply")
-                primera_respuesta_min = round(time_to_reply / 60, 2) if time_to_reply is not None else None
+                primera_respuesta_min = None
 
             # =========================================================================
             # 3. TIEMPO DE GESTIÓN Y PRIMER CIERRE (MEDIDO DESDE EL INICIO HUMANO REAL)
