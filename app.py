@@ -270,7 +270,7 @@ def procesar_fechas_df(df):
 
     return df
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=10, show_spinner=False)
 def obtener_datos():
     """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
     todos_los_datos = []
