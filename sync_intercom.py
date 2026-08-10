@@ -167,29 +167,30 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             statistics = conv.get("statistics", {}) or {}
 
             # =========================================================================
-            # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA (JERARQUÍA ESTRICTA DE PRIORIDAD)
+            # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA (DERIVACIÓN DEL BOT/EQUIPO)
             # =========================================================================
-            first_team_assign = statistics.get("first_assignment_to_team_at")
-            first_admin_assign = statistics.get("first_assignment_to_admin_at")
-            first_admin_reply = statistics.get("first_admin_reply_at")
+            statistics = conv.get("statistics", {}) or {}
+            
+            # 1. Intenta tomar la primera asignación registrada en las estadísticas
+            first_assignment_at = statistics.get("first_assignment_at") or statistics.get("first_assignment_to_team_at")
+            
+            # 2. Respaldo: Buscar en conversation_parts la primera asignación a un EQUIPO (team)
+            if not first_assignment_at:
+                parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
+                team_assignments = [
+                    p.get("created_at") for p in parts 
+                    if p.get("part_type") == "assignment" and p.get("assigned_to", {}).get("type") == "team"
+                ]
+                if team_assignments:
+                    first_assignment_at = min(team_assignments)
 
-            # 1. Prioridad Máxima: Si la IA/Bot derivó el chat a un Equipo/Bandeja
-            if first_team_assign:
-                ts_inicio_ref = first_team_assign
-
-            # 2. Segunda Prioridad: Asignación a agente individual (solo si ocurrió ANTES de la respuesta)
-            elif first_admin_assign and (not first_admin_reply or first_admin_assign < (first_admin_reply - 10)):
-                ts_inicio_ref = first_admin_assign
-
-            # 3. Respaldo: Si no hubo asignación a bandeja, usaremos la creación del mensaje
+            # Asignar el timestamp inicial de referencia
+            if first_assignment_at:
+                ts_inicio_ref = first_assignment_at
             else:
                 ts_inicio_ref = created_at_orig
 
             inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
-
-            admin_id = conv.get("admin_assignee_id")
-            agente = agentes.get(str(admin_id).strip(), "Sin asignar") if admin_id else "Sin asignar"
-            por_agente = "excluido" if agente.lower() == "sin asignar" else "no excluido"
 
             # =========================================================================
             # 2. PRIMERA RESPUESTA HUMANA (MEDIDA DESDE LA LLEGADA HASTA LA RESPUESTA)
