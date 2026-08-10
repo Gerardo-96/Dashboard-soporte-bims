@@ -167,22 +167,25 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             statistics = conv.get("statistics", {}) or {}
 
             # =========================================================================
-            # 1. DEDUCCIÓN DE INICIO REAL (SÓLO EVENTOS DE LLEGADA / ASIGNACIÓN)
+            # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA (JERARQUÍA ESTRICTA DE PRIORIDAD)
             # =========================================================================
             first_team_assign = statistics.get("first_assignment_to_team_at")
             first_admin_assign = statistics.get("first_assignment_to_admin_at")
-            last_assign = statistics.get("last_assignment_at")
+            first_admin_reply = statistics.get("first_admin_reply_at")
 
-            # Solo tomamos eventos de asignación para saber cuándo llegó a manos humanas
-            candidatos_inicio = [ts for ts in [first_team_assign, first_admin_assign, last_assign] if ts is not None]
+            # 1. Prioridad Máxima: Si la IA/Bot derivó el chat a un Equipo/Bandeja
+            if first_team_assign:
+                ts_inicio_ref = first_team_assign
 
-            if candidatos_inicio:
-                ts_inicio_ref = min(candidatos_inicio)
-                inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
+            # 2. Segunda Prioridad: Asignación a agente individual (solo si ocurrió ANTES de la respuesta)
+            elif first_admin_assign and (not first_admin_reply or first_admin_assign < (first_admin_reply - 10)):
+                ts_inicio_ref = first_admin_assign
+
+            # 3. Respaldo: Si no hubo asignación a bandeja, usaremos la creación del mensaje
             else:
-                # Si no hubo asignación explícita, se usa la creación original
                 ts_inicio_ref = created_at_orig
-                inicio_real = datetime.fromtimestamp(created_at_orig, tz=tz_local)
+
+            inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
 
             admin_id = conv.get("admin_assignee_id")
             agente = agentes.get(str(admin_id).strip(), "Sin asignar") if admin_id else "Sin asignar"
