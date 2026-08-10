@@ -70,7 +70,7 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# PANTALLA DE LOGIN CON CAMPOS DENTRO DE LA TARJETA
+# PANTALLA DE LOGIN CON TARJETA UNIFICADA
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
@@ -81,21 +81,21 @@ if not st.session_state["user_authenticated"]:
             background-color: #0f172a !important;
         }
 
-        /* Fuerza que el contenedor principal del login sea compacto y centrado */
+        /* Bloquea la columna/contenedor principal para transformarlo en la tarjeta centrada */
         .block-container {
-            max-width: 420px !important;
+            max-width: 520px !important;
             padding-top: 5rem !important;
+            padding-bottom: 2rem !important;
             margin: 0 auto !important;
         }
 
-        /* Estilos para encapsular todo en una tarjeta unica */
-        .login-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 30px 24px;
-            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
-            margin-bottom: 20px;
+        /* Aplica el estilo visual de la tarjeta directamente a la vista principal */
+        [data-testid="stVerticalBlock"] > div:has(div.login-title) {
+            background-color: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-radius: 16px !important;
+            padding: 28px 24px !important;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4) !important;
         }
 
         .login-title {
@@ -110,10 +110,10 @@ if not st.session_state["user_authenticated"]:
             text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
-        /* Estilizado interno de las cajas de texto */
+        /* Estilizado de las cajas de texto dentro de la tarjeta */
         div[data-testid="stTextInput"] {
             width: 100% !important;
             margin-bottom: 8px;
@@ -140,7 +140,7 @@ if not st.session_state["user_authenticated"]:
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 12px !important;
+            margin-top: 10px !important;
         }
 
         .loading-badge {
@@ -157,24 +157,20 @@ if not st.session_state["user_authenticated"]:
     </style>
     """, unsafe_allow_html=True)
 
-    # 1. Inicio de la tarjeta HTML y encabezado
+    # Encabezado dentro del contenedor principal
     st.markdown("""
-    <div class="login-card">
         <div class="login-title">Dashboard Soporte BIMS</div>
         <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
     """, unsafe_allow_html=True)
 
-    # 2. Componentes de entrada e interactividad
+    # Componentes que ahora quedan visualmente dentro del bloque estilizado
     input_user_email = st.text_input("Correo Electrónico", key="login_email_card")
     input_user_pass = st.text_input("Contraseña", type="password", key="login_pass_card")
     
     status_box = st.empty()
     btn_login_user = st.button("Iniciar Sesión", use_container_width=True, key="btn_login_card")
 
-    # 3. Cierre estricto de la tarjeta HTML
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Lógica de validación
+    # Lógica de verificación
     if btn_login_user:
         if not input_user_email.strip() or not input_user_pass.strip():
             status_box.warning("Por favor ingresa tu correo y contraseña.")
