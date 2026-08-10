@@ -18,6 +18,16 @@ st.set_page_config(
     layout="wide"
 )
 
+# Estilo global para ocultar el widget 'Running...' en toda la app
+st.markdown("""
+<style>
+    /* Ocultar la etiqueta flotante 'Running...' de Streamlit en Login y Dashboard */
+    [data-testid="stStatusWidget"], header[data-testid="stHeader"] { 
+        display: none !important; 
+    }
+</style>
+""", unsafe_allow_html=True)
+
 try:
     from sync_intercom import sincronizar_intercom
     SYNC_AVAILABLE = True
@@ -60,26 +70,24 @@ def verificar_credenciales_supabase(email_val, pass_val):
     except Exception:
         return False, None
 
-# PANTALLA DE LOGIN
+# ==========================================
+# PANTALLA DE LOGIN ESTILIZADA Y CENTRADA
+# ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
         .stApp { background-color: #0f172a; color: #f8fafc; }
-        
-        /* Ocultar notificación emergente flotante 'Running...' de Streamlit */
-        [data-testid="stStatusWidget"], header[data-testid="stHeader"] { 
-            display: none !important; 
-        }
 
-        /* Contenedor estático rígido con dimensiones fijas */
+        /* Tarjeta de Login centrada con ancho acotado */
         .login-card-container {
-            max-width: 400px;
-            margin: 60px auto 0 auto;
+            width: 100%;
+            max-width: 380px;
+            margin: 80px auto 0 auto;
             background-color: #1e293b;
             border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 28px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+            border-radius: 16px;
+            padding: 32px 28px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
         }
 
         .login-title {
@@ -94,35 +102,62 @@ if not st.session_state["user_authenticated"]:
             text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
+        /* Estilizado de las cajas de entrada de texto */
         div[data-testid="stForm"] {
             border: none !important;
             padding: 0 !important;
             background: transparent !important;
         }
 
+        div[data-testid="stTextInput"] {
+            margin-bottom: 12px;
+        }
+
+        div[data-testid="stTextInput"] input {
+            background-color: #0f172a !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155 !important;
+            border-radius: 8px !important;
+            padding: 10px 12px !important;
+        }
+
+        div[data-testid="stTextInput"] input:focus {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 0 1px #38bdf8 !important;
+        }
+
+        /* Botón de Inicio de Sesión */
         .stButton>button { 
             background-color: #0284c7 !important; 
             color: white !important; 
             font-weight: bold !important; 
             border-radius: 8px !important; 
             border: none !important;
-            height: 42px !important;
-            margin-top: 12px !important;
+            height: 44px !important;
+            margin-top: 10px !important;
+            transition: all 0.2s ease;
         }
 
-        /* Estilo para la caja de estado y animación */
-        .loading-box {
+        .stButton>button:hover {
+            background-color: #0369a1 !important;
+        }
+
+        /* Animación de carga personalizada */
+        .loading-badge {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            background-color: #0f172a;
+            border: 1px solid #0284c7;
+            border-radius: 8px;
             padding: 10px;
             color: #38bdf8;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             font-weight: 600;
+            margin-top: 12px;
         }
     </style>
 
@@ -142,15 +177,15 @@ if not st.session_state["user_authenticated"]:
             if not input_user_email.strip() or not input_user_pass.strip():
                 status_box.warning("Por favor ingresa tu correo y contraseña.")
             else:
-                # Renderiza la animación dentro del contenedor reservado
+                # Muestra el indicador animado mientras consulta a Supabase
                 with status_box.container():
                     st.markdown("""
-                    <div class="loading-box">
-                        <div class="stSpinner">⏳ Verificando credenciales...</div>
+                    <div class="loading-badge">
+                        ⏳ Verificando credenciales...
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    time_lib.sleep(0.6)  # Pausa visual garantizada para ver la animación
+                    time_lib.sleep(0.5)  # Pausa garantizada para visualización
                     valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
