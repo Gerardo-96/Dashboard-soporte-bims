@@ -192,6 +192,11 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
             inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
 
+            hace_7_meses = ahora_local - timedelta(days=210)
+            if inicio_real < hace_7_meses:
+                # Si la conversación es más antigua a 7 meses, se descarta para ahorrar espacio en Supabase
+                continue
+
             # =========================================================================
             # 2. PRIMERA RESPUESTA HUMANA (MEDIDA DESDE LA LLEGADA HASTA LA RESPUESTA)
             # =========================================================================
