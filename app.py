@@ -71,14 +71,16 @@ def verificar_credenciales_supabase(email_val, pass_val):
 
 # ==========================================
 # LOGIN - DASHBOARD SOPORTE BIMS
-# Diseño SaaS / Fintech profesional
+# Diseño SaaS / Fintech profesional (Corregido)
 # ==========================================
 
 if not st.session_state["user_authenticated"]:
 
     st.markdown("""
-    <style
-
+    <style>
+    /* ==========================================
+       VARIABLES VISUALES
+       ========================================== */
     :root {
         --bg-primary: #0b1120;
         --bg-secondary: #111827;
@@ -92,11 +94,11 @@ if not st.session_state["user_authenticated"]:
         --brand: #10b981;
         --brand-hover: #059669;
         --brand-light: #34d399;
-
-        --danger: #f87171;
-        --warning: #fbbf24;
     }
 
+    /* ==========================================
+       FONDO GENERAL & HEADER
+       ========================================== */
     .stApp {
         background:
             radial-gradient(
@@ -109,32 +111,31 @@ if not st.session_state["user_authenticated"]:
                 #0b1120 0%,
                 #0f172a 100%
             );
-
         color: var(--text-primary);
-        min-height: 100vh;
     }
 
     header[data-testid="stHeader"] {
         background: transparent !important;
     }
 
-    #MainMenu {
-        visibility: hidden;
+    [data-testid="stStatusWidget"], #MainMenu, footer {
+        display: none !important;
+        visibility: hidden !important;
     }
 
-    footer {
-        visibility: hidden;
-    }
-
+    /* ==========================================
+       CONTENEDOR PRINCIPAL
+       ========================================== */
     .block-container {
-        max-width: 460px !important;
-
-        padding-top: 7rem !important;
+        max-width: 440px !important;
+        padding-top: 5rem !important;
         padding-bottom: 3rem !important;
-
         margin: 0 auto !important;
     }
 
+    /* ==========================================
+       MARCA SUPERIOR
+       ========================================== */
     .login-brand {
         text-align: center;
         margin-bottom: 24px;
@@ -143,408 +144,208 @@ if not st.session_state["user_authenticated"]:
     .brand-icon {
         width: 46px;
         height: 46px;
-
-        margin: 0 auto 14px auto;
-
+        margin: 0 auto 12px auto;
         display: flex;
         align-items: center;
         justify-content: center;
-
         border-radius: 13px;
-
-        background:
-            linear-gradient(
-                135deg,
-                rgba(16, 185, 129, 0.20),
-                rgba(16, 185, 129, 0.05)
-            );
-
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.20), rgba(16, 185, 129, 0.05));
         border: 1px solid rgba(52, 211, 153, 0.25);
-
         color: var(--brand-light);
-
         font-size: 21px;
         font-weight: 700;
-
-        box-shadow:
-            0 10px 30px rgba(16, 185, 129, 0.08);
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.08);
     }
-
 
     .brand-name {
         color: var(--text-primary);
-
-        font-size: 0.95rem;
+        font-size: 1rem;
         font-weight: 700;
-
         letter-spacing: 0.02em;
     }
 
     .brand-label {
         color: var(--text-muted);
-
-        font-size: 0.72rem;
-
-        margin-top: 3px;
+        font-size: 0.75rem;
+        margin-top: 2px;
     }
 
-    .login-card {
-        width: 100%;
-
-        box-sizing: border-box;
-
-        background: var(--card-bg);
-
-        border: 1px solid var(--border);
-
-        border-radius: 20px;
-
-        padding: 32px 32px 30px 32px;
-
-        box-shadow:
-            0 25px 60px rgba(0, 0, 0, 0.35),
-            0 8px 25px rgba(0, 0, 0, 0.20);
-
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
+    /* ==========================================
+       TARJETA ENCAPSULADA NATIVA
+       ========================================== */
+    div[data-testid="stContainer"] {
+        background: var(--card-bg) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 20px !important;
+        padding: 28px 26px !important;
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35), 0 8px 25px rgba(0, 0, 0, 0.20) !important;
+        backdrop-filter: blur(14px) !important;
+        -webkit-backdrop-filter: blur(14px) !important;
     }
 
-    .login-card::before {
+    /* Línea verde decorativa superior */
+    div[data-testid="stContainer"]::before {
         content: "";
-
         display: block;
-
         width: 42px;
         height: 3px;
-
-        margin: -32px auto 27px auto;
-
+        margin: 0 auto 20px auto;
         border-radius: 20px;
-
         background: var(--brand);
     }
 
     .login-title {
         text-align: center;
-
         color: var(--text-primary);
-
-        font-size: 1.55rem;
+        font-size: 1.45rem;
         font-weight: 750;
-
         letter-spacing: -0.025em;
-
-        margin-bottom: 7px;
+        margin-bottom: 6px;
     }
-
 
     .login-subtitle {
         text-align: center;
-
         color: var(--text-secondary);
+        font-size: 0.85rem;
+        line-height: 1.4;
+        margin-bottom: 22px;
+    }
 
-        font-size: 0.86rem;
-        line-height: 1.5;
-
-        margin-bottom: 27px;
+    /* ==========================================
+       INPUTS & BOTÓN
+       ========================================== */
+    div[data-testid="stTextInput"] {
+        margin-bottom: 12px !important;
     }
 
     div[data-testid="stTextInput"] label {
         color: #cbd5e1 !important;
-
         font-size: 0.78rem !important;
         font-weight: 600 !important;
-
-        margin-bottom: 6px !important;
     }
-
-    div[data-testid="stTextInput"] {
-        margin-bottom: 14px !important;
-    }
-
 
     div[data-testid="stTextInput"] input {
         width: 100% !important;
-
-        box-sizing: border-box !important;
-
-        height: 46px !important;
-
+        height: 44px !important;
         background: #0b1220 !important;
-
         color: var(--text-primary) !important;
-
         border: 1px solid #263244 !important;
-
         border-radius: 10px !important;
-
         padding: 0 13px !important;
-
         font-size: 0.88rem !important;
-
-        transition:
-            border-color 0.2s ease,
-            box-shadow 0.2s ease,
-            background 0.2s ease !important;
     }
-
-
-    div[data-testid="stTextInput"] input:hover {
-        border-color: #3b4a60 !important;
-    }
-
 
     div[data-testid="stTextInput"] input:focus {
         background: #0d1525 !important;
-
         border-color: var(--brand) !important;
-
-        box-shadow:
-            0 0 0 3px rgba(16, 185, 129, 0.10) !important;
-
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.10) !important;
         outline: none !important;
     }
 
-
-    div[data-testid="stTextInput"] input::placeholder {
-        color: #475569 !important;
-    }
-
-    div.stButton {
-        margin-top: 8px !important;
-    }
-
-
+    /* Botón de Inicio de Sesión */
     div.stButton > button {
         width: 100% !important;
-
-        height: 46px !important;
-
+        height: 44px !important;
         border: none !important;
-
         border-radius: 10px !important;
-
-        background:
-            linear-gradient(
-                135deg,
-                var(--brand),
-                var(--brand-hover)
-            ) !important;
-
+        background: linear-gradient(135deg, var(--brand), var(--brand-hover)) !important;
         color: white !important;
-
         font-size: 0.88rem !important;
         font-weight: 700 !important;
-
-        letter-spacing: 0.01em;
-
-        box-shadow:
-            0 8px 20px rgba(16, 185, 129, 0.18);
-
-        transition:
-            transform 0.15s ease,
-            box-shadow 0.15s ease,
-            filter 0.15s ease !important;
-    }
-
-
-    div.stButton > button:hover {
-        filter: brightness(1.06);
-
-        transform: translateY(-1px);
-
-        box-shadow:
-            0 10px 25px rgba(16, 185, 129, 0.25);
-    }
-
-
-    div.stButton > button:active {
-        transform: translateY(0);
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.18) !important;
+        margin-top: 6px !important;
     }
 
     .loading-badge {
         display: flex;
-
         align-items: center;
         justify-content: center;
-
         gap: 8px;
-
-        margin-top: 16px;
-
-        padding: 11px 14px;
-
+        margin-top: 14px;
+        padding: 10px 14px;
         background: rgba(16, 185, 129, 0.06);
-
         border: 1px solid rgba(16, 185, 129, 0.18);
-
         border-radius: 10px;
-
         color: var(--brand-light);
-
         font-size: 0.80rem;
         font-weight: 600;
     }
 
     .login-footer {
         text-align: center;
-
         color: #475569;
-
-        font-size: 0.70rem;
-
+        font-size: 0.72rem;
         margin-top: 22px;
     }
-
-
-    .login-footer span {
-        color: #64748b;
-    }
-
-    div[data-testid="stAlert"] {
-        border-radius: 10px !important;
-
-        font-size: 0.82rem !important;
-
-        margin-top: 14px !important;
-    }
-
-
-    @media (max-width: 600px) {
-
-        .block-container {
-            padding-top: 3rem !important;
-            padding-left: 18px !important;
-            padding-right: 18px !important;
-        }
-
-        .login-card {
-            padding: 28px 22px 26px 22px;
-        }
-
-        .login-card::before {
-            margin-top: -28px;
-        }
-
-    }
-
     </style>
     """, unsafe_allow_html=True)
 
-
+    # Marca Superior
     st.markdown("""
         <div class="login-brand">
-
-            <div class="brand-name">
-                BIMS
-            </div>
-
-            <div class="brand-label">
-                Plataforma de soporte
-            </div>
-
+            <div class="brand-icon">✓</div>
+            <div class="brand-name">BIMS</div>
+            <div class="brand-label">Plataforma de soporte</div>
         </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
-        <div class="login-card">
+    # Tarjeta que agrupa verdaderamente a los componentes
+    with st.container(border=True):
+        st.markdown("""
+            <div class="login-title">Bienvenido</div>
+            <div class="login-subtitle">Ingresa tus credenciales para acceder al panel de soporte.</div>
+        """, unsafe_allow_html=True)
 
-            <div class="login-title">
-                Bienvenido
-            </div>
+        input_user_email = st.text_input(
+            "Correo electrónico",
+            placeholder="nombre@empresa.com",
+            key="login_email_card"
+        )
 
-            <div class="login-subtitle">
-                Ingresa tus credenciales para acceder
-                al panel de soporte.
-            </div>
+        input_user_pass = st.text_input(
+            "Contraseña",
+            type="password",
+            placeholder="Ingresa tu contraseña",
+            key="login_pass_card"
+        )
 
-        </div>
-    """, unsafe_allow_html=True)
+        btn_login_user = st.button(
+            "Iniciar sesión",
+            use_container_width=True,
+            key="btn_login_card"
+        )
 
+        status_box = st.empty()
 
-    input_user_email = st.text_input(
-        "Correo electrónico",
-        placeholder="nombre@empresa.com",
-        key="login_email_card"
-    )
+        if btn_login_user:
+            email = input_user_email.strip()
+            password = input_user_pass.strip()
 
-
-    input_user_pass = st.text_input(
-        "Contraseña",
-        type="password",
-        placeholder="Ingresa tu contraseña",
-        key="login_pass_card"
-    )
-
-    btn_login_user = st.button(
-        "Iniciar sesión",
-        use_container_width=True,
-        key="btn_login_card"
-    )
-
-    status_box = st.empty()
-
-
-    if btn_login_user:
-
-        email = input_user_email.strip()
-        password = input_user_pass.strip()
-
-        if not email or not password:
-
-            status_box.warning(
-                "Por favor completa todos los campos."
-            )
-
-
-        else:
-
-            with status_box.container():
-
-                st.markdown("""
-                    <div class="loading-badge">
-                        <span>⏳</span>
-                        <span>Verificando credenciales...</span>
-                    </div>
-                """, unsafe_allow_html=True)
-
-
-                # Pequeña pausa visual
-                time_lib.sleep(0.5)
-
-
-                valido, datos_user = verificar_credenciales_supabase(
-                    email,
-                    password
-                )
-
-            if valido:
-
-                st.session_state["user_authenticated"] = True
-
-                st.session_state["user_email"] = (
-                    datos_user.get("email")
-                )
-
-                st.session_state["user_name"] = (
-                    datos_user.get("nombre")
-                )
-
-                status_box.success(
-                    "Acceso concedido. Cargando panel..."
-                )
-
-                time_lib.sleep(0.3)
-
-                st.rerun()
-
-
+            if not email or not password:
+                status_box.warning("Por favor completa todos los campos.")
             else:
+                with status_box.container():
+                    st.markdown("""
+                        <div class="loading-badge">
+                            <span>⏳</span>
+                            <span>Verificando credenciales...</span>
+                        </div>
+                    """, unsafe_allow_html=True)
 
-                status_box.error(
-                    "Correo o contraseña incorrectos."
-                )
+                    time_lib.sleep(0.5)
+                    valido, datos_user = verificar_credenciales_supabase(email, password)
 
+                if valido:
+                    st.session_state["user_authenticated"] = True
+                    st.session_state["user_email"] = datos_user.get("email")
+                    st.session_state["user_name"] = datos_user.get("nombre")
+                    status_box.success("Acceso concedido. Cargando panel...")
+                    time_lib.sleep(0.3)
+                    st.rerun()
+                else:
+                    status_box.error("Correo o contraseña incorrectos.")
+
+    # Footer
     st.markdown("""
         <div class="login-footer">
             Acceso protegido · <span>BIMS Support</span>
