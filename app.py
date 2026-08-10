@@ -51,53 +51,90 @@ def verificar_credenciales_supabase(email_val, pass_val):
     except Exception:
         return False, None
 
-# PANTALLA DE LOGIN
+# ==========================================
+# PANTALLA DE LOGIN CON DISEÑO Y ANCHO FIJO
+# ==========================================
 if not st.session_state["user_authenticated"]:
     st.set_page_config(page_title="Acceso - Dashboard Soporte BIMS", page_icon="📈", layout="centered")
 
     st.markdown("""
     <style>
         .stApp { background-color: #0f172a; color: #f8fafc; }
-        .login-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 24px;
-            margin-top: 50px;
+        
+        /* Contenedor con ancho rígido estático para evitar redimensionamientos */
+        div[data-testid="stForm"] {
+            max-width: 380px !important;
+            margin: 0 auto !important;
+            background-color: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-radius: 12px !important;
+            padding: 24px !important;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
         }
-        .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
+
+        /* Bloqueo del ancho de los inputs para mantenerlos simétricos */
+        div[data-testid="stTextInput"] {
+            width: 100% !important;
+        }
+
+        .login-title {
+            text-align: center;
+            color: #38bdf8;
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-top: 40px;
+            margin-bottom: 4px;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.88rem;
+            margin-bottom: 24px;
+        }
+
+        .stButton>button { 
+            background-color: #0284c7; 
+            color: white; 
+            font-weight: bold; 
+            border-radius: 8px; 
+            border: none;
+            height: 42px;
+            margin-top: 10px;
+        }
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("<h2 style='text-align: center; color: #38bdf8;'>Dashboard Soporte BIMS</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94a3b8;'>Ingresa tus credenciales autorizadas para acceder al Dashboard.</p>", unsafe_allow_html=True)
+    st.markdown("<div class='login-title'>Dashboard Soporte BIMS</div>", unsafe_allow_html=True)
+    st.markdown("<div class='login-subtitle'>Ingresa tus credenciales autorizadas para acceder al Dashboard.</div>", unsafe_allow_html=True)
     
-    # Uso de columnas centradas para reducir el ancho del formulario
-    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
-    
-    with col_l2:
-        with st.form("form_login_global"):
-            input_user_email = st.text_input("Correo Electrónico")
-            input_user_pass = st.text_input("Contraseña", type="password")
-            btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
-            
-            if btn_login_user:
-                if not input_user_email.strip() or not input_user_pass.strip():
-                    st.warning("Por favor ingresa tu correo y contraseña.")
-                else:
-                    # Animación de carga explícita mientras consulta Supabase
-                    with st.spinner("Verificando credenciales..."):
-                        valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
-                        
-                    if valido:
-                        st.session_state["user_authenticated"] = True
-                        st.session_state["user_email"] = datos_user.get("email")
-                        st.session_state["user_name"] = datos_user.get("nombre")
-                        st.success("Acceso concedido.")
-                        st.rerun()
-                    else:
-                        st.error("Credenciales incorrectas o usuario no activo.")
+    # Formulario centralizado
+    with st.form("form_login_global"):
+        input_user_email = st.text_input("Correo Electrónico")
+        input_user_pass = st.text_input("Contraseña", type="password")
+        btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
+
+    # Contenedor estático reservado para avisos y la animación de carga sin deformar la tarjeta
+    status_box = st.empty()
+
+    if btn_login_user:
+        if not input_user_email.strip() or not input_user_pass.strip():
+            status_box.warning("Por favor ingresa tu correo y contraseña.")
+        else:
+            # Animación de carga fluida mostrada en el contenedor estático
+            with status_box.container():
+                with st.spinner("Verificando credenciales..."):
+                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                 
+            if valido:
+                st.session_state["user_authenticated"] = True
+                st.session_state["user_email"] = datos_user.get("email")
+                st.session_state["user_name"] = datos_user.get("nombre")
+                status_box.success("Acceso concedido.")
+                st.rerun()
+            else:
+                status_box.error("Credenciales incorrectas o usuario no activo.")
+            
     st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
 
 # ==========================================
