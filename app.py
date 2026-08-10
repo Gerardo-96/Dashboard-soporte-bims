@@ -1171,15 +1171,14 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tarjeta 1: Sincronización y Poblamiento por Lotes con Contador
-        # Tarjeta 1: Poblamiento Masivo de Datos por Meses con Diagnóstico de Errores
+        # Tarjeta 1: Poblamiento Masivo Definitivo
         with st.container():
             st.markdown("""
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">1. Poblamiento Masivo de Datos por Meses (Segundo Plano)</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Descarga todo el histórico de conversaciones desde el 01/01/2026 hasta hoy en lotes progresivos. 
-                    El proceso se ejecuta en el servidor en segundo plano, por lo que <b>puedes cerrar esta pestaña sin interrumpir la carga</b>.
+                    Descarga todo el histórico de conversaciones desde el 01/01/2026 hasta hoy. 
+                    Las pruebas rápidas corren en pantalla y las descargas masivas corren en el servidor en segundo plano.
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -1188,10 +1187,10 @@ with tab_admin:
             try:
                 res_count = supabase.table("conversaciones").select("id", count="exact").execute()
                 total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
-            except Exception as e_count:
+            except Exception:
                 total_registros_db = 0
 
-            # Muestra de métrica y estado en pantalla
+            # Muestra de métrica y contador en vivo
             c_meta1, c_meta2 = st.columns([1, 2], vertical_alignment="center")
             with c_meta1:
                 st.markdown(f"""
@@ -1209,7 +1208,6 @@ with tab_admin:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Visualización de logs de la última sincronización en caso de fallo
             if "last_sync_log" in st.session_state:
                 st.info(f"📋 **Estado del último intento:** {st.session_state['last_sync_log']}")
 
@@ -1218,7 +1216,7 @@ with tab_admin:
             
             modo_sync = c_sync1.selectbox(
                 "Selecciona el modo de descarga:", 
-                options=["Ultimos X Dias (Prueba Rapida)", "Historico Completo 2026 (Por meses)"],
+                options=["Historico Completo 2026 (Segundo Plano)", "Ultimos X Dias (Prueba Rapida)"],
                 key="sb_modo_sync"
             )
             
@@ -1229,19 +1227,37 @@ with tab_admin:
             
             if c_sync2.button("Iniciar Descarga", use_container_width=True, key="btn_iniciar_poblamiento"):
                 if SYNC_AVAILABLE:
-                    # Prueba directa de sincronización en primer plano para capturar excepciones exactas
-                    with st.spinner(f"Ejecutando prueba de sincronización para {dias_a_sincronizar} días..."):
-                        try:
-                            # Intentamos sincronizar los días seleccionados
-                            sincronizar_intercom(dias=dias_a_sincronizar)
-                            st.session_state["last_sync_log"] = f"✅ Sincronización de {dias_a_sincronizar} días finalizada correctamente a las {datetime.now().strftime('%H:%M:%S')}."
-                            st.cache_data.clear()
-                            st.success("Sincronización completada exitosamente.")
-                            st.rerun()
-                        except Exception as err:
-                            error_detalle = str(err)
-                            st.session_state["last_sync_log"] = f"❌ Error: {error_detalle}"
-                            st.error(f"Fallo al sincronizar con Intercom/Supabase: {error_detalle}")
+                    if modo_sync == "Ultimos X Dias (Prueba Rapida)":
+                        # Prueba en primer plano con spinner
+                        with st.spinner(f"Sincronizando {dias_a_sincronizar} días..."):
+                            try:
+                                sincronizar_intercom(dias=dias_a_sincronizar)
+                                st.session_state["last_sync_log"] = f"✅ Sincronización rápida de {dias_a_sincronizar} días exitosa ({datetime.now().strftime('%H:%M:%S')})."
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as err:
+                                st.session_state["last_sync_log"] = f"❌ Error: {str(err)}"
+                                st.error(f"Error: {str(err)}")
+                    else:
+                        # Descarga masiva en segundo plano
+                        import threading
+                        
+                        def tarea_descarga_masiva(dias_totales):
+                            try:
+                                # Va procesando en bloques acumulativos de 30 días
+                                pasadas = list(range(30, dias_totales + 30, 30))
+                                for bloque_dias in pasadas:
+                                    dias_efectivos = min(bloque_dias, dias_totales)
+                                    sincronizar_intercom(dias=dias_efectivos)
+                                    time_lib.sleep(4)  # Pausa de seguridad para evitar Rate Limits
+                            except Exception as ex_bg:
+                                print(f"Error en descarga en segundo plano: {ex_bg}")
+
+                        hilo_bg = threading.Thread(target=tarea_descarga_masiva, args=(dias_a_sincronizar,))
+                        hilo_bg.start()
+                        
+                        st.session_state["last_sync_log"] = f"🚀 Descarga masiva del 2026 iniciada en segundo plano a las {datetime.now().strftime('%H:%M:%S')}. Puedes cerrar la pestaña tranquilamente."
+                        st.success("¡Descarga masiva en proceso! Presiona 'Actualizar Contador en Vivo' periódicamente para ver el progreso.")
                 else:
                     st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
                     
