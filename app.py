@@ -10,7 +10,7 @@ from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 
 # ==========================================
-# 1. CONFIGURACIÓN ÚNICA DE PÁGINA (PRIMERA LÍNEA STREAMLIT)
+# 1. CONFIGURACIÓN ÚNICA DE PÁGINA
 # ==========================================
 st.set_page_config(
     page_title="Dashboard Soporte BIMS",
@@ -18,11 +18,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilo global para ocultar el widget 'Running...' en toda la app
+# Oculta exclusivamente el aviso flotante 'Running...' sin ocultar el header principal
 st.markdown("""
 <style>
-    /* Ocultar la etiqueta flotante 'Running...' de Streamlit en Login y Dashboard */
-    [data-testid="stStatusWidget"], header[data-testid="stHeader"] { 
+    [data-testid="stStatusWidget"] { 
         display: none !important; 
     }
 </style>
@@ -71,49 +70,62 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return False, None
 
 # ==========================================
-# PANTALLA DE LOGIN ESTILIZADA Y CENTRADA
+# PANTALLA DE LOGIN CENTRADA Y ACO TADA
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
         .stApp { background-color: #0f172a; color: #f8fafc; }
 
-        /* Tarjeta de Login centrada con ancho acotado */
-        .login-card-container {
-            width: 100%;
-            max-width: 380px;
-            margin: 80px auto 0 auto;
+        /* Mantiene el header visible pero con el mismo fondo oscuro */
+        header[data-testid="stHeader"] {
+            background-color: #0f172a !important;
+        }
+
+        /* Fuerza que el contenedor principal del login no se expanda horizontalmente */
+        .block-container {
+            max-width: 420px !important;
+            padding-top: 5rem !important;
+            margin: 0 auto !important;
+        }
+
+        /* Estilo de la tarjeta de Login */
+        .login-card-header {
             background-color: #1e293b;
             border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 32px 28px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+            border-bottom: none;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            padding: 28px 24px 10px 24px;
+            text-align: center;
         }
 
         .login-title {
-            text-align: center;
             color: #38bdf8;
-            font-size: 1.5rem;
+            font-size: 1.45rem;
             font-weight: 700;
             margin-bottom: 4px;
         }
 
         .login-subtitle {
-            text-align: center;
             color: #94a3b8;
             font-size: 0.85rem;
-            margin-bottom: 24px;
         }
 
-        /* Estilizado de las cajas de entrada de texto */
+        /* Envoltorio del formulario */
         div[data-testid="stForm"] {
-            border: none !important;
-            padding: 0 !important;
-            background: transparent !important;
+            background-color: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-top: none !important;
+            border-bottom-left-radius: 16px !important;
+            border-bottom-right-radius: 16px !important;
+            padding: 0 24px 28px 24px !important;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
         }
 
+        /* Estilizado interno de los campos de texto */
         div[data-testid="stTextInput"] {
-            margin-bottom: 12px;
+            width: 100% !important;
         }
 
         div[data-testid="stTextInput"] input {
@@ -129,7 +141,7 @@ if not st.session_state["user_authenticated"]:
             box-shadow: 0 0 0 1px #38bdf8 !important;
         }
 
-        /* Botón de Inicio de Sesión */
+        /* Botón Iniciar Sesión */
         .stButton>button { 
             background-color: #0284c7 !important; 
             color: white !important; 
@@ -137,19 +149,10 @@ if not st.session_state["user_authenticated"]:
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 10px !important;
-            transition: all 0.2s ease;
+            margin-top: 8px !important;
         }
 
-        .stButton>button:hover {
-            background-color: #0369a1 !important;
-        }
-
-        /* Animación de carga personalizada */
         .loading-badge {
-            display: flex;
-            align-items: center;
-            justify-content: center;
             background-color: #0f172a;
             border: 1px solid #0284c7;
             border-radius: 8px;
@@ -157,13 +160,15 @@ if not st.session_state["user_authenticated"]:
             color: #38bdf8;
             font-size: 0.88rem;
             font-weight: 600;
-            margin-top: 12px;
+            text-align: center;
+            margin-top: 10px;
         }
     </style>
 
-    <div class="login-card-container">
+    <div class="login-card-header">
         <div class="login-title">Dashboard Soporte BIMS</div>
         <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
+    </div>
     """, unsafe_allow_html=True)
 
     with st.form("form_login_global", clear_on_submit=False):
@@ -177,7 +182,6 @@ if not st.session_state["user_authenticated"]:
             if not input_user_email.strip() or not input_user_pass.strip():
                 status_box.warning("Por favor ingresa tu correo y contraseña.")
             else:
-                # Muestra el indicador animado mientras consulta a Supabase
                 with status_box.container():
                     st.markdown("""
                     <div class="loading-badge">
@@ -185,7 +189,7 @@ if not st.session_state["user_authenticated"]:
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    time_lib.sleep(0.5)  # Pausa garantizada para visualización
+                    time_lib.sleep(0.5)
                     valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
@@ -197,7 +201,6 @@ if not st.session_state["user_authenticated"]:
                 else:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
 
-    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()  # Detiene la ejecución para no cargar el dashboard sin login
 
 # ==========================================
