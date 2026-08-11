@@ -680,11 +680,100 @@ with st.sidebar.form("form_filtros"):
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
 
+# ==========================================
+# EVALUACIÓN DE SLA PARA REPORTE EXCEL
+# ==========================================
+
+def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
+    dt_obj = row.get("created_at_dt")
+    if pd.isna(dt_obj):
+        return "excluido"
+    
+    fecha_str = dt_obj.strftime("%Y-%m-%d")
+    dia_semana = dt_obj.weekday() # 0: Lunes, ..., 5: Sábado, 6: Domingo
+    hora_actual = dt_obj.time()
+    
+    # Exclusión por Feriado
+    if fecha_str in FERIADOS:
+        return "excluido"
+    
+    # Exclusión por Agente "Sin asignar" o vacío
+    agente = str(row.get("agente_asignado", "")).strip()
+    if not agente or agente in ["Sin asignar", "None", "nan"]:
+        return "excluido"
+        
+    # Exclusión por etiqueta "Sin Respuesta"
+    etiquetas = str(row.get("etiquetas", "")).lower()
+    if "sin respuesta" in etiquetas:
+        return "excluido"
+        
+    # Validación de Horario Normal:
+    # Lunes a Viernes de 08:00 a 17:00 hs
+    # Sábados de 09:00 a 11:45 hs
+    en_horario = False
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 0, 0):
+        en_horario = True
+    elif dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(11, 45, 0):
+        en_horario = True
+        
+    if not en_horario:
+        return "excluido"
+        
+    # Evaluación del tiempo de primera respuesta
+    min_1ra = row.get("primera_respuesta_min")
+    if pd.isna(min_1ra):
+        return "no cumple"
+        
+    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
+
+
+def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
+    dt_obj = row.get("created_at_dt")
+    if pd.isna(dt_obj):
+        return "excluido"
+        
+    dia_semana = dt_obj.weekday() # 0: Lunes, ..., 6: Domingo
+    hora_actual = dt_obj.time()
+    
+    # Exclusión por Agente "Sin asignar" o vacío
+    agente = str(row.get("agente_asignado", "")).strip()
+    if not agente or agente in ["Sin asignar", "None", "nan"]:
+        return "excluido"
+        
+    # Exclusión por etiqueta "Sin Respuesta"
+    etiquetas = str(row.get("etiquetas", "")).lower()
+    if "sin respuesta" in etiquetas:
+        return "excluido"
+        
+    # Validación de Horario Extendido (Lunes a Lunes):
+    # Lunes a Miércoles (0, 1, 2): 19:00 a 01:45 hs
+    # Jueves a Domingo (3, 4, 5, 6): 18:00 a 02:45 hs
+    en_horario = False
+    
+    # Evaluación para Lunes a Miércoles
+    if dia_semana in [0, 1, 2]:
+        if hora_actual >= time(19, 0, 0) or hora_actual <= time(1, 45, 0):
+            en_horario = True
+    # Evaluación para Jueves a Domingo
+    elif dia_semana in [3, 4, 5, 6]:
+        if hora_actual >= time(18, 0, 0) or hora_actual <= time(2, 45, 0):
+            en_horario = True
+            
+    if not en_horario:
+        return "excluido"
+        
+    # Evaluación del tiempo de primera respuesta
+    min_1ra = row.get("primera_respuesta_min")
+    if pd.isna(min_1ra):
+        return "no cumple"
+        
+    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
+
 def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
     output = io.BytesIO()
     horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
 
-    sla_1ra_threshold = st.session_state.get("sla_1ra_th", 1.5)
+    sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
     sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
 
     df_reporte = pd.DataFrame()
@@ -697,7 +786,9 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
     
-    df_reporte["SLA 1a Resp"] = df_exp.apply(lambda r: evaluar_sla_1ra_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
+    # Nuevas Columnas de SLA Renombradas
+    df_reporte["SLA Normal"] = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
+    df_reporte["SLA Extendido"] = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
     
     if "rating" in df_exp and not df_exp.empty:
         df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
