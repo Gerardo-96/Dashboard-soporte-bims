@@ -272,6 +272,9 @@ def procesar_fechas_df(df):
         df["created_at_fmt"] = pd.Series(dtype='str')
         df["fecha_solo"] = pd.Series(dtype='object')
         df["hora_solo"] = pd.Series(dtype='object')
+        df["fecha_calificacion_dt"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
+        df["fecha_calificacion_fmt"] = pd.Series(dtype='str')
+        df["fecha_calificacion_solo"] = pd.Series(dtype='object')
         df["updated_at_local"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
         df["es_cerrado"] = pd.Series(dtype='bool')
         df["por_agente"] = pd.Series(dtype='str')
@@ -290,6 +293,17 @@ def procesar_fechas_df(df):
     df["created_at_fmt"] = local_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
+
+    # Procesamiento de Marca de Tiempo de Puntuación CSAT (Respaldado en created_at)
+    if "fecha_calificacion" in df.columns:
+        calif_utc = pd.to_datetime(df["fecha_calificacion"], errors="coerce", utc=True)
+        local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
+        df["fecha_calificacion_dt"] = local_calif_dt.fillna(df["created_at_dt"])
+    else:
+        df["fecha_calificacion_dt"] = df["created_at_dt"]
+
+    df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+    df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
 
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
@@ -983,44 +997,54 @@ with tab_operativo:
     now_dt = pd.Timestamp.now(tz="America/Asuncion")
     df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
-    # CSAT SCORECARD
+    # CSAT SCORECARD (ALIMENTADO DE LA MARCA DE TIEMPO DE PUNTUACIÓN DE CSAT)
     st.markdown("### CSAT Performance")
     now_date = obtener_fecha_local_hoy()
 
-    c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_solo"] == now_date]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    c_ayer, _ = calcular_csat(df_all[df_all["fecha_solo"] == (now_date - timedelta(days=1))]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    diff_hoy = round(c_hoy - c_ayer, 1)
+    # Filtro general para la pestaña CSAT usando la fecha de calificación
+    if not df_all.empty and "fecha_calificacion_solo" in df_all.columns:
+        c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == now_date])
+        c_ayer, _ = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
+        diff_hoy = round(c_hoy - c_ayer, 1)
 
-    inicio_sem = now_date - timedelta(days=now_date.weekday())
-    c_sem, k_sem = calcular_csat(df_all[(df_all["fecha_solo"] >= inicio_sem) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    ini_sem_ant = inicio_sem - timedelta(days=7)
-    fin_sem_ant = inicio_sem - timedelta(days=1)
-    c_sem_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_sem_ant) & (df_all["fecha_solo"] <= fin_sem_ant)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    diff_sem = round(c_sem - c_sem_ant, 1)
+        inicio_sem = now_date - timedelta(days=now_date.weekday())
+        c_sem, k_sem = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_sem) & (df_all["fecha_calificacion_solo"] <= now_date)])
+        ini_sem_ant = inicio_sem - timedelta(days=7)
+        fin_sem_ant = inicio_sem - timedelta(days=1)
+        c_sem_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_sem_ant) & (df_all["fecha_calificacion_solo"] <= fin_sem_ant)])
+        diff_sem = round(c_sem - c_sem_ant, 1)
 
-    inicio_mes = now_date.replace(day=1)
-    c_mes, k_mes = calcular_csat(df_all[(df_all["fecha_solo"] >= inicio_mes) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    fin_mes_ant = inicio_mes - timedelta(days=1)
-    ini_mes_ant = fin_mes_ant.replace(day=1)
-    c_mes_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_mes_ant) & (df_all["fecha_solo"] <= fin_mes_ant)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    diff_mes = round(c_mes - c_mes_ant, 1)
+        inicio_mes = now_date.replace(day=1)
+        c_mes, k_mes = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_mes) & (df_all["fecha_calificacion_solo"] <= now_date)])
+        fin_mes_ant = inicio_mes - timedelta(days=1)
+        ini_mes_ant = fin_mes_ant.replace(day=1)
+        c_mes_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_mes_ant) & (df_all["fecha_calificacion_solo"] <= fin_mes_ant)])
+        diff_mes = round(c_mes - c_mes_ant, 1)
 
-    q_act = (now_date.month - 1) // 3 + 1
-    ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
-    c_q, k_q = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_q) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    fin_q_ant = ini_q - timedelta(days=1)
-    q_ant = (fin_q_ant.month - 1) // 3 + 1
-    ini_q_ant = datetime(fin_q_ant.year, 3 * (q_ant - 1) + 1, 1).date()
-    c_q_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_q_ant) & (df_all["fecha_solo"] <= fin_q_ant)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
-    diff_q = round(c_q - c_q_ant, 1)
+        q_act = (now_date.month - 1) // 3 + 1
+        ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
+        c_q, k_q = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q) & (df_all["fecha_calificacion_solo"] <= now_date)])
+        fin_q_ant = ini_q - timedelta(days=1)
+        q_ant = (fin_q_ant.month - 1) // 3 + 1
+        ini_q_ant = datetime(fin_q_ant.year, 3 * (q_ant - 1) + 1, 1).date()
+        c_q_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q_ant) & (df_all["fecha_calificacion_solo"] <= fin_q_ant)])
+        diff_q = round(c_q - c_q_ant, 1)
 
-    c_rango, k_rango = calcular_csat(df_filtered) if not df_filtered.empty else (0.0, 0)
-    duracion_dias = (f_hasta_v - f_desde_v).days + 1
-    f_hasta_prev = f_desde_v - timedelta(days=1)
-    f_desde_prev = f_hasta_prev - timedelta(days=duracion_dias - 1)
-    df_prev_rango = df_all[(df_all["fecha_solo"] >= f_desde_prev) & (df_all["fecha_solo"] <= f_hasta_prev)] if not df_all.empty and "fecha_solo" in df_all.columns else pd.DataFrame()
-    c_rango_prev, _ = calcular_csat(df_prev_rango)
-    diff_rango = round(c_rango - c_rango_prev, 1)
+        df_filtered_csat = df_all[(df_all["fecha_calificacion_solo"] >= f_desde_v) & (df_all["fecha_calificacion_solo"] <= f_hasta_v)].copy()
+        c_rango, k_rango = calcular_csat(df_filtered_csat)
+        duracion_dias = (f_hasta_v - f_desde_v).days + 1
+        f_hasta_prev = f_desde_v - timedelta(days=1)
+        f_desde_prev = f_hasta_prev - timedelta(days=duracion_dias - 1)
+        df_prev_rango = df_all[(df_all["fecha_calificacion_solo"] >= f_desde_prev) & (df_all["fecha_calificacion_solo"] <= f_hasta_prev)]
+        c_rango_prev, _ = calcular_csat(df_prev_rango)
+        diff_rango = round(c_rango - c_rango_prev, 1)
+    else:
+        c_hoy, k_hoy, diff_hoy = 0.0, 0, 0.0
+        c_sem, k_sem, diff_sem = 0.0, 0, 0.0
+        c_mes, k_mes, diff_mes = 0.0, 0, 0.0
+        c_q, k_q, diff_q, q_act = 0.0, 0, 0.0, 1
+        c_rango, k_rango, diff_rango = 0.0, 0, 0.0
+        df_filtered_csat = pd.DataFrame()
 
     def render_metric_card(title, value, diff, sub_text):
         diff_color = "#34d399" if diff >= 0 else "#f43f5e"
@@ -1045,16 +1069,16 @@ with tab_operativo:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # EVOLUCIÓN HISTÓRICA DE CSAT
+    # EVOLUCIÓN HISTÓRICA DE CSAT (ALIMENTADO DE LA FECHA DE CALIFICACIÓN)
     with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
-        if not df_all.empty and "fecha_solo" in df_all.columns:
+        if not df_all.empty and "fecha_calificacion_solo" in df_all.columns:
             fecha_6m_atras = (pd.Timestamp.now(tz="America/Asuncion") - timedelta(days=180)).date()
-            df_6m = df_all[df_all["fecha_solo"] >= fecha_6m_atras].copy()
+            df_6m = df_all[df_all["fecha_calificacion_solo"] >= fecha_6m_atras].copy()
             df_csat_6m = obtener_df_csat_valido(df_6m)
 
             if not df_csat_6m.empty:
-                df_csat_6m["Periodo_Sort"] = df_csat_6m["created_at_dt"].dt.to_period("M")
-                df_csat_6m["Mes_Nombre"] = df_csat_6m["created_at_dt"].dt.strftime("%b %Y").fillna("")
+                df_csat_6m["Periodo_Sort"] = df_csat_6m["fecha_calificacion_dt"].dt.to_period("M")
+                df_csat_6m["Mes_Nombre"] = df_csat_6m["fecha_calificacion_dt"].dt.strftime("%b %Y").fillna("")
 
                 res_csat_mensual = []
                 for period, grp in df_csat_6m.groupby("Periodo_Sort"):
@@ -1108,7 +1132,7 @@ with tab_operativo:
                     xaxis=dict(gridcolor="#334155"),
                     paper_bgcolor="#1e293b",
                     plot_bgcolor="#1e293b",
-                    font=dict(color="#f8fafc"),
+                    font=dict(color="#cbd5e1"),
                     margin=dict(t=50, b=40, l=40, r=40),
                     height=380
                 )
@@ -1119,22 +1143,22 @@ with tab_operativo:
         else:
             st.info("Sin registros en la base de datos.")
 
-    # DETALLE DE CSAT
-    if not df_filtered.empty:
-        df_csat_det = obtener_df_csat_valido(df_filtered)
+    # DETALLE DE CSAT (ALIMENTADO DE LA FECHA DE CALIFICACIÓN)
+    if not df_filtered_csat.empty:
+        df_csat_det = obtener_df_csat_valido(df_filtered_csat)
         if not df_csat_det.empty:
             with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-                df_csat_det = df_csat_det.sort_values(by=["rating_num", "created_at_dt"], ascending=[True, False])
+                df_csat_det = df_csat_det.sort_values(by=["rating_num", "fecha_calificacion_dt"], ascending=[True, False])
 
                 st.dataframe(
                     df_csat_det[[
-                        "intercom_url", "created_at_fmt", "Calificacion", "feedback", 
+                        "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
                         "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
                     ]],
                     column_config={
                         "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                        "created_at_fmt": "Fecha/Hora Creacion",
+                        "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
                         "Calificacion": "Puntaje",
                         "feedback": "Comentario / Feedback",
                         "nombre_contacto": "Contacto",
