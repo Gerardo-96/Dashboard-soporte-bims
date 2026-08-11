@@ -60,7 +60,7 @@ def obtener_agentes():
     try:
         resp = requests.get(url, headers=headers)
         data = resp.json()
-        return {str(a["id"]).strip(): a["name"] for a in data.get("admins", [])}
+        return {str(a["id"]).strip(): a.get("name", "Desconocido") for a in data.get("admins", [])}
     except:
         return {}
 
@@ -122,7 +122,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
     start_ts = int(dt_inicio.timestamp())
     end_ts = int(dt_fin.timestamp())
 
-    agentes = obtener_agentes()
+    agentes_dict = obtener_agentes()
     conversations_url = "https://api.intercom.io/conversations/search"
     starting_after = None
     total_procesadas = 0
@@ -169,12 +169,9 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             # =========================================================================
             # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA (DERIVACIÓN DEL BOT/EQUIPO)
             # =========================================================================
-            statistics = conv.get("statistics", {}) or {}
-            
-            # 1. Intenta tomar la primera asignación registrada en las estadísticas
             first_assignment_at = statistics.get("first_assignment_at") or statistics.get("first_assignment_to_team_at")
             
-            # 2. Respaldo: Buscar en conversation_parts la primera asignación a un EQUIPO (team)
+            # Respaldo: Buscar en conversation_parts la primera asignación a un EQUIPO (team)
             if not first_assignment_at:
                 parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
                 team_assignments = [
@@ -184,7 +181,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 if team_assignments:
                     first_assignment_at = min(team_assignments)
 
-            # Asignar el timestamp inicial de referencia
             if first_assignment_at:
                 ts_inicio_ref = first_assignment_at
             else:
@@ -194,27 +190,25 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
             hace_7_meses = ahora_local - timedelta(days=210)
             if inicio_real < hace_7_meses:
-                # Si la conversación es más antigua a 7 meses, se descarta para ahorrar espacio en Supabase
+                # Omitir si la conversación es superior a 7 meses para ahorrar almacenamiento en Supabase
                 continue
 
             # =========================================================================
-            # 2. PRIMERA RESPUESTA HUMANA (MEDIDA DESDE LA LLEGADA HASTA LA RESPUESTA)
+            # 2. PRIMERA RESPUESTA HUMANA
             # =========================================================================
             first_admin_reply = statistics.get("first_admin_reply_at")
             time_to_reply = statistics.get("time_to_admin_reply")
 
             if first_admin_reply and first_admin_reply >= ts_inicio_ref:
-                # Diferencia real entre la llegada a la bandeja y el primer mensaje del agente
                 secs_espera = first_admin_reply - ts_inicio_ref
                 primera_respuesta_min = round(secs_espera / 60, 2)
             elif time_to_reply is not None:
-                # Respaldo nativo de Intercom si no se puede calcular la diferencia
                 primera_respuesta_min = round(time_to_reply / 60, 2)
             else:
                 primera_respuesta_min = None
 
             # =========================================================================
-            # 3. TIEMPO DE GESTIÓN Y PRIMER CIERRE (MEDIDO DESDE EL INICIO HUMANO REAL)
+            # 3. TIEMPO DE GESTIÓN Y CIERRE
             # =========================================================================
             state_intercom = str(conv.get("state", "")).lower()
             first_close_at = statistics.get("first_close_at") or statistics.get("last_close_at")
@@ -228,12 +222,34 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 tiempo_res_hrs = round(secs / 3600, 2)
                 tiempo_res_min = round(secs / 60, 2)
 
+            # =========================================================================
+            # 4. AGENTE Y CSAT / RATING
+            # =========================================================================
+            assigned_to = conv.get("assigned_to", {})
+            agente_id = str(assigned_to.get("id", "")).strip() if assigned_to else ""
+            agente = agentes_dict.get(agente_id, "Sin asignar")
+            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)"] else "no excluido"
+
+            rating_data = conv.get("conversation_rating", {}) or {}
+            rating = rating_data.get("rating")
+            calificacion = str(rating) if rating is not None else ""
+            feedback = rating_data.get("remark") or ""
+            cx_explanation = rating_data.get("remark") or ""
+
+            teaser_admin = rating_data.get("teaser", {}).get("admin", {}) if rating_data.get("teaser") else {}
+            admin_eval_id = str(teaser_admin.get("id", "")).strip() if teaser_admin else ""
+            agente_evaluado = agentes_dict.get(admin_eval_id, agente)
+
+            # =========================================================================
+            # 5. ETIQUETAS Y MOTIVO NORMALIZADO
+            # =========================================================================
             tags = [tag.get("name") for tag in conv.get("tags", {}).get("tags", [])]
             modulo = next((t for t in tags if t.startswith("mod-")), "")
             cliente = next((t for t in tags if t.startswith("cli-")), "")
             tipo_contacto = next((t for t in tags if t.startswith("tipo-")), "")
             nivel = next((t for t in tags if t.startswith("Niv-")), "")
             etiquetas_str = ", ".join(tags)
+            
             motivo = extraer_motivo_normalizado(modulo, tipo_contacto, etiquetas_str, cx_explanation)
 
             contacts = conv.get("contacts", {}).get("contacts", [])
@@ -245,7 +261,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                     company = get_attr(c_data, "Company")
                     nombre_contacto = c_data.get("name") or c_data.get("email") or "Sin nombre"
 
-            # Estructurar objeto compatible con la tabla PostgreSQL en Supabase
             registro = {
                 "id": conv_id,
                 "created_at": inicio_real.isoformat(),
@@ -278,7 +293,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             }
             lote_registros.append(registro)
 
-        # Inserción/Actualización masiva en Supabase
         if lote_registros:
             supabase.table("conversaciones").upsert(lote_registros).execute()
             total_procesadas += len(lote_registros)
