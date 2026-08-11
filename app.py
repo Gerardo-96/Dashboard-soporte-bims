@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
+import extra_streamlit_components as stx
 
 # ==========================================
 # 1. CONFIGURACIÓN ÚNICA DE PÁGINA
@@ -57,12 +58,27 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
-# ESTADOS PARA CONTROL DE SESIÓN E HILOS
+# GESTOR DE COOKIES Y SESIÓN PERSISTENTE (30 DÍAS)
 # ==========================================
+@st.cache_resource(experimental_allow_widgets=True)
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
+COOKIE_NAME = "bims_dashboard_user_session"
+
+# Intentar recuperar el correo guardado en la cookie del navegador
+user_cookie = cookie_manager.get(cookie=COOKIE_NAME)
+
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
+
+# Auto-autenticación si existe una cookie válida activa
+if user_cookie and not st.session_state["user_authenticated"]:
+    st.session_state["user_authenticated"] = True
+    st.session_state["user_email"] = user_cookie
 
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
@@ -215,9 +231,19 @@ if not st.session_state["user_authenticated"]:
                     valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
+                    email_user = datos_user.get("email")
                     st.session_state["user_authenticated"] = True
-                    st.session_state["user_email"] = datos_user.get("email")
+                    st.session_state["user_email"] = email_user
                     st.session_state["user_name"] = datos_user.get("nombre")
+                    
+                    # Guardar la cookie de sesión por 30 días
+                    expires_at = datetime.now() + timedelta(days=30)
+                    cookie_manager.set(
+                        cookie=COOKIE_NAME,
+                        val=email_user,
+                        expires_at=expires_at
+                    )
+                    
                     status_box.success("Acceso concedido.")
                     st.rerun()
                 else:
@@ -716,6 +742,14 @@ with st.sidebar.form("form_filtros"):
 
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
+
+# BOTÓN DE CERRAR SESIÓN GLOBAL EN LA BARRA LATERAL
+st.sidebar.markdown("---")
+if st.sidebar.button("🔒 Cerrar Sesión Global", use_container_width=True):
+    cookie_manager.delete(COOKIE_NAME)
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.rerun()
 
 # ==========================================
 # EVALUACIÓN DE SLA PARA REPORTE EXCEL
