@@ -840,12 +840,17 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (TABLA FILTRADA SOLO A CRÍTICOS)
+# FRAGMENTO DE ALERTAS EN VIVO (CON DIAGNÓSTICO DEFENSIVO DE ZONA HORARIA)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
-    alerta_nuevo_th = st.session_state.get("alerta_nuevo_th", 1.0)
-    act_sonido = st.session_state.get("act_sonido", True)
+    # Asegurar que el umbral sea estrictamente float
+    try:
+        alerta_nuevo_th = float(st.session_state.get("alerta_nuevo_th", 1.0))
+    except (ValueError, TypeError):
+        alerta_nuevo_th = 1.0
+
+    act_sonido = bool(st.session_state.get("act_sonido", True))
     tz_py = timezone(timedelta(hours=-3))
     now_dt = datetime.now(tz_py)
     
@@ -853,6 +858,7 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
+        # Petición a Supabase
         res = supabase.table("conversaciones").select("*").execute()
         datos_todos = res.data or []
     except Exception as e:
@@ -879,14 +885,25 @@ def renderizar_alertas_en_vivo():
             df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
         
         if not df_activos.empty:
-            df_activos["created_at_dt"] = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True).dt.tz_convert("America/Asuncion")
+            # CONVERSIÓN DEFENSIVA DE FECHA (Maneja ISO strings con o sin Z)
+            created_raw = pd.to_datetime(df_activos["created_at"], errors="coerce")
+            
+            # Si no tiene zona horaria asignada, asumir UTC primero y luego convertir a Paraguay
+            if created_raw.dt.tz is None:
+                df_activos["created_at_dt"] = created_raw.dt.tz_localize("UTC").dt.tz_convert("America/Asuncion")
+            else:
+                df_activos["created_at_dt"] = created_raw.dt.tz_convert("America/Asuncion")
+
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
             df_activos = df_activos.drop_duplicates(subset=["id"])
             
+            # Limpieza estricta de 1ra respuesta
             df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
-            df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
-            # FILTRO DE CHATS CRÍTICOS (Sin respuesta y superando el umbral)
+            # Cálculo de minutos transcurridos
+            df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60.0).round(1)
+            
+            # CONDICIONES
             sin_respuesta = df_activos["1ra_resp_num"].isna()
             tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
             
@@ -905,21 +922,25 @@ def renderizar_alertas_en_vivo():
                 if act_sonido:
                     st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
-            # 2. PANEL DE VERIFICACIÓN (MUESTRA ÚNICAMENTE LOS CHATS CRÍTICOS)
-            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Críticos en Alerta:** {len(df_criticos_sla)} | **Total Abiertos en BD:** {len(df_activos)}")
+            # 2. PANEL DE AUDITORÍA EN VIVO (Desplegar para diagnosticar si la alerta no sale)
+            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=True if df_criticos_sla.empty else False):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral Alerta:** {alerta_nuevo_th} min | **Críticos Detectados:** {len(df_criticos_sla)}")
                 
                 cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
                 if "canal" in df_activos.columns:
                     cols_check.append("canal")
                 
-                # Se renderiza exclusivamente el DataFrame de los críticos
-                st.dataframe(df_criticos_sla[cols_check], use_container_width=True)
+                # Agregar columnas de diagnóstico de condiciones
+                df_activos["¿Es Sin Resp?"] = sin_respuesta
+                df_activos["¿Supera Min?"] = tiempo_superado
+                cols_check.extend(["¿Es Sin Resp?", "¿Supera Min?"])
+                
+                st.dataframe(df_activos[cols_check], use_container_width=True)
         else:
-            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
+            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=True):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos sin cerrar encontrados en BD.")
     else:
-        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=True):
             st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
