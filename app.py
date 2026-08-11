@@ -1149,60 +1149,79 @@ with tab_operativo:
 
     st.markdown("---")
 
-    # MÉTRICAS POR AGENTE EN DASHBOARD
+    # ==========================================
+    # MÉTRICAS POR AGENTE EN DASHBOARD (CORREGIDO)
+    # ==========================================
     st.markdown("### Metricas por Agente")
     if not df_filtered.empty:
-        v_df = df_filtered[(df_filtered["por_agente"] == "no excluido") & (df_filtered["horario_evaluado"] != "fuera de horario")]
+        # Asegurar unicidad por ID de conversación
+        df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
-        p_1r_series = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
-        p_gest_series = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
+        # Filtro global de métricas operativas
+        v_df = df_f[(df_f["por_agente"] == "no excluido") & (df_f["horario_evaluado"] != "fuera de horario")].copy()
+        
+        # Conversión limpia de series numéricas
+        v_df["p_1ra_num"] = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
+        v_df["p_gest_num"] = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
 
-        p_1r = round(p_1r_series.mean(), 2) if not p_1r_series.dropna().empty else 0
-        p_gest = round(p_gest_series.mean(), 2) if not p_gest_series.dropna().empty else 0
+        p_1r = round(v_df["p_1ra_num"].mean(), 2) if not v_df["p_1ra_num"].dropna().empty else 0.0
+        p_gest = round(v_df["p_gest_num"].mean(), 2) if not v_df["p_gest_num"].dropna().empty else 0.0
 
-        df_cerrados = df_filtered[df_filtered["es_cerrado"]]
+        df_cerrados = df_f[df_f["es_cerrado"]]
 
         k1, k2, k3, k4 = st.columns(4)
         k1.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. 1a Respuesta</div><div class="metric-card-value">{p_1r} min</div></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. Tiempo Gestion</div><div class="metric-card-value">{p_gest} min</div></div>', unsafe_allow_html=True)
-        k3.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Consultados</div><div class="metric-card-value">{len(df_filtered)}</div></div>', unsafe_allow_html=True)
+        k3.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Consultados</div><div class="metric-card-value">{len(df_f)}</div></div>', unsafe_allow_html=True)
         k4.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Cerrados</div><div class="metric-card-value">{len(df_cerrados)}</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         res_agentes = []
-        for agente, grp in df_filtered.groupby("agente_asignado"):
-            v_g = grp[(grp["por_agente"] == "no excluido") & (grp["horario_evaluado"] != "fuera de horario")]
-            asig = len(grp)
-            cerr = len(grp[grp["es_cerrado"]])
+        for agente, grp in df_f.groupby("agente_asignado"):
+            asig_totales = len(grp)
+            cerrados_totales = len(grp[grp["es_cerrado"]])
             
-            p_1_s = pd.to_numeric(v_g["primera_respuesta_min"], errors="coerce")
-            p_1 = round(p_1_s.mean(), 2) if not p_1_s.dropna().empty else 0
+            # Filtrar solo la actividad evaluable en horario hábil para el agente
+            v_g = grp[(grp["por_agente"] == "no excluido") & (grp["horario_evaluado"] != "fuera de horario")].copy()
             
-            v_g_1ra = v_g[p_1_s.notna()]
-            if not v_g_1ra.empty:
-                cumplen_1ra = len(v_g_1ra[pd.to_numeric(v_g_1ra["primera_respuesta_min"], errors="coerce") <= sla_1ra_th])
-                sla_1 = round((cumplen_1ra / len(v_g_1ra)) * 100, 1)
-            else:
-                sla_1 = 0.0
+            v_g["p_1ra_num"] = pd.to_numeric(v_g["primera_respuesta_min"], errors="coerce")
+            v_g["p_gest_num"] = pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce")
 
-            v_g_gest = v_g[pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce").notna()]
-            if not v_g_gest.empty:
-                cumplen_gest = len(v_g_gest[pd.to_numeric(v_g_gest["tiempo_resolucion_minutos"], errors="coerce") <= sla_gest_th])
-                sla_g = round((cumplen_gest / len(v_g_gest)) * 100, 1)
+            # 1. Primera Respuesta
+            s_1ra = v_g["p_1ra_num"].dropna()
+            if not s_1ra.empty:
+                p_1 = round(s_1ra.mean(), 2)
+                cumplen_1ra = (s_1ra <= sla_1ra_th).sum()
+                sla_1_val = round((cumplen_1ra / len(s_1ra)) * 100, 1)
+                sla_1_str = f"{sla_1_val}% ({cumplen_1ra}/{len(s_1ra)})"
             else:
-                sla_g = 0.0
+                p_1 = 0.0
+                sla_1_str = "N/A"
+
+            # 2. Tiempo de Gestión
+            s_gest = v_g["p_gest_num"].dropna()
+            if not s_gest.empty:
+                cumplen_gest = (s_gest <= sla_gest_th).sum()
+                sla_g_val = round((cumplen_gest / len(s_gest)) * 100, 1)
+                sla_g_str = f"{sla_g_val}% ({cumplen_gest}/{len(s_gest)})"
+            else:
+                sla_g_str = "N/A"
 
             res_agentes.append({
                 "Agente": agente, 
-                "Asignados": asig, 
-                "Cerrados": cerr,
+                "Asignados": asig_totales, 
+                "Cerrados": cerrados_totales,
                 "Prom. 1a Resp (min)": p_1, 
-                f"% SLA 1a Resp (<= {sla_1ra_th}m)": f"{sla_1}%", 
-                f"% SLA Gestion (<= {sla_gest_th}m)": f"{sla_g}%"
+                f"% SLA 1a Resp (<= {sla_1ra_th}m)": sla_1_str, 
+                f"% SLA Gestion (<= {sla_gest_th}m)": sla_g_str
             })
         
-        st.dataframe(pd.DataFrame(res_agentes), use_container_width=True)
+        df_res_agentes = pd.DataFrame(res_agentes)
+        if not df_res_agentes.empty:
+            df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
+
+        st.dataframe(df_res_agentes, use_container_width=True)
     else:
         st.info("No hay chats registrados en la base de datos para mostrar métricas por agente.")
 
