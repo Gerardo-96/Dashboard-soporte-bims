@@ -63,8 +63,10 @@ if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
-if "sync_state" not in st.session_state:
-    st.session_state["sync_state"] = {"status": "idle", "processed": 0, "log": "", "error": None}
+
+# Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
+if "GLOBAL_SYNC_STATE" not in globals():
+    GLOBAL_SYNC_STATE = {"status": "idle", "processed": 0, "log": "", "error": None}
 
 def verificar_credenciales_supabase(email_val, pass_val):
     """Consulta la tabla 'usuarios_autorizados' en Supabase para validar el ingreso."""
@@ -308,7 +310,6 @@ def procesar_fechas_df(df):
 
     return df
 
-# Aumentamos ttl a 300 segundos (5 minutos) para evitar descargar miles de filas cada 10 segundos
 @st.cache_data(ttl=300, show_spinner=False)
 def obtener_datos():
     """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
@@ -750,7 +751,7 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 def renderizar_alertas_en_vivo():
     alerta_nuevo_th = st.session_state.get("alerta_nuevo_th", 1.0)
     
-    # Consulta directa y liviana a Supabase: SOLO trae conversaciones abiertas (sin bajar todo el histórico)
+    # Consulta directa y liviana a Supabase: SOLO trae conversaciones abiertas
     try:
         res = supabase.table("conversaciones")\
             .select("id, created_at, primera_respuesta_min, estado, fecha_primer_cierre, fecha_cierre")\
@@ -1350,7 +1351,7 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tarjeta 1: Sincronización en Hilo Paralelo
+        # Tarjeta 1: Sincronización en Hilo Paralelo (USANDO ESTADO GLOBAL SEGURO)
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -1384,7 +1385,7 @@ with tab_admin:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            sync_info = st.session_state["sync_state"]
+            sync_info = GLOBAL_SYNC_STATE
             if sync_info["status"] == "running":
                 st.warning(f"⏳ **Sincronización en curso en segundo plano...** Conversaciones guardadas: `{sync_info['processed']}`. Puedes seguir usando el dashboard.")
             elif sync_info["status"] == "completed":
@@ -1398,19 +1399,22 @@ with tab_admin:
             
             if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=(sync_info["status"] == "running")):
                 if SYNC_AVAILABLE:
-                    st.session_state["sync_state"] = {"status": "running", "processed": 0, "log": "", "error": None}
+                    GLOBAL_SYNC_STATE["status"] = "running"
+                    GLOBAL_SYNC_STATE["processed"] = 0
+                    GLOBAL_SYNC_STATE["log"] = ""
+                    GLOBAL_SYNC_STATE["error"] = None
 
                     def tarea_sync_paralela(f_inicio, f_final):
                         try:
                             def cb_progreso(proc, tot):
-                                st.session_state["sync_state"]["processed"] = proc
+                                GLOBAL_SYNC_STATE["processed"] = proc
 
                             tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
-                            st.session_state["sync_state"]["status"] = "completed"
-                            st.session_state["sync_state"]["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {datetime.now().strftime('%H:%M:%S')}."
+                            GLOBAL_SYNC_STATE["status"] = "completed"
+                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {datetime.now().strftime('%H:%M:%S')}."
                         except Exception as ex_thread:
-                            st.session_state["sync_state"]["status"] = "error"
-                            st.session_state["sync_state"]["error"] = str(ex_thread)
+                            GLOBAL_SYNC_STATE["status"] = "error"
+                            GLOBAL_SYNC_STATE["error"] = str(ex_thread)
 
                     hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta), daemon=True)
                     hilo_sync.start()
