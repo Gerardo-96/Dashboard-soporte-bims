@@ -308,7 +308,8 @@ def procesar_fechas_df(df):
 
     return df
 
-@st.cache_data(ttl=10, show_spinner=False)
+# Aumentamos ttl a 300 segundos (5 minutos) para evitar descargar miles de filas cada 10 segundos
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_datos():
     """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
     todos_los_datos = []
@@ -747,24 +748,36 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
-    df_all = obtener_datos()
     alerta_nuevo_th = st.session_state.get("alerta_nuevo_th", 1.0)
     
-    if not df_all.empty and "es_cerrado" in df_all.columns:
-        df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_dashboard)
-        df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
+    # Consulta directa y liviana a Supabase: SOLO trae conversaciones abiertas (sin bajar todo el histórico)
+    try:
+        res = supabase.table("conversaciones")\
+            .select("id, created_at, primera_respuesta_min, estado, fecha_primer_cierre, fecha_cierre")\
+            .neq("estado", "Cerrado")\
+            .execute()
+        datos_abiertos = res.data
+    except Exception:
+        datos_abiertos = []
+
+    if datos_abiertos:
+        df_abiertos = pd.DataFrame(datos_abiertos)
+        df_abiertos = procesar_fechas_df(df_abiertos)
+        
+        df_abiertos["horario_evaluado"] = df_abiertos["created_at_dt"].apply(evaluar_horario_dashboard)
+        df_abiertos["es_cerrado"] = df_abiertos.apply(es_chat_cerrado, axis=1)
 
         now_dt = pd.Timestamp.now(tz="America/Asuncion")
-        df_abiertos_all = df_all[~df_all["es_cerrado"]].copy()
+        df_activos = df_abiertos[~df_abiertos["es_cerrado"]].copy()
         
-        if not df_abiertos_all.empty:
-            df_abiertos_all = df_abiertos_all.drop_duplicates(subset=["id"])
-            df_abiertos_all["min_transcurridos"] = ((now_dt - df_abiertos_all["created_at_dt"]).dt.total_seconds() / 60).round(1)
+        if not df_activos.empty:
+            df_activos = df_activos.drop_duplicates(subset=["id"])
+            df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
-            df_criticos_sla = df_abiertos_all[
-                (df_abiertos_all["primera_respuesta_min"].isna()) & 
-                (df_abiertos_all["min_transcurridos"] >= alerta_nuevo_th) &
-                (df_abiertos_all["horario_evaluado"] != "fuera de horario")
+            df_criticos_sla = df_activos[
+                (df_activos["primera_respuesta_min"].isna()) & 
+                (df_activos["min_transcurridos"] >= alerta_nuevo_th) &
+                (df_activos["horario_evaluado"] != "fuera de horario")
             ]
 
             if not df_criticos_sla.empty:
