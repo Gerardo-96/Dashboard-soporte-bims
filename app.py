@@ -840,7 +840,7 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (FILTRADO DE PRIMERA RESPUESTA ESTRICTO)
+# FRAGMENTO DE ALERTAS EN VIVO (TABLA FILTRADA SOLO A CRÍTICOS)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
@@ -883,19 +883,16 @@ def renderizar_alertas_en_vivo():
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
             df_activos = df_activos.drop_duplicates(subset=["id"])
             
-            # Convertir primera_respuesta_min a número puro (convierte "None", "" o invalidos a NaN)
             df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
             df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
-            # =========================================================================
-            # CONDICIÓN RESTRINGIDA: ESTRICTAMENTE NaN (SIN NINGÚN VALOR NUMÉRICO)
-            # =========================================================================
+            # FILTRO DE CHATS CRÍTICOS (Sin respuesta y superando el umbral)
             sin_respuesta = df_activos["1ra_resp_num"].isna()
             tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
             
             df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
-            # 1. RENDERIZAR TARJETA ROJA Y ALARMA
+            # 1. RENDERIZAR TARJETA ROJA
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
                 st.markdown(f"""
@@ -908,13 +905,16 @@ def renderizar_alertas_en_vivo():
                 if act_sonido:
                     st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
-            # 2. PANEL DE VERIFICACIÓN
+            # 2. PANEL DE VERIFICACIÓN (MUESTRA ÚNICAMENTE LOS CHATS CRÍTICOS)
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Abiertos Activos:** {len(df_activos)} | **Pendientes Sin Respuesta:** {len(df_criticos_sla)}")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Críticos en Alerta:** {len(df_criticos_sla)} | **Total Abiertos en BD:** {len(df_activos)}")
+                
                 cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
                 if "canal" in df_activos.columns:
                     cols_check.append("canal")
-                st.dataframe(df_activos[cols_check], use_container_width=True)
+                
+                # Se renderiza exclusivamente el DataFrame de los críticos
+                st.dataframe(df_criticos_sla[cols_check], use_container_width=True)
         else:
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
