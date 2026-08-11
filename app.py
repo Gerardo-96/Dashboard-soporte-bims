@@ -868,7 +868,7 @@ def renderizar_alertas_en_vivo():
         error_msg = str(e)
 
     if error_msg:
-        with st.expander("🛠️ Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
+        with st.expander("Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
             st.error(f"❌ Error al consultar Supabase: {error_msg}")
         return
 
