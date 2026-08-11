@@ -840,15 +840,17 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (RENDERIZADO Y MONITOREO GARANTIZADO)
+# FRAGMENTO DE ALERTAS EN VIVO (HORA EXACTA PARAGUAY UTC-3)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
     alerta_nuevo_th = st.session_state.get("alerta_nuevo_th", 1.0)
     act_sonido = st.session_state.get("act_sonido", True)
+    tz_py = timezone(timedelta(hours=-3))
+    now_dt = datetime.now(tz_py)
     
     try:
-        # Consulta directa a Supabase de chats no cerrados
+        # Consulta de conversaciones abiertas en Supabase
         res = supabase.table("conversaciones")\
             .select("id, created_at, primera_respuesta_min, estado, fecha_cierre, fecha_primer_cierre")\
             .neq("estado", "Cerrado")\
@@ -857,25 +859,21 @@ def renderizar_alertas_en_vivo():
     except Exception as e:
         datos_abiertos = []
 
-    now_dt = pd.Timestamp.now(tz="America/Asuncion")
-
     if datos_abiertos:
         df_activos = pd.DataFrame(datos_abiertos)
         
-        # Convertir created_at a datetime local de Asunción
+        # Convertir created_at UTC directamente a la zona horaria Paraguay (UTC-3)
         df_activos["created_at_dt"] = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True).dt.tz_convert("America/Asuncion")
-        
-        # Generar formato amigable de hora
         df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
         df_activos = df_activos.drop_duplicates(subset=["id"])
         
-        # Convertir primera_respuesta_min a número (convierte cadenas vacías a NaN)
+        # Convertir primera_respuesta_min a número (espacios o vacíos pasan a NaN)
         df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
         
-        # Minutos transcurridos
+        # Cálculo exacto de minutos transcurridos
         df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
         
-        # Máscara para chats sin respuesta y con tiempo superado
+        # Máscara para chats sin respuesta que superan el tiempo límite
         sin_respuesta = df_activos["1ra_resp_num"].isna()
         tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
         
@@ -894,16 +892,14 @@ def renderizar_alertas_en_vivo():
             if act_sonido:
                 st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
-        # 2. PANEL DE VERIFICACIÓN VISIBLE PARA CONTROL
+        # 2. PANEL DE VERIFICACIÓN CON HORA REAL DE PARAGUAY
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-            st.write(f"**Ultima verificacion:** {now_dt.strftime('%H:%M:%S')} hs | **Umbral configurado:** {alerta_nuevo_th} min | **Chats Activos:** {len(df_activos)}")
+            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral configurado:** {alerta_nuevo_th} min | **Chats Activos:** {len(df_activos)}")
             cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
             st.dataframe(df_activos[cols_check], use_container_width=True)
     else:
-        # Indicador de estado en reposo cuando no hay conversaciones abiertas en BD
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-            st.write(f"**Ultima verificacion:** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin chats abiertos pendientes.")
-
+            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin chats abiertos pendientes.")
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
 # ==========================================
