@@ -261,7 +261,6 @@ def obtener_tiempo_transcurrido(fecha_dt):
 
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas numéricas."""
-    # PROTECCIÓN SI EL DATAFRAME VIENE VACÍO DESDE SUPABASE
     if df.empty or "created_at" not in df.columns:
         df["created_at_dt"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
         df["created_at_fmt"] = pd.Series(dtype='str')
@@ -617,7 +616,7 @@ if "input_f_hasta" not in st.session_state:
 # ==========================
 df_all_init = obtener_datos()
 
-if not df_all_init.empty and "created_at_dt" in df_all_init.columns:
+if not df_all_init.empty and "created_at_dt" in df_all_init.columns and not df_all_init["created_at_dt"].dropna().empty:
     min_created_dt = df_all_init["created_at_dt"].min()
     max_updated_dt = df_all_init["updated_at_local"].max() if "updated_at_local" in df_all_init.columns else min_created_dt
     
@@ -629,6 +628,14 @@ if not df_all_init.empty and "created_at_dt" in df_all_init.columns:
         <b>Estado Base de Datos:</b><br>
         • <b>Ultima sincronizacion:</b> {tiempo_hace_str}<br>
         • <b>Registros desde:</b> {min_created_str}
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.sidebar.markdown("""
+    <div class="db-info-box">
+        <b>Estado Base de Datos:</b><br>
+        • <b>Ultima sincronizacion:</b> Sin registros<br>
+        • <b>Registros desde:</b> N/A
     </div>
     """, unsafe_allow_html=True)
 
@@ -685,9 +692,9 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
     
-    df_reporte["SLA 1a Resp"] = df_exp.apply(lambda r: evaluar_sla_1ra_excel(r, sla_1ra_threshold), axis=1)
+    df_reporte["SLA 1a Resp"] = df_exp.apply(lambda r: evaluar_sla_1ra_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
     
-    if "rating" in df_exp:
+    if "rating" in df_exp and not df_exp.empty:
         df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
     else:
         df_reporte["Calificacion"] = ""
@@ -707,7 +714,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
     
-    df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1)
+    df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else []
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_meta = pd.DataFrame([
@@ -743,7 +750,7 @@ def renderizar_alertas_en_vivo():
     df_all = obtener_datos()
     alerta_nuevo_th = st.session_state.get("alerta_nuevo_th", 1.0)
     
-    if not df_all.empty:
+    if not df_all.empty and "es_cerrado" in df_all.columns:
         df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_dashboard)
         df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
 
@@ -801,53 +808,55 @@ with tab_operativo:
                 df_all[col] = "Sin datos" if col not in ["motivo_normalizado", "resumen_ia"] else ("Consulta General" if col == "motivo_normalizado" else "Pendiente de procesamiento")
 
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
+    
+    # PROTECCIÓN CONTRA TABLA VACÍA AL COMPARAR FECHAS
     if not df_all.empty and "fecha_solo" in df_all.columns:
-    df_filtered = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy()
-else:
-    df_filtered = pd.DataFrame()
+        df_filtered = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy()
+    else:
+        df_filtered = pd.DataFrame()
 
     if usar_filtro_hora and not df_filtered.empty:
         df_filtered = df_filtered[(df_filtered["hora_solo"] >= hora_inicio) & (df_filtered["hora_solo"] <= hora_fin)]
 
     now_dt = pd.Timestamp.now(tz="America/Asuncion")
-    df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty else pd.DataFrame()
+    df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
     # CSAT SCORECARD
     st.markdown("### CSAT Performance")
     now_date = obtener_fecha_local_hoy()
 
-    c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_solo"] == now_date]) if not df_all.empty else (0.0, 0)
-    c_ayer, _ = calcular_csat(df_all[df_all["fecha_solo"] == (now_date - timedelta(days=1))]) if not df_all.empty else (0.0, 0)
+    c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_solo"] == now_date]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
+    c_ayer, _ = calcular_csat(df_all[df_all["fecha_solo"] == (now_date - timedelta(days=1))]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
     diff_hoy = round(c_hoy - c_ayer, 1)
 
     inicio_sem = now_date - timedelta(days=now_date.weekday())
-    c_sem, k_sem = calcular_csat(df_all[(df_all["fecha_solo"] >= inicio_sem) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty else (0.0, 0)
+    c_sem, k_sem = calcular_csat(df_all[(df_all["fecha_solo"] >= inicio_sem) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
     ini_sem_ant = inicio_sem - timedelta(days=7)
     fin_sem_ant = inicio_sem - timedelta(days=1)
-    c_sem_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_sem_ant) & (df_all["fecha_solo"] <= fin_sem_ant)]) if not df_all.empty else (0.0, 0)
+    c_sem_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_sem_ant) & (df_all["fecha_solo"] <= fin_sem_ant)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
     diff_sem = round(c_sem - c_sem_ant, 1)
 
     inicio_mes = now_date.replace(day=1)
-    c_mes, k_mes = calcular_csat(df_all[(df_all["fecha_solo"] >= inicio_mes) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty else (0.0, 0)
+    c_mes, k_mes = calcular_csat(df_all[(df_all["fecha_solo"] >= inicio_mes) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
     fin_mes_ant = inicio_mes - timedelta(days=1)
     ini_mes_ant = fin_mes_ant.replace(day=1)
-    c_mes_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_mes_ant) & (df_all["fecha_solo"] <= fin_mes_ant)]) if not df_all.empty else (0.0, 0)
+    c_mes_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_mes_ant) & (df_all["fecha_solo"] <= fin_mes_ant)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
     diff_mes = round(c_mes - c_mes_ant, 1)
 
     q_act = (now_date.month - 1) // 3 + 1
     ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
-    c_q, k_q = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_q) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty else (0.0, 0)
+    c_q, k_q = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_q) & (df_all["fecha_solo"] <= now_date)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
     fin_q_ant = ini_q - timedelta(days=1)
     q_ant = (fin_q_ant.month - 1) // 3 + 1
     ini_q_ant = datetime(fin_q_ant.year, 3 * (q_ant - 1) + 1, 1).date()
-    c_q_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_q_ant) & (df_all["fecha_solo"] <= fin_q_ant)]) if not df_all.empty else (0.0, 0)
+    c_q_ant, _ = calcular_csat(df_all[(df_all["fecha_solo"] >= ini_q_ant) & (df_all["fecha_solo"] <= fin_q_ant)]) if not df_all.empty and "fecha_solo" in df_all.columns else (0.0, 0)
     diff_q = round(c_q - c_q_ant, 1)
 
     c_rango, k_rango = calcular_csat(df_filtered) if not df_filtered.empty else (0.0, 0)
     duracion_dias = (f_hasta_v - f_desde_v).days + 1
     f_hasta_prev = f_desde_v - timedelta(days=1)
     f_desde_prev = f_hasta_prev - timedelta(days=duracion_dias - 1)
-    df_prev_rango = df_all[(df_all["fecha_solo"] >= f_desde_prev) & (df_all["fecha_solo"] <= f_hasta_prev)] if not df_all.empty else pd.DataFrame()
+    df_prev_rango = df_all[(df_all["fecha_solo"] >= f_desde_prev) & (df_all["fecha_solo"] <= f_hasta_prev)] if not df_all.empty and "fecha_solo" in df_all.columns else pd.DataFrame()
     c_rango_prev, _ = calcular_csat(df_prev_rango)
     diff_rango = round(c_rango - c_rango_prev, 1)
 
@@ -876,7 +885,7 @@ else:
 
     # EVOLUCIÓN HISTÓRICA DE CSAT
     with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
-        if not df_all.empty:
+        if not df_all.empty and "fecha_solo" in df_all.columns:
             fecha_6m_atras = (pd.Timestamp.now(tz="America/Asuncion") - timedelta(days=180)).date()
             df_6m = df_all[df_all["fecha_solo"] >= fecha_6m_atras].copy()
             df_csat_6m = obtener_df_csat_valido(df_6m)
@@ -1032,6 +1041,8 @@ else:
             })
         
         st.dataframe(pd.DataFrame(res_agentes), use_container_width=True)
+    else:
+        st.info("No hay chats registrados en la base de datos para mostrar métricas por agente.")
 
     st.markdown("---")
 
@@ -1041,7 +1052,7 @@ else:
     else:
         texto_rango_abiertos = f"del periodo {f_desde_v} al {f_hasta_v}"
 
-    df_abiertos_filtrados = df_filtered[~df_filtered["es_cerrado"]].copy() if not df_filtered.empty else pd.DataFrame()
+    df_abiertos_filtrados = df_filtered[~df_filtered["es_cerrado"]].copy() if not df_filtered.empty and "es_cerrado" in df_filtered.columns else pd.DataFrame()
     cant_abiertos_filtrados = len(df_abiertos_filtrados.drop_duplicates(subset=["id"])) if not df_abiertos_filtrados.empty else 0
 
     st.markdown(f"### Ranking de Chats Abiertos ({texto_rango_abiertos}) — {cant_abiertos_filtrados} chats")
@@ -1115,7 +1126,7 @@ else:
     # BÚSQUEDA DINÁMICA POR TENANT O AGENTE
     st.markdown("### Buscador de Chats (Por Tenant / Agente)")
     
-    if not df_all.empty:
+    if not df_all.empty and "tenant" in df_all.columns:
         col_b1, col_b2 = st.columns(2)
         
         tenants_unicos = sorted([str(x) for x in df_all["tenant"].dropna().unique() if str(x).strip() != ""])
@@ -1160,15 +1171,15 @@ else:
                 st.info("No se encontraron registros que coincidan exactamente con la seleccion.")
         else:
             st.caption("Selecciona al menos un Tenant o Agente arriba para desplegar los resultados.")
+    else:
+        st.info("Sin datos para el buscador.")
 
 with tab_resumen:
     df_all_r = obtener_datos()
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
     if not df_all_r.empty and "fecha_solo" in df_all_r.columns:
-    df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy()
-else:
-    df_filtered_r = pd.DataFrame()
+        df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy()
         
         if usar_filtro_hora and not df_filtered_r.empty:
             df_filtered_r = df_filtered_r[(df_filtered_r["hora_solo"] >= hora_inicio) & (df_filtered_r["hora_solo"] <= hora_fin)]
@@ -1426,7 +1437,7 @@ with tab_admin:
             """, unsafe_allow_html=True)
             
             df_all_exp = obtener_datos()
-            if not df_all_exp.empty:
+            if not df_all_exp.empty and "fecha_solo" in df_all_exp.columns:
                 df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
                 if usar_filtro_hora and not df_exp_filt.empty:
                     df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
