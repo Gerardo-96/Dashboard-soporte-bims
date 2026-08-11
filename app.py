@@ -839,27 +839,25 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (ÚNICO BLOQUE CON AUTO-REFRESCO RÁPIDO)
+# FRAGMENTO DE ALERTAS EN VIVO (OPTIMIZADO Y RESILIENTE)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
     alerta_nuevo_th = st.session_state.get("alerta_nuevo_th", 1.0)
     
-    # Consulta directa y liviana a Supabase: SOLO trae conversaciones abiertas
     try:
         res = supabase.table("conversaciones")\
-            .select("id, created_at, primera_respuesta_min, estado, fecha_primer_cierre, fecha_cierre")\
-            .neq("estado", "Cerrado")\
+            .select("id, created_at, primera_respuesta_min, estado, fecha_primer_cierre, fecha_cierre, por_agente")\
             .execute()
-        datos_abiertos = res.data
+        datos_todos = res.data
     except Exception:
-        datos_abiertos = []
+        datos_todos = []
 
-    if datos_abiertos:
-        df_abiertos = pd.DataFrame(datos_abiertos)
+    if datos_todos:
+        df_abiertos = pd.DataFrame(datos_todos)
         df_abiertos = procesar_fechas_df(df_abiertos)
         
-        df_abiertos["horario_evaluado"] = df_abiertos["created_at_dt"].apply(evaluar_horario_dashboard)
+        # Evaluar cierre real
         df_abiertos["es_cerrado"] = df_abiertos.apply(es_chat_cerrado, axis=1)
 
         now_dt = pd.Timestamp.now(tz="America/Asuncion")
@@ -867,19 +865,22 @@ def renderizar_alertas_en_vivo():
         
         if not df_activos.empty:
             df_activos = df_activos.drop_duplicates(subset=["id"])
+            
+            # Conteo de minutos desde que la IA derivó a la bandeja
             df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
+            # Evaluar chats pendientes de primera respuesta humana
             df_criticos_sla = df_activos[
                 (df_activos["primera_respuesta_min"].isna()) & 
-                (df_activos["min_transcurridos"] >= alerta_nuevo_th) &
-                (df_activos["horario_evaluado"] != "fuera de horario")
+                (df_activos["min_transcurridos"] >= alerta_nuevo_th)
             ]
 
             if not df_criticos_sla.empty:
+                cant_criticos = len(df_criticos_sla)
                 st.markdown(f"""
                 <div class="alert-card-critical">
                     <b>ALERTA CRÍTICA DE SLA EN VIVO</b><br>
-                    Hay <b>{len(df_criticos_sla)} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min en horario laboral).
+                    Hay <b>{cant_criticos} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
                 </div>
                 """, unsafe_allow_html=True)
 
