@@ -907,7 +907,7 @@ def renderizar_alertas_en_vivo():
 
             # 2. PANEL DE VERIFICACIÓN (MUESTRA ÚNICAMENTE LOS CHATS CRÍTICOS)
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Críticos en Alerta:** {len(df_criticos_sla)} | **Total Abiertos en BD:** {len(df_activos)}")
                 
                 cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
                 if "canal" in df_activos.columns:
