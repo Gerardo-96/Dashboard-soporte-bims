@@ -1351,7 +1351,7 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tarjeta 1: Sincronización en Hilo Paralelo (USANDO ESTADO GLOBAL SEGURO)
+        # Tarjeta 1: Sincronización en Hilo Paralelo con Monitoreo Activo
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -1386,10 +1386,19 @@ with tab_admin:
             st.markdown("<br>", unsafe_allow_html=True)
 
             sync_info = GLOBAL_SYNC_STATE
+
+            # Visualización del estado actual
             if sync_info["status"] == "running":
-                st.warning(f"⏳ **Sincronización en curso en segundo plano...** Conversaciones guardadas: `{sync_info['processed']}`. Puedes seguir usando el dashboard.")
+                st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
+                # Pausa de 2 segundos y autorefresco de pantalla automático mientras esté corriendo
+                time_lib.sleep(2)
+                st.rerun()
             elif sync_info["status"] == "completed":
-                st.success(f"✅ ¡Sincronización finalizada! {sync_info['log']}")
+                st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
+                if st.button("Limpiar Mensaje de Confirmación"):
+                    GLOBAL_SYNC_STATE["status"] = "idle"
+                    st.cache_data.clear()
+                    st.rerun()
             elif sync_info["status"] == "error":
                 st.error(f"❌ Error en la sincronización: {sync_info['error']}")
 
