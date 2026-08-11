@@ -190,7 +190,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
             hace_7_meses = ahora_local - timedelta(days=210)
             if inicio_real < hace_7_meses:
-                # Omitir si la conversación es superior a 7 meses para ahorrar almacenamiento en Supabase
                 continue
 
             # =========================================================================
@@ -223,40 +222,36 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 tiempo_res_min = round(secs / 60, 2)
 
             # =========================================================================
-            # 4. AGENTE Y CSAT / RATING (EXTRACCIÓN RESILIENTE Y EN CASCADA)
+            # 4. AGENTE Y CSAT / RATING (BÚSQUEDA EN CASCADA Y FILTRADO DE BOTS)
             # =========================================================================
-            agente_id = None
-
-            # 1. Intentar obtener el ID desde el objeto assigned_to
+            agente = "Sin asignar"
             assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
-            if isinstance(assigned_to, dict):
-                # Si es de tipo admin, extraemos su ID
-                if assigned_to.get("type") == "admin":
-                    agente_id = assigned_to.get("id")
-            elif isinstance(assigned_to, (str, int)):
-                agente_id = assigned_to
-
-            # 2. Respaldo: Buscar campos planos admin_assignee_id
-            if not agente_id or str(agente_id).strip() in ["", "None", "0"]:
-                agente_id = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
-
-            # 3. Respaldo de emergencia: Si está asignado a un Equipo (team) o no hay admin,
-            # buscamos en las partes del chat el ÚLTIMO agente humano que intervino.
-            if not agente_id or str(agente_id).strip() in ["", "None", "0"]:
+            
+            # 1. Prioridad: Asignación explícita a un Admin/Humano
+            if isinstance(assigned_to, dict) and assigned_to.get("type") == "admin":
+                admin_id = str(assigned_to.get("id", "")).strip()
+                agente = assigned_to.get("name") or agentes_dict.get(admin_id, f"Agente ({admin_id})")
+            
+            # 2. Respaldo: Si no está asignado o está a un equipo, buscar el último admin HUMANO que intervino
+            if agente == "Sin asignar":
                 parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
-                admin_replies = [
-                    p.get("author", {}).get("id") for p in parts 
-                    if p.get("author", {}).get("type") == "admin" and p.get("author", {}).get("id")
+                admin_parts = [
+                    p.get("author") for p in parts 
+                    if p.get("author", {}).get("type") in ["admin", "user_admin"] and 
+                       p.get("author", {}).get("name") and 
+                       p.get("author", {}).get("name", "").strip().lower() not in ["fin", "monica (bot)", "mónica (bot)"] and
+                       not p.get("author", {}).get("from_ai_agent", False)
                 ]
-                if admin_replies:
-                    agente_id = admin_replies[-1] # Último admin que escribió
-
-            # 4. Mapeo garantizado convirtiendo SIEMPRE a string
-            if agente_id and str(agente_id).strip() not in ["", "None", "0"]:
-                str_id = str(agente_id).strip()
-                agente = agentes_dict.get(str_id, f"Agente ({str_id})")
-            else:
-                agente = "Sin asignar"
+                if admin_parts:
+                    agente = admin_parts[-1].get("name")
+                else:
+                    # 3. Respaldo por ID plano
+                    agente_id = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
+                    if agente_id and str(agente_id).strip() not in ["", "None", "0"]:
+                        agente = agentes_dict.get(str(agente_id).strip(), f"Agente ({agente_id})")
+                    # 4. Si solo está asignado a un Equipo
+                    elif isinstance(assigned_to, dict) and assigned_to.get("type") == "team":
+                        agente = assigned_to.get("name", "Sin asignar")
 
             # Regla de exclusión
             por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)", "Mónica (Bot)"] or "Bot" in agente else "no excluido"
