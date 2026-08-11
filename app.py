@@ -230,8 +230,9 @@ if not st.session_state["user_authenticated"]:
 # ==========================================
 
 def obtener_fecha_local_hoy():
-    """Retorna la fecha actual en la zona horaria de Paraguay (America/Asuncion)."""
-    return pd.Timestamp.now(tz="America/Asuncion").date()
+    """Retorna la fecha actual exacta en Paraguay (UTC-3)."""
+    tz_py = timezone(timedelta(hours=-3))
+    return datetime.now(tz_py).date()
 
 def convertir_a_minutos(val):
     """Garantiza la conversión limpia a minutos numéricos float."""
