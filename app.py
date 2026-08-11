@@ -840,7 +840,7 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (BÚSQUEDA DIRECTA DE ESTADOS ABIERTOS)
+# FRAGMENTO DE ALERTAS EN VIVO (SIN FILTROS COMPLEJOS EN SQL)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
@@ -849,48 +849,49 @@ def renderizar_alertas_en_vivo():
     tz_py = timezone(timedelta(hours=-3))
     now_dt = datetime.now(tz_py)
     
-    try:
-        # Consulta trayendo explícitamente los estados que contengan "abierto" u "open"
-        res = supabase.table("conversaciones")\
-            .select("id, created_at, primera_respuesta_min, estado, fecha_cierre, fecha_primer_cierre")\
-            .or_("estado.ilike.abierto,estado.ilike.open")\
-            .execute()
-        datos_abiertos = res.data or []
-    except Exception as e:
-        # Respaldo: Si falla la cláusula .or_(), trae todos para filtrar en Python
-        try:
-            res = supabase.table("conversaciones").select("id, created_at, primera_respuesta_min, estado, fecha_cierre, fecha_primer_cierre").execute()
-            datos_abiertos = res.data or []
-        except Exception:
-            datos_abiertos = []
+    error_msg = None
+    datos_todos = []
 
-    if datos_abiertos:
-        df_activos = pd.DataFrame(datos_abiertos)
+    try:
+        # Consulta limpia directamente a la tabla sin filtros arriesgados
+        res = supabase.table("conversaciones").select("*").execute()
+        datos_todos = res.data or []
+    except Exception as e:
+        error_msg = str(e)
+
+    if error_msg:
+        with st.expander("🛠️ Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
+            st.error(f"❌ Error al consultar Supabase: {error_msg}")
+        return
+
+    if datos_todos:
+        df_base = pd.DataFrame(datos_todos)
         
-        # Filtrar únicamente los que no estén cerrados explícitamente
-        df_activos["estado_clean"] = df_activos["estado"].fillna("").astype(str).str.strip().str.lower()
+        # Filtrar estados abiertos en Python para evitar problemas de case-sensitivity en SQL
+        df_base["estado_clean"] = df_base["estado"].fillna("").astype(str).str.strip().str.lower()
         estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
-        df_activos = df_activos[~df_activos["estado_clean"].isin(estados_cerrados)].copy()
+        
+        df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
         if not df_activos.empty:
-            # Convertir created_at a la hora local de Paraguay (UTC-3)
+            # Convertir created_at UTC a hora local (UTC-3)
             df_activos["created_at_dt"] = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True).dt.tz_convert("America/Asuncion")
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
             df_activos = df_activos.drop_duplicates(subset=["id"])
             
-            # Convertir primera_respuesta_min a número (espacios, None o vacíos pasan a NaN)
+            # Convertir primera_respuesta_min a número
             df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
             
-            # Calcular minutos transcurridos
+            # Minutos transcurridos
             df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
-            # Condición de alerta: primera respuesta es NaN (o 0) y min_transcurridos >= umbral
+            # Condición de alerta
             sin_respuesta = df_activos["1ra_resp_num"].isna() | (df_activos["1ra_resp_num"] == 0)
             tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
             
             df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
-            # 1. TARJETA ROJA Y SONIDO
+            # 1. RENDERIZAR TARJETA ROJA
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
                 st.markdown(f"""
@@ -903,17 +904,17 @@ def renderizar_alertas_en_vivo():
                 if act_sonido:
                     st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
-            # 2. PANEL DE VERIFICACIÓN VISIBLE
+            # 2. PANEL DE DEBUG
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Abiertos Detectados:** {len(df_activos)}")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Abiertos:** {len(df_activos)} | **Total Registros BD:** {len(df_base)}")
                 cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
                 st.dataframe(df_activos[cols_check], use_container_width=True)
         else:
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats en estado abierto.")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 {len(df_base)} registros en la BD pero 0 abiertos.")
     else:
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 No se obtuvieron registros de la base de datos.")
+            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 La consulta respondió con 0 filas.")
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
 # ==========================================
