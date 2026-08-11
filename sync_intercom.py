@@ -70,10 +70,10 @@ def obtener_canal(conv):
         return "WhatsApp"
     elif source_type == "email":
         return "Correo electrónico"
-    elif source_type == "chat":
-        return "Chat (web)"
+    elif source_type == "conversation":
+        return "Chat (conversation)"
     else:
-        return f"Chat ({source_type})"
+        return "Chat (conversation)"
 
 def extraer_motivo_normalizado(modulo, tipo_contacto, etiquetas, cx_explanation):
     if modulo and modulo.strip():
