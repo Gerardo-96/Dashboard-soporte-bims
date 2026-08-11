@@ -429,11 +429,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("""
-    <script>
+<script>
+    // 1. Simular actividad de usuario cada 20 segundos
     setInterval(function() {
         window.dispatchEvent(new Event('mousemove'));
-    }, 25000);
+        window.dispatchEvent(new Event('keydown'));
+    }, 20000);
 
+    // 2. Activar AudioContext al primer clic para permitir sonido de alarma
     document.addEventListener('click', function() {
         if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
             var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -442,6 +445,25 @@ st.markdown("""
             }
         }
     }, { once: true });
+
+    // 3. Prevenir que el navegador ponga la pestaña en suspensión (Screen WakeLock)
+    let wakeLock = null;
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+            }
+        } catch (err) {
+            console.log('WakeLock error:', err);
+        }
+    }
+    
+    requestWakeLock();
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+            requestWakeLock();
+        }
+    });
 </script>
 """, unsafe_allow_html=True)
 
