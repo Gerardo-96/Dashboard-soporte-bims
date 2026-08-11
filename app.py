@@ -2,7 +2,7 @@ import os
 import io
 import time as time_lib
 import threading
-from datetime import datetime, timedelta, time, date
+from datetime import datetime, timedelta, time, date, timezone
 import pandas as pd
 import streamlit as st
 import plotly.express as px
