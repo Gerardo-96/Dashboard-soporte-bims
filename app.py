@@ -839,53 +839,69 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (OPTIMIZADO Y RESILIENTE)
+# FRAGMENTO DE ALERTAS EN VIVO (RENDERIZADO Y MONITOREO GARANTIZADO)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
     alerta_nuevo_th = st.session_state.get("alerta_nuevo_th", 1.0)
+    act_sonido = st.session_state.get("act_sonido", True)
     
     try:
+        # Consulta directa a Supabase de chats no cerrados
         res = supabase.table("conversaciones")\
-            .select("id, created_at, primera_respuesta_min, estado, fecha_primer_cierre, fecha_cierre, por_agente")\
+            .select("id, created_at, primera_respuesta_min, estado, fecha_cierre, fecha_primer_cierre")\
+            .neq("estado", "Cerrado")\
             .execute()
-        datos_todos = res.data
-    except Exception:
-        datos_todos = []
+        datos_abiertos = res.data or []
+    except Exception as e:
+        datos_abiertos = []
 
-    if datos_todos:
-        df_abiertos = pd.DataFrame(datos_todos)
-        df_abiertos = procesar_fechas_df(df_abiertos)
+    now_dt = pd.Timestamp.now(tz="America/Asuncion")
+
+    if datos_abiertos:
+        df_activos = pd.DataFrame(datos_abiertos)
         
-        # Evaluar cierre real
-        df_abiertos["es_cerrado"] = df_abiertos.apply(es_chat_cerrado, axis=1)
-
-        now_dt = pd.Timestamp.now(tz="America/Asuncion")
-        df_activos = df_abiertos[~df_abiertos["es_cerrado"]].copy()
+        # Convertir created_at a datetime local de Asunción
+        df_activos["created_at_dt"] = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True).dt.tz_convert("America/Asuncion")
         
-        if not df_activos.empty:
-            df_activos = df_activos.drop_duplicates(subset=["id"])
-            
-            # Conteo de minutos desde que la IA derivó a la bandeja
-            df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
-            
-            # Evaluar chats pendientes de primera respuesta humana
-            df_criticos_sla = df_activos[
-                (df_activos["primera_respuesta_min"].isna()) & 
-                (df_activos["min_transcurridos"] >= alerta_nuevo_th)
-            ]
+        # Generar formato amigable de hora
+        df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+        df_activos = df_activos.drop_duplicates(subset=["id"])
+        
+        # Convertir primera_respuesta_min a número (convierte cadenas vacías a NaN)
+        df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
+        
+        # Minutos transcurridos
+        df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
+        
+        # Máscara para chats sin respuesta y con tiempo superado
+        sin_respuesta = df_activos["1ra_resp_num"].isna()
+        tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
+        
+        df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
-            if not df_criticos_sla.empty:
-                cant_criticos = len(df_criticos_sla)
-                st.markdown(f"""
-                <div class="alert-card-critical">
-                    <b>ALERTA CRÍTICA DE SLA EN VIVO</b><br>
-                    Hay <b>{cant_criticos} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
-                </div>
-                """, unsafe_allow_html=True)
+        # 1. RENDERIZAR LA TARJETA ROJA SI HAY CRÍTICOS
+        if not df_criticos_sla.empty:
+            cant = len(df_criticos_sla)
+            st.markdown(f"""
+            <div class="alert-card-critical">
+                <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
+                Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
+            </div>
+            """, unsafe_allow_html=True)
 
-                if act_sonido:
-                    st.components.v1.html(AUDIO_ALARM_HTML, height=0)
+            if act_sonido:
+                st.components.v1.html(AUDIO_ALARM_HTML, height=0)
+
+        # 2. PANEL DE VERIFICACIÓN VISIBLE PARA CONTROL
+        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+            st.write(f"**Ultima verificacion:** {now_dt.strftime('%H:%M:%S')} hs | **Umbral configurado:** {alerta_nuevo_th} min | **Chats Activos:** {len(df_activos)}")
+            cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
+            st.dataframe(df_activos[cols_check], use_container_width=True)
+    else:
+        # Indicador de estado en reposo cuando no hay conversaciones abiertas en BD
+        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+            st.write(f"**Ultima verificacion:** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin chats abiertos pendientes.")
 
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
