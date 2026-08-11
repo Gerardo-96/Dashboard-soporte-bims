@@ -840,7 +840,7 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (SIN CANAL CORREO ELECTRÓNICO)
+# FRAGMENTO DE ALERTAS EN VIVO (FILTRADO DE PRIMERA RESPUESTA ESTRICTO)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
@@ -873,7 +873,7 @@ def renderizar_alertas_en_vivo():
         # 2. Descartar chats cerrados
         df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
-        # 3. OMITIR CANAL CORREO ELECTRÓNICO
+        # 3. Omitir canal correo electrónico
         if "canal" in df_activos.columns:
             df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
             df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
@@ -883,14 +883,19 @@ def renderizar_alertas_en_vivo():
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
             df_activos = df_activos.drop_duplicates(subset=["id"])
             
+            # Convertir primera_respuesta_min a número puro (convierte "None", "" o invalidos a NaN)
             df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
             df_activos["min_transcurridos"] = ((now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
-            sin_respuesta = df_activos["1ra_resp_num"].isna() | (df_activos["1ra_resp_num"] == 0)
+            # =========================================================================
+            # CONDICIÓN RESTRINGIDA: ESTRICTAMENTE NaN (SIN NINGÚN VALOR NUMÉRICO)
+            # =========================================================================
+            sin_respuesta = df_activos["1ra_resp_num"].isna()
             tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
             
             df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
+            # 1. RENDERIZAR TARJETA ROJA Y ALARMA
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
                 st.markdown(f"""
@@ -903,15 +908,16 @@ def renderizar_alertas_en_vivo():
                 if act_sonido:
                     st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
+            # 2. PANEL DE VERIFICACIÓN
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Abiertos (Sin Correo):** {len(df_activos)} | **Total Registros BD:** {len(df_base)}")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Chats Abiertos Activos:** {len(df_activos)} | **Pendientes Sin Respuesta:** {len(df_criticos_sla)}")
                 cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
                 if "canal" in df_activos.columns:
                     cols_check.append("canal")
                 st.dataframe(df_activos[cols_check], use_container_width=True)
         else:
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 {len(df_base)} registros en BD pero 0 chats de chat en vivo abiertos.")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
     else:
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
             st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
