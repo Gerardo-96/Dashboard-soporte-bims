@@ -223,20 +223,52 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 tiempo_res_min = round(secs / 60, 2)
 
             # =========================================================================
-            # 4. AGENTE Y CSAT / RATING
+            # 4. AGENTE Y CSAT / RATING (EXTRACCIÓN RESILIENTE Y EN CASCADA)
             # =========================================================================
-            assigned_to = conv.get("assigned_to", {})
-            agente_id = str(assigned_to.get("id", "")).strip() if assigned_to else ""
-            agente = agentes_dict.get(agente_id, "Sin asignar")
-            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)"] else "no excluido"
+            agente_id = None
 
-            rating_data = conv.get("conversation_rating", {}) or {}
+            # 1. Intentar obtener el ID desde el objeto assigned_to
+            assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
+            if isinstance(assigned_to, dict):
+                # Si es de tipo admin, extraemos su ID
+                if assigned_to.get("type") == "admin":
+                    agente_id = assigned_to.get("id")
+            elif isinstance(assigned_to, (str, int)):
+                agente_id = assigned_to
+
+            # 2. Respaldo: Buscar campos planos admin_assignee_id
+            if not agente_id or str(agente_id).strip() in ["", "None", "0"]:
+                agente_id = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
+
+            # 3. Respaldo de emergencia: Si está asignado a un Equipo (team) o no hay admin,
+            # buscamos en las partes del chat el ÚLTIMO agente humano que intervino.
+            if not agente_id or str(agente_id).strip() in ["", "None", "0"]:
+                parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
+                admin_replies = [
+                    p.get("author", {}).get("id") for p in parts 
+                    if p.get("author", {}).get("type") == "admin" and p.get("author", {}).get("id")
+                ]
+                if admin_replies:
+                    agente_id = admin_replies[-1] # Último admin que escribió
+
+            # 4. Mapeo garantizado convirtiendo SIEMPRE a string
+            if agente_id and str(agente_id).strip() not in ["", "None", "0"]:
+                str_id = str(agente_id).strip()
+                agente = agentes_dict.get(str_id, f"Agente ({str_id})")
+            else:
+                agente = "Sin asignar"
+
+            # Regla de exclusión
+            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)", "Mónica (Bot)"] or "Bot" in agente else "no excluido"
+
+            # Extracción de CSAT / Rating
+            rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
             rating = rating_data.get("rating")
             calificacion = str(rating) if rating is not None else ""
             feedback = rating_data.get("remark") or ""
             cx_explanation = rating_data.get("remark") or ""
 
-            teaser_admin = rating_data.get("teaser", {}).get("admin", {}) if rating_data.get("teaser") else {}
+            teaser_admin = rating_data.get("teaser", {}).get("admin", {}) if isinstance(rating_data.get("teaser"), dict) else {}
             admin_eval_id = str(teaser_admin.get("id", "")).strip() if teaser_admin else ""
             agente_evaluado = agentes_dict.get(admin_eval_id, agente)
 
