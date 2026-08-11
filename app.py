@@ -65,8 +65,11 @@ if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
 
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
-if "GLOBAL_SYNC_STATE" not in globals():
-    GLOBAL_SYNC_STATE = {"status": "idle", "processed": 0, "log": "", "error": None}
+@st.cache_resource
+def obtener_estado_sync_global():
+    return {"status": "idle", "processed": 0, "log": "", "error": None}
+
+GLOBAL_SYNC_STATE = obtener_estado_sync_global()
 
 def verificar_credenciales_supabase(email_val, pass_val):
     """Consulta la tabla 'usuarios_autorizados' en Supabase para validar el ingreso."""
@@ -1401,12 +1404,17 @@ with tab_admin:
                     st.rerun()
             elif sync_info["status"] == "error":
                 st.error(f"❌ Error en la sincronización: {sync_info['error']}")
+                if st.button("Reintentar / Limpiar Error"):
+                    GLOBAL_SYNC_STATE["status"] = "idle"
+                    st.rerun()
 
             col_f1, col_f2, col_f3 = st.columns([1, 1, 1], vertical_alignment="bottom")
             f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
             f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
             
-            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=(sync_info["status"] == "running")):
+            btn_bloqueado = (sync_info["status"] == "running")
+            
+            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
                 if SYNC_AVAILABLE:
                     GLOBAL_SYNC_STATE["status"] = "running"
                     GLOBAL_SYNC_STATE["processed"] = 0
