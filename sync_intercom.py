@@ -256,12 +256,18 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             # Regla de exclusión
             por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)", "Mónica (Bot)"] or "Bot" in agente else "no excluido"
 
-            # Extracción de CSAT / Rating
+            # Extracción de CSAT / Rating y Marca de Tiempo de Puntuación
             rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
             rating = rating_data.get("rating")
             calificacion = str(rating) if rating is not None else ""
             feedback = rating_data.get("remark") or ""
             cx_explanation = rating_data.get("remark") or ""
+
+            ts_rating = rating_data.get("created_at")
+            if ts_rating:
+                fecha_calificacion_iso = datetime.fromtimestamp(ts_rating, tz=tz_local).isoformat()
+            else:
+                fecha_calificacion_iso = None
 
             teaser_admin = rating_data.get("teaser", {}).get("admin", {}) if isinstance(rating_data.get("teaser"), dict) else {}
             admin_eval_id = str(teaser_admin.get("id", "")).strip() if teaser_admin else ""
@@ -306,6 +312,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 "calificacion": calificacion,
                 "rating": rating,
                 "feedback": feedback,
+                "fecha_calificacion": fecha_calificacion_iso,
                 "agente_evaluado": agente_evaluado,
                 "cx_score_explanation": cx_explanation,
                 "fecha_cierre": fecha_cierre.isoformat() if fecha_cierre else None,
