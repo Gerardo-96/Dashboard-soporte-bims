@@ -840,7 +840,7 @@ tab_operativo, tab_resumen, tab_admin = st.tabs([
 ])
 
 # =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (CON CONSULTA OPTIMIZADA A SUPABASE)
+# FRAGMENTO DE ALERTAS EN VIVO (MUESTRA ÚNICAMENTE LO CRÍTICO)
 # =========================================================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
@@ -857,7 +857,7 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        # Petición a Supabase ordenando por fecha más reciente para no perder chats nuevos
+        # Petición a Supabase ordenando por fecha más reciente
         res = supabase.table("conversaciones")\
             .select("*")\
             .order("created_at", desc=True)\
@@ -905,6 +905,7 @@ def renderizar_alertas_en_vivo():
             sin_respuesta = df_activos["1ra_resp_num"].isna()
             tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
             
+            # FILTRADO EXCLUSIVO DE CHATS CRÍTICOS
             df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
             # 1. RENDERIZAR TARJETA ROJA
@@ -920,20 +921,24 @@ def renderizar_alertas_en_vivo():
                 if act_sonido:
                     st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
-            # 2. PANEL DE VERIFICACIÓN
-            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=True if df_criticos_sla.empty else False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Pendientes Críticos:** {len(df_criticos_sla)}")
+            # 2. PANEL DE VERIFICACIÓN (MUESTRA ÚNICAMENTE LO CRÍTICO)
+            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
                 
-                cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
-                if "canal" in df_activos.columns:
-                    cols_check.append("canal")
-                
-                st.dataframe(df_activos[cols_check], use_container_width=True)
+                if not df_criticos_sla.empty:
+                    cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
+                    if "canal" in df_criticos_sla.columns:
+                        cols_check.append("canal")
+                    
+                    # Se renderiza exclusivamente la tabla con los chats críticos
+                    st.dataframe(df_criticos_sla[cols_check], use_container_width=True)
+                else:
+                    st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
         else:
-            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=True):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos encontrados entre los últimos 1,000 registros.")
+            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
     else:
-        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=True):
+        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
             st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
