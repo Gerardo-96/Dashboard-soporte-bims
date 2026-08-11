@@ -1212,8 +1212,8 @@ with tab_resumen:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # PALETA DE COLORES MATE Y ELEGANTES (Gama Muted/Dark Modern)
-        palette_mate = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#2dd4bf", "#f472b6", "#94a3b8"]
+        # PALETA MATE SOBRIA Y ELEGANTE (Estilo Slate / Muted Dark)
+        palette_mate = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#2dd4bf", "#94a3b8"]
 
         g_pie, g_bar = st.columns([1, 1])
 
@@ -1223,21 +1223,30 @@ with tab_resumen:
                 df_agentes_total, 
                 values="Cantidad de Chats", 
                 names="Agente",
-                hole=0.6,
+                hole=0.55,
                 color_discrete_sequence=palette_mate
             )
             fig_pie.update_traces(
                 textposition='inside', 
-                textinfo='percent+label',
+                textinfo='percent',
+                hovertemplate="<b>%{label}</b><br>Chats: %{value}<br>Porcentaje: %{percent}<extra></extra>",
                 marker=dict(line=dict(color='#1e293b', width=2))
             )
             fig_pie.update_layout(
                 showlegend=True, 
                 paper_bgcolor="#1e293b",
                 plot_bgcolor="#1e293b",
-                font=dict(color="#cbd5e1", family="sans-serif"),
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-                margin=dict(t=30, b=40, l=30, r=30)
+                font=dict(color="#cbd5e1", family="sans-serif", size=12),
+                height=420,
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.15,
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=11, color="#94a3b8")
+                ),
+                margin=dict(t=20, b=80, l=20, r=20)
             )
             st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -1259,11 +1268,19 @@ with tab_resumen:
             fig_bar.update_layout(
                 paper_bgcolor="#1e293b",
                 plot_bgcolor="#1e293b",
-                font=dict(color="#cbd5e1", family="sans-serif"),
+                font=dict(color="#cbd5e1", family="sans-serif", size=12),
+                height=420,
                 xaxis=dict(gridcolor="#334155", title="Fecha"),
                 yaxis=dict(gridcolor="#334155", title="Cantidad de Chats"),
-                legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
-                margin=dict(t=30, b=40, l=30, r=30)
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.20,
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=11, color="#94a3b8")
+                ),
+                margin=dict(t=20, b=80, l=20, r=20)
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
