@@ -60,19 +60,16 @@ supabase = init_supabase()
 # ==========================================
 # GESTOR DE COOKIES Y SESIÓN PERSISTENTE (30 DÍAS)
 # ==========================================
-
 cookie_manager = stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
 COOKIE_NAME = "bims_dashboard_user_session"
-
-# Intentar recuperar el correo guardado en la cookie del navegador
-user_cookie = cookie_manager.get(cookie=COOKIE_NAME)
 
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
+
+# Intentar recuperar el correo guardado en la cookie del navegador
+user_cookie = cookie_manager.get(cookie=COOKIE_NAME)
 
 # Auto-autenticación si existe una cookie válida activa
 if user_cookie and not st.session_state["user_authenticated"]:
