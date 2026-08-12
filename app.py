@@ -741,7 +741,7 @@ st.session_state["f_hasta_key"] = fecha_hasta
 
 # BOTÓN DE CERRAR SESIÓN GLOBAL EN LA BARRA LATERAL
 st.sidebar.markdown("---")
-if st.sidebar.button("🔒 Cerrar Sesión Global", use_container_width=True):
+if st.sidebar.button("Cerrar Sesión", use_container_width=True):
     cookie_manager.delete(COOKIE_NAME)
     st.session_state["user_authenticated"] = False
     st.session_state["user_email"] = ""
@@ -988,7 +988,7 @@ def renderizar_alertas_en_vivo():
                     st.components.v1.html(AUDIO_ALARM_HTML, height=0)
 
             # 2. PANEL DE VERIFICACIÓN (MUESTRA ÚNICAMENTE LO CRÍTICO)
-            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+            with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
                 
                 if not df_criticos_sla.empty:
