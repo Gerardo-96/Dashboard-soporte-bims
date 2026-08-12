@@ -691,7 +691,6 @@ if not df_all_init.empty and "created_at_dt" in df_all_init.columns and not df_a
     <div class="db-info-box">
         <b>Estado Base de Datos:</b><br>
         • <b>Ultima sincronizacion:</b> {tiempo_hace_str}<br>
-        • <b>Registros desde:</b> {min_created_str}
     </div>
     """, unsafe_allow_html=True)
 else:
