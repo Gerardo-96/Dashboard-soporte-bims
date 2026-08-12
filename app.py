@@ -60,7 +60,7 @@ supabase = init_supabase()
 # ==========================================
 # GESTOR DE COOKIES Y SESIÓN PERSISTENTE (30 DÍAS)
 # ==========================================
-@st.cache_resource(experimental_allow_widgets=True)
+@st.cache_resource
 def get_cookie_manager():
     return stx.CookieManager()
 
