@@ -60,9 +60,8 @@ supabase = init_supabase()
 # ==========================================
 # GESTOR DE COOKIES Y SESIÓN PERSISTENTE (30 DÍAS)
 # ==========================================
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
+
+cookie_manager = stx.CookieManager()
 
 cookie_manager = get_cookie_manager()
 COOKIE_NAME = "bims_dashboard_user_session"
