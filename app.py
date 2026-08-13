@@ -59,23 +59,40 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
-# AUTENTICACIÓN PERSISTENTE (LOCALSTORAGE SIN ENSUCIAR URL)
+# AUTENTICACIÓN PERSISTENTE ROBUSTA (LOCALSTORAGE + QUERY PARAMS)
 # ==========================================
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
 
-# Componente HTML/JS para leer el token almacenado en el navegador
+# 1. Recuperar token de sesión de la URL al recargar o reabrir
+token_url = st.query_params.get("session_token", None)
+
+if token_url and not st.session_state["user_authenticated"]:
+    try:
+        res = supabase.table("usuarios_autorizados")\
+            .select("*")\
+            .eq("email", str(token_url).strip().lower())\
+            .eq("activo", True)\
+            .execute()
+        if len(res.data) > 0:
+            st.session_state["user_authenticated"] = True
+            st.session_state["user_email"] = res.data[0].get("email")
+            st.session_state["user_name"] = res.data[0].get("nombre")
+    except Exception:
+        pass
+
+# 2. Script JS de auto-restauración vía LocalStorage
 st.components.v1.html("""
 <script>
     const storedUser = localStorage.getItem('bims_user_session');
-    if (storedUser) {
-        // Enviar el usuario a Streamlit a través de la API interna
-        window.parent.postMessage({
-            type: 'streamlit:setComponentValue',
-            value: storedUser
-        }, '*');
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Si hay usuario en localStorage pero la URL perdió el token al desconectarse, auto-restaurar
+    if (storedUser && !urlParams.has('session_token')) {
+        urlParams.set('session_token', storedUser);
+        window.location.search = urlParams.toString();
     }
 </script>
 """, height=0)
@@ -253,7 +270,8 @@ if not st.session_state["user_authenticated"]:
                     st.session_state["user_email"] = email_user
                     st.session_state["user_name"] = datos_user.get("nombre")
     
-                    # Guardar en localStorage de forma invisible y permanente
+                    # Guardar en URL y LocalStorage simultáneamente
+                    st.query_params["session_token"] = email_user
                     st.components.v1.html(f"""
                     <script>
                         localStorage.setItem('bims_user_session', '{email_user}');
@@ -826,7 +844,8 @@ if st.sidebar.button("Exportar Reporte a Excel", use_container_width=True):
     modal_exportar_excel()
 
 if st.sidebar.button("Cerrar Sesión", use_container_width=True):
-    # Borrar token del navegador
+    # Limpiar parámetros de URL y LocalStorage
+    st.query_params.clear()
     st.components.v1.html("""
     <script>
         localStorage.removeItem('bims_user_session');
