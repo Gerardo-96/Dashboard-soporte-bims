@@ -97,23 +97,6 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
-# Escuchar si hay un intento de restauración automática
-session_restored = st.session_state.get("restored_user_email", None)
-
-if session_restored and not st.session_state["user_authenticated"]:
-    try:
-        res = supabase.table("usuarios_autorizados")\
-            .select("*")\
-            .eq("email", session_restored.strip().lower())\
-            .eq("activo", True)\
-            .execute()
-        if len(res.data) > 0:
-            st.session_state["user_authenticated"] = True
-            st.session_state["user_email"] = res.data[0].get("email")
-            st.session_state["user_name"] = res.data[0].get("nombre")
-    except Exception:
-        pass
-
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
 def obtener_estado_sync_global():
