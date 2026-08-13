@@ -34,7 +34,7 @@ def get_contact(contact_id):
             data = r.json()
             contact_cache[contact_id] = data
             return data
-    except:
+    except Exception:
         pass
     contact_cache[contact_id] = None
     return None
@@ -46,7 +46,7 @@ def get_conversation_detail(conv_id):
         r = requests.get(url, headers=headers)
         if r.status_code == 200:
             return r.json()
-    except:
+    except Exception:
         pass
     return None
 
@@ -61,7 +61,7 @@ def obtener_agentes():
         resp = requests.get(url, headers=headers)
         data = resp.json()
         return {str(a["id"]).strip(): a.get("name", "Desconocido") for a in data.get("admins", [])}
-    except:
+    except Exception:
         return {}
 
 def obtener_canal(conv):
@@ -257,28 +257,28 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)", "Mónica (Bot)"] or "Bot" in agente else "no excluido"
 
             # Extracción de CSAT / Rating (Filtrado estricto: Solo evaluaciones a Agentes Humanos)
-rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
-teammate_data = rating_data.get("teammate") or {}
-rating_type = teammate_data.get("type")
+            rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
+            teammate_data = rating_data.get("teammate") or {}
+            rating_type = teammate_data.get("type")
 
-if rating_type == "admin":
-    rating = rating_data.get("rating")
-    calificacion = str(rating) if rating is not None else ""
-    feedback = rating_data.get("remark") or ""
-    cx_explanation = rating_data.get("remark") or ""
+            if rating_type == "admin":
+                rating = rating_data.get("rating")
+                calificacion = str(rating) if rating is not None else ""
+                feedback = rating_data.get("remark") or ""
+                cx_explanation = rating_data.get("remark") or ""
 
-    ts_rating = rating_data.get("created_at")
-    if ts_rating:
-        fecha_calificacion_iso = datetime.fromtimestamp(ts_rating, tz=tz_local).isoformat()
-    else:
-        fecha_calificacion_iso = None
-else:
-    # Se descarta si fue evaluado un Bot o un Equipo
-    rating = None
-    calificacion = ""
-    feedback = ""
-    cx_explanation = ""
-    fecha_calificacion_iso = None
+                ts_rating = rating_data.get("created_at")
+                if ts_rating:
+                    fecha_calificacion_iso = datetime.fromtimestamp(ts_rating, tz=tz_local).isoformat()
+                else:
+                    fecha_calificacion_iso = None
+            else:
+                # Se descarta si fue evaluado un Bot o un Equipo
+                rating = None
+                calificacion = ""
+                feedback = ""
+                cx_explanation = ""
+                fecha_calificacion_iso = None
 
             teaser_admin = rating_data.get("teaser", {}).get("admin", {}) if isinstance(rating_data.get("teaser"), dict) else {}
             admin_eval_id = str(teaser_admin.get("id", "")).strip() if teaser_admin else ""
