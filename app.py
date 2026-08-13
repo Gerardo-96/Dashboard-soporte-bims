@@ -532,14 +532,30 @@ st.markdown("""
 </script>
 """, unsafe_allow_html=True)
 
+# SINTETIZADOR WEB AUDIO API INMUNE A ERRORES DE RECURSOS EXTERNOS
 AUDIO_ALARM_HTML = """
 <script>
 (function() {
-    var audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-    audio.volume = 0.75;
-    audio.play().catch(function(e) {
-        console.log("Audio bloqueado por navegador:", e);
-    });
+    try {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        var ctx = new AudioCtx();
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // Tono de alerta claro 880Hz
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.8);
+    } catch(e) {
+        console.log("Audio no reproducido por politicas del navegador", e);
+    }
 })();
 </script>
 """
@@ -877,8 +893,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
     
-    # ELIMINADAS LAS COLUMNAS RESUMEN IA Y MOTIVO NORMALIZADO SEGÚN SOLICITUD
-    
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
     
@@ -1061,8 +1075,7 @@ def renderizar_alertas_en_vivo():
                 if act_sonido:
                     st.components.v1.html(
                         AUDIO_ALARM_HTML, 
-                        height=0, 
-                        key=f"audio_alarm_{now_dt.timestamp()}"
+                        height=0
                     )
 
             with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
@@ -1299,9 +1312,9 @@ with tab_operativo:
     st.markdown("---")
 
     # ==========================================
-    # MÉTRICAS POR AGENTE EN DASHBOARD (CORREGIDO)
+    # MÉTRICAS POR AGENTE EN DASHBOARD (INCLUYE CUMPLIMIENTO SLA 1RA RESPUESTA)
     # ==========================================
-    st.markdown("### Metricas por Agente")
+    st.markdown("### Metricas por Agente & SLA Operativo")
     if not df_filtered.empty:
         df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
@@ -1313,13 +1326,22 @@ with tab_operativo:
         p_1r = round(v_df["p_1ra_num"].mean(), 2) if not v_df["p_1ra_num"].dropna().empty else 0.0
         p_gest = round(v_df["p_gest_num"].mean(), 2) if not v_df["p_gest_num"].dropna().empty else 0.0
 
+        # CALCULO DE PORCENTAJE GENERAL DE CUMPLIMIENTO SLA 1RA RESPUESTA EN RANGO
+        s_1ra_total = v_df["p_1ra_num"].dropna()
+        if not s_1ra_total.empty:
+            cumplen_1ra_tot = (s_1ra_total <= sla_1ra_th).sum()
+            pct_sla_1ra_total = round((cumplen_1ra_tot / len(s_1ra_total)) * 100, 1)
+        else:
+            pct_sla_1ra_total = 0.0
+
         df_cerrados = df_f[df_f["es_cerrado"]]
 
-        k1, k2, k3, k4 = st.columns(4)
+        k1, k2, k3, k4, k5 = st.columns(5)
         k1.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. 1a Respuesta</div><div class="metric-card-value">{p_1r} min</div></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. Tiempo Gestion</div><div class="metric-card-value">{p_gest} min</div></div>', unsafe_allow_html=True)
-        k3.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Consultados</div><div class="metric-card-value">{len(df_f)}</div></div>', unsafe_allow_html=True)
-        k4.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Cerrados</div><div class="metric-card-value">{len(df_cerrados)}</div></div>', unsafe_allow_html=True)
+        k3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">% SLA 1ra Resp. (Rango)</div><div class="metric-card-value" style="color: #34d399;">{pct_sla_1ra_total}%</div><div class="metric-card-sub">Meta <= {sla_1ra_th} min</div></div>', unsafe_allow_html=True)
+        k4.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Consultados</div><div class="metric-card-value">{len(df_f)}</div></div>', unsafe_allow_html=True)
+        k5.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Cerrados</div><div class="metric-card-value">{len(df_cerrados)}</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
