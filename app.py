@@ -1376,9 +1376,9 @@ with tab_operativo:
             """
 
         k1, k2, k3, k4, k5 = st.columns(5)
-        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta <= {sla_1ra_th} min"), unsafe_allow_html=True)
-        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta <= {sla_gest_th} min"), unsafe_allow_html=True)
-        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta >= 90%", val_color=color_sla_val, border_color=border_sla_card), unsafe_allow_html=True)
+        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
+        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
+        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_sla_val, border_color=border_sla_card), unsafe_allow_html=True)
         k4.markdown(render_sla_card("Chats Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
         k5.markdown(render_sla_card("Chats Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
 
