@@ -614,14 +614,71 @@ def evaluar_horario_estricto(dt_objeto):
         return True
     return False
 
-def evaluar_sla_1ra_excel(row, threshold_1ra):
+# ==========================================
+# EVALUACIÓN DE SLA PARA REPORTE EXCEL
+# ==========================================
+
+def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
     dt_obj = row.get("created_at_dt")
-    if not evaluar_horario_estricto(dt_obj):
-        return "excluido por filtro"
+    if pd.isna(dt_obj):
+        return "excluido"
     
+    fecha_str = dt_obj.strftime("%Y-%m-%d")
+    dia_semana = dt_obj.weekday() # 0: Lunes, ..., 5: Sábado, 6: Domingo
+    hora_actual = dt_obj.time()
+    
+    # Exclusión por Feriado
+    if fecha_str in FERIADOS:
+        return "excluido"
+    
+    # Exclusión por Agente "Sin asignar" o vacío
+    agente = str(row.get("agente_asignado", "")).strip()
+    if not agente or agente in ["Sin asignar", "None", "nan"]:
+        return "excluido"
+        
+    en_horario = False
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
+        en_horario = True
+    elif dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(11, 45, 0):
+        en_horario = True
+        
+    if not en_horario:
+        return "excluido"
+        
     min_1ra = row.get("primera_respuesta_min")
     if pd.isna(min_1ra):
         return "no cumple"
+        
+    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
+
+
+def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
+    dt_obj = row.get("created_at_dt")
+    if pd.isna(dt_obj):
+        return "excluido"
+        
+    dia_semana = dt_obj.weekday()
+    hora_actual = dt_obj.time()
+    
+    agente = str(row.get("agente_asignado", "")).strip()
+    if not agente or agente in ["Sin asignar", "None", "nan"]:
+        return "excluido"
+        
+    en_horario = False
+    if dia_semana in [0, 1, 2]:
+        if hora_actual >= time(19, 0, 0) or hora_actual <= time(1, 45, 0):
+            en_horario = True
+    elif dia_semana in [3, 4, 5, 6]:
+        if hora_actual >= time(18, 0, 0) or hora_actual <= time(2, 45, 0):
+            en_horario = True
+            
+    if not en_horario:
+        return "excluido"
+        
+    min_1ra = row.get("primera_respuesta_min")
+    if pd.isna(min_1ra):
+        return "no cumple"
+        
     return "cumple" if min_1ra <= threshold_1ra else "no cumple"
 
 def evaluar_sla_gestion_excel(row, threshold_gest):
@@ -788,7 +845,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
     sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
 
-    # CORRECCIÓN DE ZONA HORARIA A AMÉRICA/ASUNCIÓN (UTC-3)
     tz_py = timezone(timedelta(hours=-3))
     now_py_str = datetime.now(tz_py).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -802,7 +858,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
     df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
     
-    # Nuevas Columnas de SLA Renombradas
     df_reporte["SLA Normal"] = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
     df_reporte["SLA Extendido"] = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
     
@@ -821,8 +876,9 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Cliente"] = df_exp.get("cliente", "")
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
-    df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
-    df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
+    
+    # ELIMINADAS LAS COLUMNAS RESUMEN IA Y MOTIVO NORMALIZADO SEGÚN SOLICITUD
+    
     df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
     df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
     
@@ -845,7 +901,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
 
     output.seek(0)
     return output
-
 
 # ==========================================
 # DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
@@ -914,7 +969,6 @@ if st.sidebar.button("Exportar Reporte a Excel", use_container_width=True):
     modal_exportar_excel()
 
 if st.sidebar.button("Cerrar Sesión", use_container_width=True):
-    # Limpiar parámetros de URL y LocalStorage
     st.query_params.clear()
     st.components.v1.html("""
     <script>
@@ -925,85 +979,6 @@ if st.sidebar.button("Cerrar Sesión", use_container_width=True):
     st.session_state["user_authenticated"] = False
     st.session_state["user_email"] = ""
     st.rerun()
-
-# ==========================================
-# EVALUACIÓN DE SLA PARA REPORTE EXCEL
-# ==========================================
-
-def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
-    dt_obj = row.get("created_at_dt")
-    if pd.isna(dt_obj):
-        return "excluido"
-    
-    fecha_str = dt_obj.strftime("%Y-%m-%d")
-    dia_semana = dt_obj.weekday() # 0: Lunes, ..., 5: Sábado, 6: Domingo
-    hora_actual = dt_obj.time()
-    
-    # Exclusión por Feriado
-    if fecha_str in FERIADOS:
-        return "excluido"
-    
-    # Exclusión por Agente "Sin asignar" o vacío
-    agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan"]:
-        return "excluido"
-        
-    # Validación de Horario Normal:
-    # Lunes a Viernes de 08:00 a 17:30 hs
-    # Sábados de 09:00 a 11:45 hs
-    en_horario = False
-    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
-        en_horario = True
-    elif dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(11, 45, 0):
-        en_horario = True
-        
-    if not en_horario:
-        return "excluido"
-        
-    # Evaluación del tiempo de primera respuesta
-    min_1ra = row.get("primera_respuesta_min")
-    if pd.isna(min_1ra):
-        return "no cumple"
-        
-    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
-
-
-def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
-    dt_obj = row.get("created_at_dt")
-    if pd.isna(dt_obj):
-        return "excluido"
-        
-    dia_semana = dt_obj.weekday() # 0: Lunes, ..., 6: Domingo
-    hora_actual = dt_obj.time()
-    
-    # Exclusión por Agente "Sin asignar" o vacío
-    agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan"]:
-        return "excluido"
-        
-    # Validación de Horario Extendido (Lunes a Lunes):
-    # Lunes a Miércoles (0, 1, 2): 19:00 a 01:45 hs
-    # Jueves a Domingo (3, 4, 5, 6): 18:00 a 02:45 hs
-    en_horario = False
-    
-    # Evaluación para Lunes a Miércoles
-    if dia_semana in [0, 1, 2]:
-        if hora_actual >= time(19, 0, 0) or hora_actual <= time(1, 45, 0):
-            en_horario = True
-    # Evaluación para Jueves a Domingo
-    elif dia_semana in [3, 4, 5, 6]:
-        if hora_actual >= time(18, 0, 0) or hora_actual <= time(2, 45, 0):
-            en_horario = True
-            
-    if not en_horario:
-        return "excluido"
-        
-    # Evaluación del tiempo de primera respuesta
-    min_1ra = row.get("primera_respuesta_min")
-    if pd.isna(min_1ra):
-        return "no cumple"
-        
-    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
 
 st.title("Dashboard Soporte BIMS")
 
@@ -1032,7 +1007,6 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        # Petición a Supabase ordenando por fecha más reciente
         res = supabase.table("conversaciones")\
             .select("*")\
             .order("created_at", desc=True)\
@@ -1050,40 +1024,31 @@ def renderizar_alertas_en_vivo():
     if datos_todos:
         df_base = pd.DataFrame(datos_todos)
         
-        # 1. Normalizar estado
         df_base["estado_clean"] = df_base["estado"].fillna("").astype(str).str.strip().str.lower()
         estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
         
-        # 2. Descartar chats cerrados
         df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
-        # 3. Omitir canal correo electrónico
         if "canal" in df_activos.columns:
             df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
             df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
         
         if not df_activos.empty:
-            # Conversión defensiva UTC -> America/Asuncion
             created_utc = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True)
             df_activos["created_at_dt"] = created_utc.dt.tz_convert("America/Asuncion")
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
             df_activos = df_activos.drop_duplicates(subset=["id"])
             
-            # Limpieza de 1ra respuesta
             df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
             
-            # Cálculo de minutos transcurridos
             calc_min = (now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60.0
             df_activos["min_transcurridos"] = calc_min.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
             
-            # CONDICIONES CRÍTICAS
             sin_respuesta = df_activos["1ra_resp_num"].isna()
             tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
             
-            # FILTRADO EXCLUSIVO DE CHATS CRÍTICOS
             df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
-            # 1. RENDERIZAR TARJETA ROJA
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
                 st.markdown(f"""
@@ -1094,14 +1059,12 @@ def renderizar_alertas_en_vivo():
                 """, unsafe_allow_html=True)
 
                 if act_sonido:
-                    # Agregamos una clave única basada en la hora exacta para forzar la re-ejecución del script de audio
                     st.components.v1.html(
                         AUDIO_ALARM_HTML, 
                         height=0, 
                         key=f"audio_alarm_{now_dt.timestamp()}"
                     )
 
-            # 2. PANEL DE VERIFICACIÓN (MUESTRA ÚNICAMENTE LO CRÍTICO)
             with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
                 
@@ -1110,7 +1073,6 @@ def renderizar_alertas_en_vivo():
                     if "canal" in df_criticos_sla.columns:
                         cols_check.append("canal")
                     
-                    # Se renderiza exclusivamente la tabla con los chats críticos
                     st.dataframe(df_criticos_sla[cols_check], use_container_width=True)
                 else:
                     st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
@@ -1120,15 +1082,14 @@ def renderizar_alertas_en_vivo():
     else:
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
             st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
+
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
 # ==========================================
 
 with tab_operativo:
-    # 1. Alertas en Vivo (Refresco automático de 10 segundos)
     renderizar_alertas_en_vivo()
 
-    # 2. Métricas Generales y Reportes
     df_all = obtener_datos()
     sla_1ra_th = st.session_state["sla_1ra_th"]
     sla_gest_th = st.session_state["sla_gest_th"]
@@ -1151,7 +1112,6 @@ with tab_operativo:
 
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
-    # PROTECCIÓN CONTRA TABLA VACÍA AL COMPARAR FECHAS
     if not df_all.empty and "fecha_solo" in df_all.columns:
         df_filtered = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy()
     else:
@@ -1168,12 +1128,10 @@ with tab_operativo:
     now_date = obtener_fecha_local_hoy()
 
     if not df_all.empty and "fecha_calificacion_solo" in df_all.columns:
-        # CSAT Hoy
         c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == now_date])
         c_ayer, _ = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
         diff_hoy = round(c_hoy - c_ayer, 1)
 
-        # CSAT Esta Semana
         inicio_sem = now_date - timedelta(days=now_date.weekday())
         c_sem, k_sem = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_sem) & (df_all["fecha_calificacion_solo"] <= now_date)])
         ini_sem_ant = inicio_sem - timedelta(days=7)
@@ -1181,7 +1139,6 @@ with tab_operativo:
         c_sem_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_sem_ant) & (df_all["fecha_calificacion_solo"] <= fin_sem_ant)])
         diff_sem = round(c_sem - c_sem_ant, 1)
 
-        # CSAT Este Mes
         inicio_mes = now_date.replace(day=1)
         c_mes, k_mes = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_mes) & (df_all["fecha_calificacion_solo"] <= now_date)])
         fin_mes_ant = inicio_mes - timedelta(days=1)
@@ -1189,7 +1146,6 @@ with tab_operativo:
         c_mes_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_mes_ant) & (df_all["fecha_calificacion_solo"] <= fin_mes_ant)])
         diff_mes = round(c_mes - c_mes_ant, 1)
 
-        # CSAT Trimestre (Q)
         q_act = (now_date.month - 1) // 3 + 1
         ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
         c_q, k_q = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q) & (df_all["fecha_calificacion_solo"] <= now_date)])
@@ -1199,7 +1155,6 @@ with tab_operativo:
         c_q_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q_ant) & (df_all["fecha_calificacion_solo"] <= fin_q_ant)])
         diff_q = round(c_q - c_q_ant, 1)
 
-        # CSAT Rango Seleccionado por el Usuario
         df_filtered_csat = df_all[(df_all["fecha_calificacion_solo"] >= f_desde_v) & (df_all["fecha_calificacion_solo"] <= f_hasta_v)].copy()
         c_rango, k_rango = calcular_csat(df_filtered_csat)
         duracion_dias = (f_hasta_v - f_desde_v).days + 1
@@ -1348,13 +1303,10 @@ with tab_operativo:
     # ==========================================
     st.markdown("### Metricas por Agente")
     if not df_filtered.empty:
-        # Asegurar unicidad por ID de conversación
         df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
-        # Filtro global de métricas operativas
         v_df = df_f[(df_f["por_agente"] == "no excluido") & (df_f["horario_evaluado"] != "fuera de horario")].copy()
         
-        # Conversión limpia de series numéricas
         v_df["p_1ra_num"] = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
         v_df["p_gest_num"] = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
 
@@ -1376,13 +1328,11 @@ with tab_operativo:
             asig_totales = len(grp)
             cerrados_totales = len(grp[grp["es_cerrado"]])
             
-            # Filtrar solo la actividad evaluable en horario hábil para el agente
             v_g = grp[(grp["por_agente"] == "no excluido") & (grp["horario_evaluado"] != "fuera de horario")].copy()
             
             v_g["p_1ra_num"] = pd.to_numeric(v_g["primera_respuesta_min"], errors="coerce")
             v_g["p_gest_num"] = pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce")
 
-            # 1. Primera Respuesta
             s_1ra = v_g["p_1ra_num"].dropna()
             if not s_1ra.empty:
                 p_1 = round(s_1ra.mean(), 2)
@@ -1393,7 +1343,6 @@ with tab_operativo:
                 p_1 = 0.0
                 sla_1_str = "N/A"
 
-            # 2. Tiempo de Gestión
             s_gest = v_g["p_gest_num"].dropna()
             if not s_gest.empty:
                 cumplen_gest = (s_gest <= sla_gest_th).sum()
@@ -1587,7 +1536,6 @@ with tab_resumen:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # PALETA MATE SOBRIA Y ELEGANTE (Estilo Slate / Muted Dark)
         palette_mate = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#2dd4bf", "#94a3b8"]
 
         g_pie, g_bar = st.columns([1, 1])
@@ -1751,7 +1699,6 @@ with tab_admin:
             # Visualización del estado actual
             if sync_info["status"] == "running":
                 st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
-                # Pausa de 2 segundos y autorefresco de pantalla automático mientras esté corriendo
                 time_lib.sleep(2)
                 st.rerun()
             elif sync_info["status"] == "completed":
