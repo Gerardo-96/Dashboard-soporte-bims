@@ -672,12 +672,7 @@ def calcular_csat(df_sub):
     ratings = df_valid["rating_num"]
     positivas = len(ratings[ratings >= 4])
     total = len(ratings)
-    
-    val_raw = (positivas / total) * 100
-    # Redondeo estricto por exceso a 1 decimal
-    val_ceil = math.ceil(val_raw * 10) / 10
-    
-    return val_ceil, total
+    return round((positivas / total) * 100, 1), total
 
 # ==========================
 # ESTADO DE SESIÓN Y PARÁMETROS
