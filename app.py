@@ -1139,16 +1139,17 @@ with tab_operativo:
     now_dt = pd.Timestamp.now(tz="America/Asuncion")
     df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
-    # CSAT SCORECARD (ALIMENTADO DE LA MARCA DE TIEMPO DE PUNTUACIÓN DE CSAT)
+    # CSAT SCORECARD (ALIMENTADO 100% DE LA FECHA DE PUNTUACIÓN DE CSAT)
     st.markdown("### CSAT Performance")
     now_date = obtener_fecha_local_hoy()
 
-    # Filtro general para la pestaña CSAT usando la fecha de calificación
     if not df_all.empty and "fecha_calificacion_solo" in df_all.columns:
+        # CSAT Hoy
         c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == now_date])
         c_ayer, _ = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
         diff_hoy = round(c_hoy - c_ayer, 1)
 
+        # CSAT Esta Semana
         inicio_sem = now_date - timedelta(days=now_date.weekday())
         c_sem, k_sem = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_sem) & (df_all["fecha_calificacion_solo"] <= now_date)])
         ini_sem_ant = inicio_sem - timedelta(days=7)
@@ -1156,6 +1157,7 @@ with tab_operativo:
         c_sem_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_sem_ant) & (df_all["fecha_calificacion_solo"] <= fin_sem_ant)])
         diff_sem = round(c_sem - c_sem_ant, 1)
 
+        # CSAT Este Mes
         inicio_mes = now_date.replace(day=1)
         c_mes, k_mes = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_mes) & (df_all["fecha_calificacion_solo"] <= now_date)])
         fin_mes_ant = inicio_mes - timedelta(days=1)
@@ -1163,6 +1165,7 @@ with tab_operativo:
         c_mes_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_mes_ant) & (df_all["fecha_calificacion_solo"] <= fin_mes_ant)])
         diff_mes = round(c_mes - c_mes_ant, 1)
 
+        # CSAT Trimestre (Q)
         q_act = (now_date.month - 1) // 3 + 1
         ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
         c_q, k_q = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q) & (df_all["fecha_calificacion_solo"] <= now_date)])
@@ -1172,6 +1175,7 @@ with tab_operativo:
         c_q_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q_ant) & (df_all["fecha_calificacion_solo"] <= fin_q_ant)])
         diff_q = round(c_q - c_q_ant, 1)
 
+        # CSAT Rango Seleccionado por el Usuario
         df_filtered_csat = df_all[(df_all["fecha_calificacion_solo"] >= f_desde_v) & (df_all["fecha_calificacion_solo"] <= f_hasta_v)].copy()
         c_rango, k_rango = calcular_csat(df_filtered_csat)
         duracion_dias = (f_hasta_v - f_desde_v).days + 1
