@@ -661,7 +661,8 @@ def obtener_df_csat_valido(df_sub):
         (df_c["rating_num"] >= 1) & (df_c["rating_num"] <= 5) &
         (df_c["canal"] != "Correo electrónico") &
         (df_c["agente_asignado"].fillna("").str.strip() != "") &
-        (df_c["agente_asignado"] != "Sin asignar")
+        (df_c["agente_asignado"] != "Sin asignar") &
+        (~df_c["agente_asignado"].str.lower().str.contains("bot")) # Excluir bots por nombre
     ]
     return df_csat
 
