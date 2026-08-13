@@ -781,6 +781,72 @@ with st.sidebar.form("form_filtros"):
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
 
+def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
+    output = io.BytesIO()
+    horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
+
+    sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
+    sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
+
+    # CORRECCIÓN DE ZONA HORARIA A AMÉRICA/ASUNCIÓN (UTC-3)
+    tz_py = timezone(timedelta(hours=-3))
+    now_py_str = datetime.now(tz_py).strftime("%Y-%m-%d %H:%M:%S")
+
+    df_reporte = pd.DataFrame()
+    df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
+    df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
+    df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
+    df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
+    df_reporte["Company"] = df_exp.get("company", "Sin datos")
+    df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
+    df_reporte["Por Agente"] = df_exp.get("por_agente", "")
+    df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
+    
+    # Nuevas Columnas de SLA Renombradas
+    df_reporte["SLA Normal"] = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
+    df_reporte["SLA Extendido"] = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
+    
+    if "rating" in df_exp and not df_exp.empty:
+        df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
+    else:
+        df_reporte["Calificacion"] = ""
+        
+    df_reporte["Feedback"] = df_exp.get("feedback", "")
+    df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
+    df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
+    df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
+
+    df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
+    df_reporte["Modulo"] = df_exp.get("modulo", "")
+    df_reporte["Cliente"] = df_exp.get("cliente", "")
+    df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
+    df_reporte["Nivel"] = df_exp.get("nivel", "")
+    df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
+    df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
+    df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
+    df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
+    
+    df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else []
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_meta = pd.DataFrame([
+            ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
+            ["Rango de Fechas Consultado:", f"Desde {f_desde_val} hasta {f_hasta_val}"],
+            ["Franja Horaria Aplicada:", horario_texto],
+            ["Fecha de Generacion:", now_py_str],
+            ["", ""]
+        ])
+        df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
+        df_reporte.to_excel(writer, index=False, sheet_name="Detalle", startrow=6)
+        
+        ws = writer.sheets["Detalle"]
+        for i, col in enumerate(df_reporte.columns, 1):
+            ws.column_dimensions[get_column_letter(i)].width = 24
+
+    output.seek(0)
+    return output
+
+
 # ==========================================
 # DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
 # ==========================================
@@ -938,71 +1004,6 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
         return "no cumple"
         
     return "cumple" if min_1ra <= threshold_1ra else "no cumple"
-
-def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
-    output = io.BytesIO()
-    horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
-
-    sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
-    sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
-
-    # CORRECCIÓN DE ZONA HORARIA A AMÉRICA/ASUNCIÓN (UTC-3)
-    tz_py = timezone(timedelta(hours=-3))
-    now_py_str = datetime.now(tz_py).strftime("%Y-%m-%d %H:%M:%S")
-
-    df_reporte = pd.DataFrame()
-    df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
-    df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
-    df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
-    df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
-    df_reporte["Company"] = df_exp.get("company", "Sin datos")
-    df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
-    df_reporte["Por Agente"] = df_exp.get("por_agente", "")
-    df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
-    
-    # Nuevas Columnas de SLA Renombradas
-    df_reporte["SLA Normal"] = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
-    df_reporte["SLA Extendido"] = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
-    
-    if "rating" in df_exp and not df_exp.empty:
-        df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
-    else:
-        df_reporte["Calificacion"] = ""
-        
-    df_reporte["Feedback"] = df_exp.get("feedback", "")
-    df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
-    df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
-    df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
-
-    df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
-    df_reporte["Modulo"] = df_exp.get("modulo", "")
-    df_reporte["Cliente"] = df_exp.get("cliente", "")
-    df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
-    df_reporte["Nivel"] = df_exp.get("nivel", "")
-    df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "Consulta General")
-    df_reporte["Resumen IA"] = df_exp.get("resumen_ia", "Sin resumen")
-    df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
-    df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
-    
-    df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else []
-
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df_meta = pd.DataFrame([
-            ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
-            ["Rango de Fechas Consultado:", f"Desde {f_desde_val} hasta {f_hasta_val}"],
-            ["Franja Horaria Aplicada:", horario_texto],
-            ["Fecha de Generacion:", now_py_str],
-            ["", ""]
-        ])
-        df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
-        df_reporte.to_excel(writer, index=False, sheet_name="Detalle", startrow=6)
-        
-        ws = writer.sheets["Detalle"]
-        for i, col in enumerate(df_reporte.columns, 1):
-            ws.column_dimensions[get_column_letter(i)].width = 24
-
-    output.seek(0)
-    return output
 
 st.title("Dashboard Soporte BIMS")
 
