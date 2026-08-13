@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 import extra_streamlit_components as stx
+import math 
 
 # ==========================================
 # 1. CONFIGURACIÓN ÚNICA DE PÁGINA
@@ -651,7 +652,12 @@ def calcular_csat(df_sub):
     ratings = df_valid["rating_num"]
     positivas = len(ratings[ratings >= 4])
     total = len(ratings)
-    return round((positivas / total) * 100, 1), total
+    
+    val_raw = (positivas / total) * 100
+    # Redondeo estricto por exceso a 1 decimal
+    val_ceil = math.ceil(val_raw * 10) / 10
+    
+    return val_ceil, total
 
 # ==========================
 # ESTADO DE SESIÓN Y PARÁMETROS
@@ -685,7 +691,6 @@ if not df_all_init.empty and "created_at_dt" in df_all_init.columns and not df_a
     max_updated_dt = df_all_init["updated_at_local"].max() if "updated_at_local" in df_all_init.columns else min_created_dt
     
     tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
-    min_created_str = min_created_dt.strftime('%d/%m/%Y') if pd.notna(min_created_dt) else "N/A"
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
@@ -738,8 +743,72 @@ with st.sidebar.form("form_filtros"):
 st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
 
-# BOTÓN DE CERRAR SESIÓN GLOBAL EN LA BARRA LATERAL
+# ==========================================
+# DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
+# ==========================================
+@st.dialog("📊 Exportar Reporte a Excel")
+def modal_exportar_excel():
+    st.caption("Selecciona el rango de fechas que deseas incluir en el archivo Excel:")
+    
+    col_d1, col_d2 = st.columns(2)
+    hoy = obtener_fecha_local_hoy()
+    f_exp_inicio = col_d1.date_input("Fecha Desde:", value=hoy, key="modal_exp_desde")
+    f_exp_fin = col_d2.date_input("Fecha Hasta:", value=hoy, key="modal_exp_hasta")
+    
+    usar_hora_exp = st.checkbox("Restringir Franja Horaria en Excel", value=False)
+    if usar_hora_exp:
+        col_h1, col_h2 = st.columns(2)
+        h_exp_ini = col_h1.time_input("Hora Inicio", time(8, 0), key="modal_exp_h_ini")
+        h_exp_fin = col_h2.time_input("Hora Fin", time(18, 0), key="modal_exp_h_fin")
+    else:
+        h_exp_ini, h_exp_fin = time(8, 0), time(18, 0)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    df_all_data = obtener_datos()
+    
+    if not df_all_data.empty and "fecha_solo" in df_all_data.columns:
+        df_exp_filt = df_all_data[
+            (df_all_data["fecha_solo"] >= pd.to_datetime(f_exp_inicio).date()) & 
+            (df_all_data["fecha_solo"] <= pd.to_datetime(f_exp_fin).date())
+        ].copy()
+        
+        if usar_hora_exp and not df_exp_filt.empty:
+            df_exp_filt = df_exp_filt[
+                (df_exp_filt["hora_solo"] >= h_exp_ini) & 
+                (df_exp_filt["hora_solo"] <= h_exp_fin)
+            ]
+    else:
+        df_exp_filt = pd.DataFrame()
+
+    if not df_exp_filt.empty:
+        st.success(f" Se encontraron **{len(df_exp_filt)} registros** para el rango seleccionado.")
+        
+        excel_bytes = generar_excel_reporte(
+            df_exp_filt, 
+            f_exp_inicio, 
+            f_exp_fin, 
+            usar_hora_exp, 
+            h_exp_ini, 
+            h_exp_fin
+        )
+        
+        st.download_button(
+            label=" Descargar Archivo Excel",
+            data=excel_bytes,
+            file_name=f"reporte_intercom_{f_exp_inicio}_a_{f_exp_fin}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    else:
+        st.warning("⚠️ No existen registros cargados en la base de datos para las fechas seleccionadas.")
+
+# SECCIÓN DE BOTONES EN LA BARRA LATERAL
 st.sidebar.markdown("---")
+
+if st.sidebar.button("📊 Exportar Reporte a Excel", use_container_width=True):
+    modal_exportar_excel()
+
 if st.sidebar.button("Cerrar Sesión", use_container_width=True):
     cookie_manager.delete(COOKIE_NAME)
     st.session_state["user_authenticated"] = False
@@ -842,6 +911,10 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
     sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
 
+    # CORRECCIÓN DE ZONA HORARIA A AMÉRICA/ASUNCIÓN (UTC-3)
+    tz_py = timezone(timedelta(hours=-3))
+    now_py_str = datetime.now(tz_py).strftime("%Y-%m-%d %H:%M:%S")
+
     df_reporte = pd.DataFrame()
     df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
     df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
@@ -883,7 +956,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
             ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
             ["Rango de Fechas Consultado:", f"Desde {f_desde_val} hasta {f_hasta_val}"],
             ["Franja Horaria Aplicada:", horario_texto],
-            ["Fecha de Generacion:", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+            ["Fecha de Generacion:", now_py_str],
             ["", ""]
         ])
         df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
@@ -1717,39 +1790,11 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tarjeta 3: Descarga Masiva
+        # Tarjeta 3: Gestión de Usuarios Autorizados
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">3. Descarga Masiva de Reportes Excel</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Genera y descarga el archivo Excel completo de los registros filtrados.</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            df_all_exp = obtener_datos()
-            if not df_all_exp.empty and "fecha_solo" in df_all_exp.columns:
-                df_exp_filt = df_all_exp[(df_all_exp["fecha_solo"] >= pd.to_datetime(fecha_desde).date()) & (df_all_exp["fecha_solo"] <= pd.to_datetime(fecha_hasta).date())].copy()
-                if usar_filtro_hora and not df_exp_filt.empty:
-                    df_exp_filt = df_exp_filt[(df_exp_filt["hora_solo"] >= hora_inicio) & (df_exp_filt["hora_solo"] <= hora_fin)]
-            else:
-                df_exp_filt = pd.DataFrame()
-
-            if not df_exp_filt.empty:
-                st.download_button(
-                    label="Descargar Reporte Filtrado en Excel",
-                    data=generar_excel_reporte(df_exp_filt, fecha_desde, fecha_hasta, usar_filtro_hora, hora_inicio, hora_fin),
-                    file_name=f"reporte_intercom_{fecha_desde}_a_{fecha_hasta}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            else:
-                st.info("No hay datos filtrados para descargar actualmente.")
-
-        # Tarjeta 4: Gestión de Usuarios Autorizados
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">4. Gestion de Usuarios Autorizados</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">3. Gestion de Usuarios Autorizados</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
             </div>
             """, unsafe_allow_html=True)
