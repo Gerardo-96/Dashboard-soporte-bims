@@ -1312,12 +1312,13 @@ with tab_operativo:
     st.markdown("---")
 
     # ==========================================
-    # MÉTRICAS POR AGENTE EN DASHBOARD (INCLUYE CUMPLIMIENTO SLA 1RA RESPUESTA)
+    # MÉTRICAS POR AGENTE EN DASHBOARD (INCLUYE CUMPLIMIENTO SLA 1RA RESPUESTA Y DIVERSAS METAS)
     # ==========================================
-    st.markdown("### Metricas por Agente & SLA Operativo")
+    st.markdown("### Métricas por Agente & SLA Operativo")
     if not df_filtered.empty:
         df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
+        # Filtro global de métricas operativas
         v_df = df_f[(df_f["por_agente"] == "no excluido") & (df_f["horario_evaluado"] != "fuera de horario")].copy()
         
         v_df["p_1ra_num"] = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
@@ -1326,7 +1327,7 @@ with tab_operativo:
         p_1r = round(v_df["p_1ra_num"].mean(), 2) if not v_df["p_1ra_num"].dropna().empty else 0.0
         p_gest = round(v_df["p_gest_num"].mean(), 2) if not v_df["p_gest_num"].dropna().empty else 0.0
 
-        # CALCULO DE PORCENTAJE GENERAL DE CUMPLIMIENTO SLA 1RA RESPUESTA EN RANGO
+        # CÁLCULO DE PORCENTAJE GENERAL DE CUMPLIMIENTO SLA 1RA RESPUESTA EN RANGO
         s_1ra_total = v_df["p_1ra_num"].dropna()
         if not s_1ra_total.empty:
             cumplen_1ra_tot = (s_1ra_total <= sla_1ra_th).sum()
@@ -1334,14 +1335,39 @@ with tab_operativo:
         else:
             pct_sla_1ra_total = 0.0
 
+        # CONTEO DE CHATS ABIERTOS Y CERRADOS (TOTAL VS HUMANO)
+        df_abiertos = df_f[~df_f["es_cerrado"]]
         df_cerrados = df_f[df_f["es_cerrado"]]
 
+        total_abiertos_tot = len(df_abiertos)
+        abiertos_humanos = len(df_abiertos[df_abiertos["por_agente"] == "no excluido"])
+
+        total_cerrados_tot = len(df_cerrados)
+        cerrados_humanos = len(df_cerrados[df_cerrados["por_agente"] == "no excluido"])
+
+        # LÓGICA DE COLOR DINÁMICO PARA % SLA 1RA RESP.
+        es_cumplido_sla = pct_sla_1ra_total >= 90.0
+        color_sla_val = "#34d399" if es_cumplido_sla else "#f43f5e"
+        border_sla_card = "#10b981" if es_cumplido_sla else "#ef4444"
+
+        # REUTILIZACIÓN DE ESTILO HOMOGÉNEO EN TARJETAS
+        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
+            return f"""
+            <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 105px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div class="metric-card-title">{title}</div>
+                    <div class="metric-card-value" style="color: {val_color};">{value}</div>
+                </div>
+                <div class="metric-card-sub">{sub_text}</div>
+            </div>
+            """
+
         k1, k2, k3, k4, k5 = st.columns(5)
-        k1.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. 1a Respuesta</div><div class="metric-card-value">{p_1r} min</div></div>', unsafe_allow_html=True)
-        k2.markdown(f'<div class="metric-card"><div class="metric-card-title">Prom. Tiempo Gestion</div><div class="metric-card-value">{p_gest} min</div></div>', unsafe_allow_html=True)
-        k3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">% SLA 1ra Resp. (Rango)</div><div class="metric-card-value" style="color: #34d399;">{pct_sla_1ra_total}%</div><div class="metric-card-sub">Meta <= {sla_1ra_th} min</div></div>', unsafe_allow_html=True)
-        k4.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Consultados</div><div class="metric-card-value">{len(df_f)}</div></div>', unsafe_allow_html=True)
-        k5.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats Cerrados</div><div class="metric-card-value">{len(df_cerrados)}</div></div>', unsafe_allow_html=True)
+        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta <= {sla_1ra_th} min"), unsafe_allow_html=True)
+        k2.markdown(render_sla_card("Prom. Tiempo Gestión", f"{p_gest} min", f"Meta <= {sla_gest_th} min"), unsafe_allow_html=True)
+        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta >= 90%", val_color=color_sla_val, border_color=border_sla_card), unsafe_allow_html=True)
+        k4.markdown(render_sla_card("Total Chats Abiertos", f"{total_abiertos_tot}", f"Humano: {abiertos_humanos}"), unsafe_allow_html=True)
+        k5.markdown(render_sla_card("Total Chats Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1381,10 +1407,6 @@ with tab_operativo:
                 f"% SLA 1a Resp (<= {sla_1ra_th}m)": sla_1_str, 
                 f"% SLA Gestion (<= {sla_gest_th}m)": sla_g_str
             })
-        
-        df_res_agentes = pd.DataFrame(res_agentes)
-        if not df_res_agentes.empty:
-            df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
 
         st.dataframe(df_res_agentes, use_container_width=True)
     else:
