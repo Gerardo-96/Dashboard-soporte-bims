@@ -59,23 +59,43 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
-# GESTOR DE COOKIES Y SESIÓN PERSISTENTE (30 DÍAS)
+# AUTENTICACIÓN PERSISTENTE (LOCALSTORAGE SIN ENSUCIAR URL)
 # ==========================================
-cookie_manager = stx.CookieManager()
-COOKIE_NAME = "bims_dashboard_user_session"
-
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
 
-# Intentar recuperar el correo guardado en la cookie del navegador
-user_cookie = cookie_manager.get(cookie=COOKIE_NAME)
+# Componente HTML/JS para leer el token almacenado en el navegador
+st.components.v1.html("""
+<script>
+    const storedUser = localStorage.getItem('bims_user_session');
+    if (storedUser) {
+        // Enviar el usuario a Streamlit a través de la API interna
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: storedUser
+        }, '*');
+    }
+</script>
+""", height=0)
 
-# Auto-autenticación si existe una cookie válida activa
-if user_cookie and not st.session_state["user_authenticated"]:
-    st.session_state["user_authenticated"] = True
-    st.session_state["user_email"] = user_cookie
+# Escuchar si hay un intento de restauración automática
+session_restored = st.session_state.get("restored_user_email", None)
+
+if session_restored and not st.session_state["user_authenticated"]:
+    try:
+        res = supabase.table("usuarios_autorizados")\
+            .select("*")\
+            .eq("email", session_restored.strip().lower())\
+            .eq("activo", True)\
+            .execute()
+        if len(res.data) > 0:
+            st.session_state["user_authenticated"] = True
+            st.session_state["user_email"] = res.data[0].get("email")
+            st.session_state["user_name"] = res.data[0].get("nombre")
+    except Exception:
+        pass
 
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
@@ -232,16 +252,16 @@ if not st.session_state["user_authenticated"]:
                     st.session_state["user_authenticated"] = True
                     st.session_state["user_email"] = email_user
                     st.session_state["user_name"] = datos_user.get("nombre")
-                    
-                    # Guardar la cookie de sesión por 30 días
-                    expires_at = datetime.now() + timedelta(days=30)
-                    cookie_manager.set(
-                        cookie=COOKIE_NAME,
-                        val=email_user,
-                        expires_at=expires_at
-                    )
-                    
+    
+                    # Guardar en localStorage de forma invisible y permanente
+                    st.components.v1.html(f"""
+                    <script>
+                        localStorage.setItem('bims_user_session', '{email_user}');
+                    </script>
+                    """, height=0)
+    
                     status_box.success("Acceso concedido.")
+                    time_lib.sleep(0.3)
                     st.rerun()
                 else:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
@@ -806,11 +826,17 @@ def modal_exportar_excel():
 # SECCIÓN DE BOTONES EN LA BARRA LATERAL
 st.sidebar.markdown("---")
 
-if st.sidebar.button("📊 Exportar Reporte a Excel", use_container_width=True):
+if st.sidebar.button("Exportar Reporte a Excel", use_container_width=True):
     modal_exportar_excel()
 
 if st.sidebar.button("Cerrar Sesión", use_container_width=True):
-    cookie_manager.delete(COOKIE_NAME)
+    # Borrar token del navegador
+    st.components.v1.html("""
+    <script>
+        localStorage.removeItem('bims_user_session');
+    </script>
+    """, height=0)
+    
     st.session_state["user_authenticated"] = False
     st.session_state["user_email"] = ""
     st.rerun()
