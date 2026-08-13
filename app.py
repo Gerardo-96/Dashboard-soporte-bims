@@ -1915,27 +1915,26 @@ with tab_faq:
         En el archivo Excel descargable, cada conversación contiene tres columnas de evaluación independiente:
 
         * **SLA Normal:** 
-          * **Cumple:** Creado en Horario Normal, con agente asignado, sin etiqueta *"sin respuesta"*, y cuya primera respuesta tomó $\le$ al límite (predeterminado $2.0$ min).
-          * **No Cumple:** Creado en Horario Normal pero superó el límite o no recibió respuesta humana.
-          * **Excluido por filtro:** Creado fuera del Horario Normal o en feriado.
+          * **Cumple:** Creado en Día Laboral, Horario Normal, con agente asignado, y cuya primera respuesta tomó $\le$ al límite ($2.0$ min).
+          * **No Cumple:** Creado en Día Laboral, Horario Normal pero la primera respuesta superó el tiempo límite.
+          * **Excluído** Creado fuera de los días laborales o en feriado, o fuera del Horario Normal, o atendido exclusivamente por el bot.
 
         * **SLA Extendido:** 
-          * **Cumple:** Creado dentro de la franja de Horario Extendido, con agente asignado, sin etiqueta *"sin respuesta"*, y con primera respuesta $\le$ al límite ($2.0$ min).
-          * **No Cumple:** Creado en Horario Extendido pero superó el límite o no recibió respuesta.
+          * **Cumple:** Creado dentro de la franja de Horario Extendido, con agente asignado, y con primera respuesta $\le$ al límite ($2.0$ min).
+          * **No Cumple:** Creado en Horario Extendido pero la primera respuesta superó el límite de tiempo.
           * **Excluido por filtro:** Creado fuera del Horario Extendido.
 
         * **SLA Tiempo Gestión:** 
-          * **Cumple:** Creado en horario hábil y resuelto/cerrado en un tiempo $\le$ al umbral (predeterminado $60$ min).
+          * **Cumple:** Creado en horario hábil, sin la etiqueta *"Sin Respuesta"* y resuelto/cerrado en un tiempo $\le$ al umbral ($60$ min).
           * **No Cumple:** Creado en horario hábil pero su tiempo de resolución superó el umbral.
           * **Sin cerrar:** Conversación aún abierta pendiente de resolución.
-          * **Excluido por filtro:** Conversación que contiene la etiqueta *"sin respuesta"*, creada en feriado o fuera de horario.
+          * **Excluido por filtro:** Conversación que contiene la etiqueta *"sin respuesta"*, creada en feriado o fuera de horario hábil.
         """)
 
     with st.expander("4. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
         st.markdown("""
-        * **Origen de la Fecha:** Las métricas, gráficos y tablas de CSAT se alimentan de la **marca de tiempo exacta en que el cliente calificó la atención** (`fecha_calificacion`). Si el cliente no dejó calificación o el registro no tiene marca de tiempo, toma como respaldo la fecha de creación del chat.
-        * **Calificaciones Válidas:** Se consideran las puntuaciones numéricas entre **1 y 5 estrellas** de conversaciones atendidas por agentes humanos (excluyendo canal de correo).
+        * **Origen de la Fecha:** Las métricas, gráficos y tablas de CSAT se alimentan de la **marca de tiempo exacta en que el cliente calificó la atención** (`fecha_calificacion`).
+        * **Calificaciones Válidas:** Se consideran las puntuaciones numéricas entre **1 y 5 estrellas** de conversaciones atendidas por agentes humanos.
         * **Fórmula de CSAT:**
           $$\\text{CSAT (\\%)} = \\left( \\frac{\\text{Total de Calificaciones Positivas (4 y 5 estrellas)}}{\\text{Total de Encuestas Validadas}} \\right) \\times 100$$
-        * **Redondeo por Exceso:** Para alinearse con las metas operativas, los valores porcentuales del CSAT en las tarjetas y gráficos se redondean siempre **por exceso a 1 decimal** (por ejemplo, $80.21\\%$ o $80.25\\%$ se eleva automáticamente a **$80.3\\%$**).
         """)
