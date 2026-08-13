@@ -1892,7 +1892,7 @@ with tab_admin:
                 st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
 
 with tab_faq:
-    st.markdown("### ❓ Preguntas Frecuentes & Criterios Operativos")
+    st.markdown("### Preguntas Frecuentes & Criterios Operativos")
     st.caption("Guía detallada sobre las reglas de negocio, horarios de atención, medición de SLA y evaluación del CSAT.")
 
     with st.expander("1. ¿Cómo se evalúa el SLA en la Pantalla (Dashboard En Vivo)?", expanded=True):
