@@ -1000,7 +1000,8 @@ st.title("Dashboard Soporte BIMS")
 tab_operativo, tab_resumen, tab_admin = st.tabs([
     "Control Operativo & SLA", 
     "Resumen de Chats & Agentes", 
-    "Administración & Configuracion"
+    "Administración & Configuracion",
+    "FAQ"
 ])
 
 # =========================================================================
@@ -1083,7 +1084,12 @@ def renderizar_alertas_en_vivo():
                 """, unsafe_allow_html=True)
 
                 if act_sonido:
-                    st.components.v1.html(AUDIO_ALARM_HTML, height=0)
+                    # Agregamos una clave única basada en la hora exacta para forzar la re-ejecución del script de audio
+                    st.components.v1.html(
+                        AUDIO_ALARM_HTML, 
+                        height=0, 
+                        key=f"audio_alarm_{now_dt.timestamp()}"
+                    )
 
             # 2. PANEL DE VERIFICACIÓN (MUESTRA ÚNICAMENTE LO CRÍTICO)
             with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
@@ -1884,3 +1890,62 @@ with tab_admin:
                     st.info("No hay usuarios registrados aún en la base de datos.")
             except Exception as e:
                 st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
+
+with tab_faq:
+    st.markdown("### ❓ Preguntas Frecuentes & Criterios Operativos")
+    st.caption("Guía detallada sobre las reglas de negocio, horarios de atención, medición de SLA y evaluación del CSAT.")
+
+    with st.expander("1. ¿Cómo se evalúa el SLA en la Pantalla (Dashboard En Vivo)?", expanded=True):
+        st.markdown("""
+        * **Chats Evaluados:** Se incluyen solo los chats asignados a agentes humanos (`por_agente == 'no excluido'`) y que hayan sido creados dentro de la jornada operativa (`horario_evaluado != 'fuera de horario'`).
+        * **Promedios de Respuesta y Gestión:** Se calcula la media numérica (`mean`) en minutos de la **Primera Respuesta** y del **Tiempo de Resolución/Gestión** de los chats válidos del rango de fechas consultado.
+        * **Porcentaje de Cumplimiento:** Es la proporción de conversaciones donde el tiempo de respuesta o gestión fue menor o igual al umbral objetivo configurado (ejemplo: $\le 2.0$ min para 1ra respuesta y $\le 60.0$ min para gestión).
+        """)
+
+    with st.expander("2. ¿Cuáles son los Horarios y Criterios de Exclusión para la medición del SLA?", expanded=False):
+        st.markdown("""
+        #### 📅 Días Feriados
+        Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`** o **`excluido por filtro`**.
+        
+        #### 🕒 Horario Hábil Normal
+        * **Lunes a Viernes:** 08:00 a 17:00 hs (para SLA en Excel) / 08:00 a 18:00 hs (para Dashboard)
+        * **Sábados:** 09:00 a 11:45 hs (para SLA en Excel) / 09:00 a 12:00 hs (para Dashboard)
+
+        #### 🌙 Horario Extendido (Turno Noche / Fin de Semana)
+        * **Lunes a Miércoles:** 19:00 a 01:45 hs (del día siguiente)
+        * **Jueves a Domingo:** 18:00 a 02:45 hs (del día siguiente)
+
+        #### 🚫 Exclusiones Generales
+        * Chats sin agente asignado o asignados únicamente a Bots (`Monica (Bot)`, etc.).
+        * Conversaciones del canal de Correo Electrónico (`email`).
+        """)
+
+    with st.expander("3. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
+        st.markdown("""
+        En el archivo Excel descargable, cada conversación contiene tres columnas de evaluación independiente:
+
+        * **SLA Normal:** 
+          * **Cumple:** Creado en Horario Normal, con agente asignado, sin etiqueta *"sin respuesta"*, y cuya primera respuesta tomó $\le$ al límite (predeterminado $2.0$ min).
+          * **No Cumple:** Creado en Horario Normal pero superó el límite o no recibió respuesta humana.
+          * **Excluido por filtro:** Creado fuera del Horario Normal o en feriado.
+
+        * **SLA Extendido:** 
+          * **Cumple:** Creado dentro de la franja de Horario Extendido, con agente asignado, sin etiqueta *"sin respuesta"*, y con primera respuesta $\le$ al límite ($2.0$ min).
+          * **No Cumple:** Creado en Horario Extendido pero superó el límite o no recibió respuesta.
+          * **Excluido por filtro:** Creado fuera del Horario Extendido.
+
+        * **SLA Tiempo Gestión:** 
+          * **Cumple:** Creado en horario hábil y resuelto/cerrado en un tiempo $\le$ al umbral (predeterminado $60$ min).
+          * **No Cumple:** Creado en horario hábil pero su tiempo de resolución superó el umbral.
+          * **Sin cerrar:** Conversación aún abierta pendiente de resolución.
+          * **Excluido por filtro:** Conversación que contiene la etiqueta *"sin respuesta"*, creada en feriado o fuera de horario.
+        """)
+
+    with st.expander("4. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
+        st.markdown("""
+        * **Origen de la Fecha:** Las métricas, gráficos y tablas de CSAT se alimentan de la **marca de tiempo exacta en que el cliente calificó la atención** (`fecha_calificacion`). Si el cliente no dejó calificación o el registro no tiene marca de tiempo, toma como respaldo la fecha de creación del chat.
+        * **Calificaciones Válidas:** Se consideran las puntuaciones numéricas entre **1 y 5 estrellas** de conversaciones atendidas por agentes humanos (excluyendo canal de correo).
+        * **Fórmula de CSAT:**
+          $$\\text{CSAT (\\%)} = \\left( \\frac{\\text{Total de Calificaciones Positivas (4 y 5 estrellas)}}{\\text{Total de Encuestas Validadas}} \\right) \\times 100$$
+        * **Redondeo por Exceso:** Para alinearse con las metas operativas, los valores porcentuales del CSAT en las tarjetas y gráficos se redondean siempre **por exceso a 1 decimal** (por ejemplo, $80.21\\%$ o $80.25\\%$ se eleva automáticamente a **$80.3\\%$**).
+        """)
