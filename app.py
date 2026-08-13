@@ -1086,12 +1086,9 @@ def renderizar_alertas_en_vivo():
                 """, unsafe_allow_html=True)
 
                 if act_sonido:
-                    # 'key' dinámico basado en timestamp para forzar al DOM a re-ejecutar el reproductor en cada ciclo de 10s
-                    st.components.v1.html(
-                        AUDIO_ALARM_HTML, 
-                        height=0, 
-                        key=f"audio_alarm_{now_dt.timestamp()}"
-                    )
+                    # Inyectamos el timestamp en el HTML para forzar su re-renderizado sin usar 'key'
+                    html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
+                    st.components.v1.html(html_con_ts, height=0)
 
             with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
