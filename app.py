@@ -1347,13 +1347,14 @@ with tab_operativo:
         else:
             pct_sla_1ra_total = 0.0
 
-        # CONTEO DE CHATS ABIERTOS Y CERRADOS (TOTAL VS HUMANO)
-        df_abiertos = df_f[~df_f["es_cerrado"]]
+        # CONTEO DE CHATS INGRESADOS Y CERRADOS (TOTAL VS HUMANO)
         df_cerrados = df_f[df_f["es_cerrado"]]
 
-        total_abiertos_tot = len(df_abiertos)
-        abiertos_humanos = len(df_abiertos[df_abiertos["por_agente"] == "no excluido"])
+        # Total de chats que INGRESARON / CREARON en el rango filtrado
+        total_ingresados_tot = len(df_f)
+        ingresados_humanos = len(df_f[df_f["por_agente"] == "no excluido"])
 
+        # Total de chats CERRADOS en el rango filtrado
         total_cerrados_tot = len(df_cerrados)
         cerrados_humanos = len(df_cerrados[df_cerrados["por_agente"] == "no excluido"])
 
@@ -1378,7 +1379,7 @@ with tab_operativo:
         k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta <= {sla_1ra_th} min"), unsafe_allow_html=True)
         k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta <= {sla_gest_th} min"), unsafe_allow_html=True)
         k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta >= 90%", val_color=color_sla_val, border_color=border_sla_card), unsafe_allow_html=True)
-        k4.markdown(render_sla_card("Chats Abiertos", f"{total_abiertos_tot}", f"Humano: {abiertos_humanos}"), unsafe_allow_html=True)
+        k4.markdown(render_sla_card("Chats Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
         k5.markdown(render_sla_card("Chats Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
