@@ -997,7 +997,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
 
 st.title("Dashboard Soporte BIMS")
 
-tab_operativo, tab_resumen, tab_admin = st.tabs([
+tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
     "Control Operativo & SLA", 
     "Resumen de Chats & Agentes", 
     "Administración & Configuracion",
