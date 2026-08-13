@@ -256,18 +256,29 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             # Regla de exclusión
             por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)", "Mónica (Bot)"] or "Bot" in agente else "no excluido"
 
-            # Extracción de CSAT / Rating y Marca de Tiempo de Puntuación
-            rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
-            rating = rating_data.get("rating")
-            calificacion = str(rating) if rating is not None else ""
-            feedback = rating_data.get("remark") or ""
-            cx_explanation = rating_data.get("remark") or ""
+            # Extracción de CSAT / Rating (Filtrado estricto: Solo evaluaciones a Agentes Humanos)
+rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
+teammate_data = rating_data.get("teammate") or {}
+rating_type = teammate_data.get("type")
 
-            ts_rating = rating_data.get("created_at")
-            if ts_rating:
-                fecha_calificacion_iso = datetime.fromtimestamp(ts_rating, tz=tz_local).isoformat()
-            else:
-                fecha_calificacion_iso = None
+if rating_type == "admin":
+    rating = rating_data.get("rating")
+    calificacion = str(rating) if rating is not None else ""
+    feedback = rating_data.get("remark") or ""
+    cx_explanation = rating_data.get("remark") or ""
+
+    ts_rating = rating_data.get("created_at")
+    if ts_rating:
+        fecha_calificacion_iso = datetime.fromtimestamp(ts_rating, tz=tz_local).isoformat()
+    else:
+        fecha_calificacion_iso = None
+else:
+    # Se descarta si fue evaluado un Bot o un Equipo
+    rating = None
+    calificacion = ""
+    feedback = ""
+    cx_explanation = ""
+    fecha_calificacion_iso = None
 
             teaser_admin = rating_data.get("teaser", {}).get("admin", {}) if isinstance(rating_data.get("teaser"), dict) else {}
             admin_eval_id = str(teaser_admin.get("id", "")).strip() if teaser_admin else ""
