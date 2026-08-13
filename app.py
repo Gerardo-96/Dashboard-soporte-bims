@@ -1908,15 +1908,15 @@ with tab_faq:
         Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
         
         #### 🕒 Horario Hábil Normal
-        * **Lunes a Viernes:** 08:00 a 17:00 hs (para SLA en Excel) / 08:00 a 18:00 hs (para Dashboard)
-        * **Sábados:** 09:00 a 11:45 hs (para SLA en Excel) / 09:00 a 12:00 hs (para Dashboard)
+        * **Lunes a Viernes:** 08:00 a 18:00 hs.
+        * **Sábados:** 09:00 a 12:00 hs.
 
         #### 🌙 Horario Extendido (Turno Noche / Fin de Semana)
-        * **Lunes a Miércoles:** 19:00 a 01:45 hs (del día siguiente)
-        * **Jueves a Domingo:** 18:00 a 02:45 hs (del día siguiente)
+        * **Lunes a Miércoles:** 19:00 a 02:00 hs (del día siguiente)
+        * **Jueves a Domingo:** 18:00 a 03:00 hs (del día siguiente)
 
         #### 🚫 Exclusiones Generales
-        * Chats sin agente asignado o asignados únicamente a Bots (`Monica (Bot)`, etc.).
+        * Chats asignados únicamente a Bots (`Monica (Bot)`, etc.).
         * Conversaciones del canal de Correo Electrónico (`email`).
         """)
 
