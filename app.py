@@ -863,16 +863,11 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
     if not agente or agente in ["Sin asignar", "None", "nan"]:
         return "excluido"
         
-    # Exclusión por etiqueta "Sin Respuesta"
-    etiquetas = str(row.get("etiquetas", "")).lower()
-    if "sin respuesta" in etiquetas:
-        return "excluido"
-        
     # Validación de Horario Normal:
-    # Lunes a Viernes de 08:00 a 17:00 hs
+    # Lunes a Viernes de 08:00 a 17:30 hs
     # Sábados de 09:00 a 11:45 hs
     en_horario = False
-    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 0, 0):
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
         en_horario = True
     elif dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(11, 45, 0):
         en_horario = True
@@ -899,11 +894,6 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
     # Exclusión por Agente "Sin asignar" o vacío
     agente = str(row.get("agente_asignado", "")).strip()
     if not agente or agente in ["Sin asignar", "None", "nan"]:
-        return "excluido"
-        
-    # Exclusión por etiqueta "Sin Respuesta"
-    etiquetas = str(row.get("etiquetas", "")).lower()
-    if "sin respuesta" in etiquetas:
         return "excluido"
         
     # Validación de Horario Extendido (Lunes a Lunes):
