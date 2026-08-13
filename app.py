@@ -729,9 +729,14 @@ def evaluar_sla_1ra(por_agente, horario, min_1ra, threshold):
         return "no cumple"
     return "cumple" if min_1ra <= threshold else "no cumple"
 
-def evaluar_sla_gestion(por_agente, horario, min_gest, threshold):
+def evaluar_sla_gestion(por_agente, horario, min_gest, threshold, etiquetas=""):
     if por_agente == "excluido" or horario == "fuera de horario":
         return "excluido"
+    
+    # Exclusión por etiqueta 'sin respuesta' igual que en Excel
+    if "sin respuesta" in str(etiquetas).lower():
+        return "excluido"
+        
     if pd.isna(min_gest):
         return "sin cerrar"
     return "cumple" if min_gest <= threshold else "no cumple"
@@ -1128,7 +1133,13 @@ with tab_operativo:
             lambda r: evaluar_sla_1ra(r.get("por_agente"), r.get("horario_evaluado"), r.get("primera_respuesta_min"), sla_1ra_th), axis=1
         )
         df_all["sla_gest_eval"] = df_all.apply(
-            lambda r: evaluar_sla_gestion(r.get("por_agente"), r.get("horario_evaluado"), r.get("tiempo_resolucion_minutos"), sla_gest_th), axis=1
+            lambda r: evaluar_sla_gestion(
+                r.get("por_agente"), 
+                r.get("horario_evaluado"), 
+                r.get("tiempo_resolucion_minutos"), 
+                sla_gest_th,
+                r.get("etiquetas", "")
+            ), axis=1
         )
 
         for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "resumen_ia"]:
