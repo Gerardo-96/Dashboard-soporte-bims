@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 import extra_streamlit_components as stx
-import math 
 
 # ==========================================
 # 1. CONFIGURACIÓN ÚNICA DE PÁGINA
@@ -532,7 +531,7 @@ st.markdown("""
 </script>
 """, unsafe_allow_html=True)
 
-# SINTETIZADOR WEB AUDIO API INMUNE A ERRORES DE RECURSOS EXTERNOS
+# SINTETIZADOR WEB AUDIO API POTENTE (RÁFAGA DE 3 BEEPS AGUDOS)
 AUDIO_ALARM_HTML = """
 <script>
 (function() {
@@ -547,7 +546,7 @@ AUDIO_ALARM_HTML = """
         function emitirBeep(delay, freq, dur) {
             var osc = ctx.createOscillator();
             var gain = ctx.createGain();
-            osc.type = 'square'; // Onda cuadrada para un sonido tipo alarma/sirena muy llamativo
+            osc.type = 'square'; // Onda cuadrada para un sonido penetrante estilo alarma
             osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
 
             gain.gain.setValueAtTime(0.35, ctx.currentTime + delay);
@@ -560,13 +559,13 @@ AUDIO_ALARM_HTML = """
             osc.stop(ctx.currentTime + delay + dur);
         }
 
-        // Ráfaga de 3 Beeps potentes y penetrantes (Frecuencia 1046Hz / Nota C6)
+        // Ráfaga de 3 Beeps potentes y penetrantes (Frecuencias C6 y E6)
         emitirBeep(0.0, 1046.50, 0.18);
         emitirBeep(0.25, 1046.50, 0.18);
-        emitirBeep(0.50, 1318.51, 0.30); // Tono final más agudo (E6)
+        emitirBeep(0.50, 1318.51, 0.30);
 
     } catch(e) {
-        console.log("Error al reproducir audio de alerta:", e);
+        console.log("Audio no reproducido por politicas del navegador", e);
     }
 })();
 </script>
@@ -780,6 +779,7 @@ def calcular_csat(df_sub):
     ratings = df_valid["rating_num"]
     positivas = len(ratings[ratings >= 4])
     total = len(ratings)
+    
     return round((positivas / total) * 100, 1), total
 
 # ==========================
@@ -1386,7 +1386,7 @@ with tab_operativo:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-res_agentes = []
+        res_agentes = []
         for agente, grp in df_f.groupby("agente_asignado"):
             asig_totales = len(grp)
             cerrados_totales = len(grp[grp["es_cerrado"]])
