@@ -1386,7 +1386,7 @@ with tab_operativo:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        res_agentes = []
+res_agentes = []
         for agente, grp in df_f.groupby("agente_asignado"):
             asig_totales = len(grp)
             cerrados_totales = len(grp[grp["es_cerrado"]])
@@ -1423,7 +1423,13 @@ with tab_operativo:
                 f"% SLA Gestion (<= {sla_gest_th}m)": sla_g_str
             })
 
-        st.dataframe(df_res_agentes, use_container_width=True)
+        # CONVERSIÓN A DATAFRAME Y RENDERIZADO DENTRO DEL BLOQUE 'IF'
+        df_res_agentes = pd.DataFrame(res_agentes)
+        if not df_res_agentes.empty:
+            df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
+            st.dataframe(df_res_agentes, use_container_width=True)
+        else:
+            st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
     else:
         st.info("No hay chats registrados en la base de datos para mostrar métricas por agente.")
 
