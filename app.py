@@ -543,18 +543,30 @@ AUDIO_ALARM_HTML = """
         if (ctx.state === 'suspended') {
             ctx.resume();
         }
-        var osc = ctx.createOscillator();
-        var gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime); // Tono de alerta claro 880Hz
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.8);
+
+        function emitirBeep(delay, freq, dur) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = 'square'; // Onda cuadrada para un sonido tipo alarma/sirena muy llamativo
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+
+            gain.gain.setValueAtTime(0.35, ctx.currentTime + delay);
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + delay + dur);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(ctx.currentTime + delay);
+            osc.stop(ctx.currentTime + delay + dur);
+        }
+
+        // Ráfaga de 3 Beeps potentes y penetrantes (Frecuencia 1046Hz / Nota C6)
+        emitirBeep(0.0, 1046.50, 0.18);
+        emitirBeep(0.25, 1046.50, 0.18);
+        emitirBeep(0.50, 1318.51, 0.30); // Tono final más agudo (E6)
+
     } catch(e) {
-        console.log("Audio no reproducido por politicas del navegador", e);
+        console.log("Error al reproducir audio de alerta:", e);
     }
 })();
 </script>
@@ -1003,9 +1015,9 @@ tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
     "FAQ"
 ])
 
-# =========================================================================
-# FRAGMENTO DE ALERTAS EN VIVO (MUESTRA ÚNICAMENTE LO CRÍTICO)
-# =========================================================================
+# ==========================================
+# FRAGMENTO DE ALERTAS EN VIVO (CON REPETICIÓN FORZADA CADA 10s)
+# ==========================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
     try:
@@ -1063,6 +1075,7 @@ def renderizar_alertas_en_vivo():
             
             df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
+            # 1. RENDERIZAR TARJETA ROJA Y SONIDO
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
                 st.markdown(f"""
@@ -1073,9 +1086,11 @@ def renderizar_alertas_en_vivo():
                 """, unsafe_allow_html=True)
 
                 if act_sonido:
+                    # 'key' dinámico basado en timestamp para forzar al DOM a re-ejecutar el reproductor en cada ciclo de 10s
                     st.components.v1.html(
                         AUDIO_ALARM_HTML, 
-                        height=0
+                        height=0, 
+                        key=f"audio_alarm_{now_dt.timestamp()}"
                     )
 
             with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
