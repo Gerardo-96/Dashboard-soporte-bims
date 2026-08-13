@@ -1905,7 +1905,7 @@ with tab_faq:
     with st.expander("2. ¿Cuáles son los Horarios y Criterios de Exclusión para la medición del SLA?", expanded=False):
         st.markdown("""
         #### 📅 Días Feriados
-        Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`** o **`excluido por filtro`**.
+        Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
         
         #### 🕒 Horario Hábil Normal
         * **Lunes a Viernes:** 08:00 a 17:00 hs (para SLA en Excel) / 08:00 a 18:00 hs (para Dashboard)
