@@ -491,13 +491,53 @@ st.markdown("""
 
 st.markdown("""
 <script>
-    // 1. Simular actividad de usuario cada 20 segundos
-    setInterval(function() {
-        window.dispatchEvent(new Event('mousemove'));
-        window.dispatchEvent(new Event('keydown'));
-    }, 20000);
+    // =========================================================================
+    // 1. WEB WORKER (Mantiene vivo el hilo de ejecucion en SEGUNDO PLANO)
+    // =========================================================================
+    const workerCode = `
+        setInterval(() => {
+            postMessage('ping');
+        }, 10000); // Impulso cada 10 segundos
+    `;
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
 
-    // 2. Activar AudioContext al primer clic para permitir sonido de alarma
+    worker.onmessage = function() {
+        // Enviar evento continuo para evitar congelamiento de WebSockets en Streamlit
+        window.dispatchEvent(new Event('mousemove'));
+        
+        // Hacer un PING silencioso al servidor de Streamlit para mantener la sesion viva
+        fetch(window.location.href, { method: 'HEAD', cache: 'no-store' }).catch(() => {});
+    };
+
+    // =========================================================================
+    // 2. SCREEN WAKE LOCK API (Evita que el sistema operativo congele la pantalla)
+    // =========================================================================
+    let wakeLock = null;
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+            }
+        } catch (err) {
+            console.log('WakeLock no disponible o denegado');
+        }
+    }
+
+    requestWakeLock();
+
+    // Reactivar inmediatamente al volver a enfocar la pestaña
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+            requestWakeLock();
+            // Disparar evento de actividad inmediato
+            window.dispatchEvent(new Event('keydown'));
+        }
+    });
+
+    // =========================================================================
+    // 3. ACTIVACIÓN DE AUDIO CONTEXT (Garantiza alertas sonoras sin bloqueo)
+    // =========================================================================
     document.addEventListener('click', function() {
         if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
             var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -506,25 +546,6 @@ st.markdown("""
             }
         }
     }, { once: true });
-
-    // 3. Prevenir que el navegador ponga la pestaña en suspensión (Screen WakeLock)
-    let wakeLock = null;
-    async function requestWakeLock() {
-        try {
-            if ('wakeLock' in navigator) {
-                wakeLock = await navigator.wakeLock.request('screen');
-            }
-        } catch (err) {
-            console.log('WakeLock error:', err);
-        }
-    }
-    
-    requestWakeLock();
-    document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'visible') {
-            requestWakeLock();
-        }
-    });
 </script>
 """, unsafe_allow_html=True)
 
