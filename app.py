@@ -1104,11 +1104,16 @@ with tab_operativo:
     alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
 
     if not df_all.empty:
-        estado_clean = df_all.get("estado", pd.Series(dtype=str)).astype(str).str.strip().str.lower()
-        cierre_clean = df_all.get("fecha_cierre", pd.Series(dtype=str)).astype(str).str.strip().str.lower()
+        # Extraemos el estado limpiando espacios y minúsculas
+        estado_clean = df_all.get("estado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
+        
+        # Un chat está CERRADO únicamente si su estado en Supabase/Intercom indica cierre explícito
+        df_all["es_cerrado"] = estado_clean.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"])
+
+    now_dt = pd.Timestamp.now(tz="America/Asuncion")
     
-        # Mascara booleana vectorizada
-        df_all["es_cerrado"] = estado_clean.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"]) | (~cierre_clean.isin(["", "none", "nan", "nat", "null"]))
+    # Obtenemos el DataFrame con los chats que realmente siguen ABIERTOS
+    df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty else pd.DataFrame()
 
         # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
         cond_1ra = [
