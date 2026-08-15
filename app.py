@@ -582,11 +582,11 @@ FERIADOS = [
 
 DIAS_NORMAL_L_V = [0, 1, 2, 3, 4]
 NORMAL_L_V_INICIO = time(8, 0, 0)
-NORMAL_L_V_FIN = time(18, 0, 0)
+NORMAL_L_V_FIN = time(17, 30, 0)
 
 DIAS_NORMAL_SABADO = [5]
 NORMAL_SABADO_INICIO = time(9, 0, 0)
-NORMAL_SABADO_FIN = time(12, 0, 0)
+NORMAL_SABADO_FIN = time(11, 45, 0)
 
 DIAS_EXTENDIDO_L_J = [0, 1, 2, 3]
 EXTENDIDO_L_J_INICIO = time(19, 0, 0)
@@ -844,7 +844,37 @@ def set_fechas_hoy():
     st.session_state["input_f_desde"] = hoy
     st.session_state["input_f_hasta"] = hoy
 
-st.sidebar.button("Establecer Fecha de Hoy", on_click=set_fechas_hoy, use_container_width=True)
+def set_fechas_semana():
+    hoy = obtener_fecha_local_hoy()
+    # Lunes de la semana actual (weekday() es 0 para Lunes)
+    inicio_semana = hoy - timedelta(days=hoy.weekday())
+    # Domingo de la semana actual (Lunes + 6 días)
+    fin_semana = inicio_semana + timedelta(days=6)
+    st.session_state["input_f_desde"] = inicio_semana
+    st.session_state["input_f_hasta"] = fin_semana
+
+def set_fechas_mes():
+    hoy = obtener_fecha_local_hoy()
+    # Primer día del mes actual
+    inicio_mes = hoy.replace(day=1)
+    # Último día del mes actual (primer día del mes siguiente menos 1 día)
+    if hoy.month == 12:
+        fin_mes = date(hoy.year, 12, 31)
+    else:
+        fin_mes = date(hoy.year, hoy.month + 1, 1) - timedelta(days=1)
+        
+    st.session_state["input_f_desde"] = inicio_mes
+    st.session_state["input_f_hasta"] = fin_mes
+
+st.sidebar.markdown("### Filtros de Consulta")
+
+# Botones rápidos de selección de rango
+col_b_hoy, col_b_sem, col_b_mes = st.sidebar.columns(3)
+col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
+col_b_sem.button("Esta Semana", on_click=set_fechas_semana, use_container_width=True)
+col_b_mes.button("Este Mes", on_click=set_fechas_mes, use_container_width=True)
+
+usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
 
 with st.sidebar.form("form_filtros"):
     st.caption("Rango de Fechas")
@@ -1335,13 +1365,13 @@ with tab_operativo:
     st.markdown("---")
 
     # ==========================================
-    # MÉTRICAS POR AGENTE EN DASHBOARD (INCLUYE CUMPLIMIENTO SLA 1RA RESPUESTA Y DIVERSAS METAS)
+    # MÉTRICAS POR AGENTE EN DASHBOARD (INCLUYE SLA 1RA RESPUESTA Y SLA GESTIÓN)
     # ==========================================
     st.markdown("### Métricas por Agente & SLA Operativo")
     if not df_filtered.empty:
         df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
-        # Filtro global de métricas operativas
+        # Filtro global de métricas operativas (Horario hábil y humano)
         v_df = df_f[(df_f["por_agente"] == "no excluido") & (df_f["horario_evaluado"] != "fuera de horario")].copy()
         
         v_df["p_1ra_num"] = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
@@ -1350,29 +1380,45 @@ with tab_operativo:
         p_1r = round(v_df["p_1ra_num"].mean(), 2) if not v_df["p_1ra_num"].dropna().empty else 0.0
         p_gest = round(v_df["p_gest_num"].mean(), 2) if not v_df["p_gest_num"].dropna().empty else 0.0
 
-        # CÁLCULO DE PORCENTAJE GENERAL DE CUMPLIMIENTO SLA 1RA RESPUESTA EN RANGO
-        s_1ra_total = v_df["p_1ra_num"].dropna()
-        if not s_1ra_total.empty:
-            cumplen_1ra_tot = (s_1ra_total <= sla_1ra_th).sum()
-            pct_sla_1ra_total = round((cumplen_1ra_tot / len(s_1ra_total)) * 100, 1)
+        # 1. CÁLCULO % SLA 1RA RESPUESTA (TODO EL RANGO FILTRADO)
+        if "sla_1ra_eval" in df_f.columns:
+            eval_1ra_rango = df_f[df_f["sla_1ra_eval"].isin(["cumple", "no cumple"])]
+            if not eval_1ra_rango.empty:
+                cumplen_1ra = (eval_1ra_rango["sla_1ra_eval"] == "cumple").sum()
+                pct_sla_1ra_total = round((cumplen_1ra / len(eval_1ra_rango)) * 100, 1)
+            else:
+                pct_sla_1ra_total = 0.0
         else:
             pct_sla_1ra_total = 0.0
+
+        # 2. CÁLCULO % SLA TIEMPO DE GESTIÓN (TODO EL RANGO FILTRADO)
+        if "sla_gest_eval" in df_f.columns:
+            eval_gest_rango = df_f[df_f["sla_gest_eval"].isin(["cumple", "no cumple"])]
+            if not eval_gest_rango.empty:
+                cumplen_gest = (eval_gest_rango["sla_gest_eval"] == "cumple").sum()
+                pct_sla_gest_total = round((cumplen_gest / len(eval_gest_rango)) * 100, 1)
+            else:
+                pct_sla_gest_total = 0.0
+        else:
+            pct_sla_gest_total = 0.0
 
         # CONTEO DE CHATS INGRESADOS Y CERRADOS (TOTAL VS HUMANO)
         df_cerrados = df_f[df_f["es_cerrado"]]
 
-        # Total de chats que INGRESARON / CREARON en el rango filtrado
         total_ingresados_tot = len(df_f)
         ingresados_humanos = len(df_f[df_f["por_agente"] == "no excluido"])
 
-        # Total de chats CERRADOS en el rango filtrado
         total_cerrados_tot = len(df_cerrados)
         cerrados_humanos = len(df_cerrados[df_cerrados["por_agente"] == "no excluido"])
 
-        # LÓGICA DE COLOR DINÁMICO PARA % SLA 1RA RESP.
-        es_cumplido_sla = pct_sla_1ra_total >= 90.0
-        color_sla_val = "#34d399" if es_cumplido_sla else "#f43f5e"
-        border_sla_card = "#10b981" if es_cumplido_sla else "#ef4444"
+        # COLORES DINÁMICOS (Verde ≥ 90%, Rojo < 90%)
+        es_cumplido_1ra = pct_sla_1ra_total >= 90.0
+        color_1ra_val = "#34d399" if es_cumplido_1ra else "#f43f5e"
+        border_1ra_card = "#10b981" if es_cumplido_1ra else "#ef4444"
+
+        es_cumplido_gest = pct_sla_gest_total >= 90.0
+        color_gest_val = "#34d399" if es_cumplido_gest else "#f43f5e"
+        border_gest_card = "#10b981" if es_cumplido_gest else "#ef4444"
 
         # REUTILIZACIÓN DE ESTILO HOMOGÉNEO EN TARJETAS
         def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
@@ -1386,12 +1432,13 @@ with tab_operativo:
             </div>
             """
 
-        k1, k2, k3, k4, k5 = st.columns(5)
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
-        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
-        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_sla_val, border_color=border_sla_card), unsafe_allow_html=True)
-        k4.markdown(render_sla_card("Chats Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
-        k5.markdown(render_sla_card("Chats Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
+        k2.markdown(render_sla_card("Prom. Tiempo Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
+        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card), unsafe_allow_html=True)
+        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card), unsafe_allow_html=True)
+        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
+        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
