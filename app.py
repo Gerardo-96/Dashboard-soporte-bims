@@ -269,7 +269,7 @@ if not st.session_state["user_authenticated"]:
     st.stop()
     
 # ==========================================
-# CÓDIGO PRINCIPAL DEL DASHBOARD
+# FUNCIONES AUXILIARES DE TIEMPOS Y REGLAS DE NEGOCIO
 # ==========================================
 
 def obtener_fecha_local_hoy():
@@ -307,6 +307,101 @@ def obtener_tiempo_transcurrido(fecha_dt):
         return f"hace {secs // 3600} h"
     else:
         return f"hace {secs // 86400} días"
+
+FERIADOS = [
+    "2026-04-02", "2026-04-03", "2026-05-01", "2026-05-14", "2026-05-15",
+    "2026-06-12", "2026-06-22", "2026-06-30", "2026-08-15", "2026-09-29",
+    "2026-12-08", "2026-12-25"
+]
+
+DIAS_NORMAL_L_V = [0, 1, 2, 3, 4]
+NORMAL_L_V_INICIO = time(8, 0, 0)
+NORMAL_L_V_FIN = time(17, 30, 0)
+
+DIAS_NORMAL_SABADO = [5]
+NORMAL_SABADO_INICIO = time(9, 0, 0)
+NORMAL_SABADO_FIN = time(11, 45, 0)
+
+DIAS_EXTENDIDO_L_J = [0, 1, 2, 3]
+EXTENDIDO_L_J_INICIO = time(19, 0, 0)
+EXTENDIDO_L_J_FIN = time(2, 0, 0)
+
+DIAS_EXTENDIDO_V_S = [4, 5]
+EXTENDIDO_V_S_INICIO = time(18, 0, 0)
+EXTENDIDO_V_S_FIN = time(3, 0, 0)
+
+def evaluar_horario_dashboard(dt_objeto):
+    if pd.isna(dt_objeto):
+        return "fuera de horario"
+    fecha_str = dt_objeto.strftime("%Y-%m-%d")
+    dia_semana = dt_objeto.weekday()
+    hora_actual = dt_objeto.time()
+
+    dt_ayer = dt_objeto - timedelta(days=1)
+    dia_ayer = dt_ayer.weekday()
+    fecha_ayer_str = dt_ayer.strftime("%Y-%m-%d")
+
+    if dia_ayer in DIAS_EXTENDIDO_L_J and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_L_J_FIN:
+        return "extendido"
+    if dia_ayer in DIAS_EXTENDIDO_V_S and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_V_S_FIN:
+        return "extendido"
+
+    if fecha_str in FERIADOS:
+        return "fuera de horario"
+
+    if dia_semana in DIAS_NORMAL_L_V and NORMAL_L_V_INICIO <= hora_actual <= NORMAL_L_V_FIN:
+        return "normal"
+    if dia_semana in DIAS_NORMAL_SABADO and NORMAL_SABADO_INICIO <= hora_actual <= NORMAL_SABADO_FIN:
+        return "normal"
+
+    if dia_semana in DIAS_EXTENDIDO_L_J and hora_actual >= EXTENDIDO_L_J_INICIO:
+        return "extendido"
+    if dia_semana in DIAS_EXTENDIDO_V_S and hora_actual >= EXTENDIDO_V_S_INICIO:
+        return "extendido"
+
+    return "fuera de horario"
+
+def es_feriado_paraguay(fecha_date):
+    """Verifica si una fecha es un feriado oficial en Paraguay."""
+    feriados_fijos = [
+        (1, 1), (3, 1), (5, 1), (5, 14), (5, 15), 
+        (6, 12), (8, 15), (9, 29), (12, 8), (12, 25)
+    ]
+    return (fecha_date.month, fecha_date.day) in feriados_fijos
+
+def calcular_minutos_habiles_gestion(row):
+    """
+    Calcula el tiempo real de gestión descontando ÚNICAMENTE los rangos 'fuera de horario'.
+    NO descuenta almuerzo ni fines de semana (si están cubiertos por Normal o Extendido).
+    Optimizado por tramos para alto rendimiento.
+    """
+    f_inicio = row.get("created_at_dt")
+    col_cierre = "fecha_primer_cierre_dt" if "fecha_primer_cierre_dt" in row and pd.notna(row.get("fecha_primer_cierre_dt")) else "fecha_cierre_dt"
+    f_cierre = row.get(col_cierre)
+    
+    if pd.isna(f_inicio) or pd.isna(f_cierre) or f_cierre <= f_inicio:
+        return row.get("tiempo_resolucion_minutos")
+
+    diff_total_sec = (f_cierre - f_inicio).total_seconds()
+    if diff_total_sec <= 60:
+        estado_inicio = evaluar_horario_dashboard(f_inicio)
+        return round(diff_total_sec / 60.0, 1) if estado_inicio != "fuera de horario" else 0.0
+
+    minutos_habiles = 0.0
+    curr = f_inicio
+    paso = timedelta(minutes=5)
+
+    while curr < f_cierre:
+        corte = min(curr + paso, f_cierre)
+        duracion_tramo = (corte - curr).total_seconds() / 60.0
+        medio = curr + timedelta(seconds=(corte - curr).total_seconds() / 2)
+        
+        if evaluar_horario_dashboard(medio) != "fuera de horario":
+            minutos_habiles += duracion_tramo
+            
+        curr = corte
+
+    return round(minutos_habiles, 1)
 
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas numéricas."""
@@ -399,8 +494,8 @@ def obtener_datos_historicos_q():
     lote = 0
     tamanio_lote = 1000
 
-    fecha_inicio_q_ant = obtener_inicio_trimestre_anterior()
     hoy = obtener_fecha_local_hoy()
+    fecha_inicio_q_ant = f"{obtener_inicio_trimestre_anterior()[:10]}T00:00:00Z"
     fecha_hasta_ayer = f"{hoy}T00:00:00Z"
 
     while True:
@@ -443,11 +538,11 @@ def obtener_datos_hoy():
     try:
         response = supabase.table("conversaciones")\
             .select(COLUMNAS_DASHBOARD)\
-            .gte("updated_at", fecha_inicio_hoy)\
+            .gte("created_at", fecha_inicio_hoy)\
             .execute()
         return response.data or []
     except Exception as e:
-        print(f"Error cargando hoy: {e}")
+        st.error(f"Error consultando datos de Hoy: {e}")
         return []
 
 
@@ -623,62 +718,6 @@ AUDIO_ALARM_HTML = """
 </script>
 """
 
-# ==========================
-# PARÁMETROS HORARIOS Y FERIADOS
-# ==========================
-FERIADOS = [
-    "2026-04-02", "2026-04-03", "2026-05-01", "2026-05-14", "2026-05-15",
-    "2026-06-12", "2026-06-22", "2026-06-30", "2026-08-15", "2026-09-29",
-    "2026-12-08", "2026-12-25"
-]
-
-DIAS_NORMAL_L_V = [0, 1, 2, 3, 4]
-NORMAL_L_V_INICIO = time(8, 0, 0)
-NORMAL_L_V_FIN = time(17, 30, 0)
-
-DIAS_NORMAL_SABADO = [5]
-NORMAL_SABADO_INICIO = time(9, 0, 0)
-NORMAL_SABADO_FIN = time(11, 45, 0)
-
-DIAS_EXTENDIDO_L_J = [0, 1, 2, 3]
-EXTENDIDO_L_J_INICIO = time(19, 0, 0)
-EXTENDIDO_L_J_FIN = time(2, 0, 0)
-
-DIAS_EXTENDIDO_V_S = [4, 5]
-EXTENDIDO_V_S_INICIO = time(18, 0, 0)
-EXTENDIDO_V_S_FIN = time(3, 0, 0)
-
-def evaluar_horario_dashboard(dt_objeto):
-    if pd.isna(dt_objeto):
-        return "fuera de horario"
-    fecha_str = dt_objeto.strftime("%Y-%m-%d")
-    dia_semana = dt_objeto.weekday()
-    hora_actual = dt_objeto.time()
-
-    dt_ayer = dt_objeto - timedelta(days=1)
-    dia_ayer = dt_ayer.weekday()
-    fecha_ayer_str = dt_ayer.strftime("%Y-%m-%d")
-
-    if dia_ayer in DIAS_EXTENDIDO_L_J and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_L_J_FIN:
-        return "extendido"
-    if dia_ayer in DIAS_EXTENDIDO_V_S and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_V_S_FIN:
-        return "extendido"
-
-    if fecha_str in FERIADOS:
-        return "fuera de horario"
-
-    if dia_semana in DIAS_NORMAL_L_V and NORMAL_L_V_INICIO <= hora_actual <= NORMAL_L_V_FIN:
-        return "normal"
-    if dia_semana in DIAS_NORMAL_SABADO and NORMAL_SABADO_INICIO <= hora_actual <= NORMAL_SABADO_FIN:
-        return "normal"
-
-    if dia_semana in DIAS_EXTENDIDO_L_J and hora_actual >= EXTENDIDO_L_J_INICIO:
-        return "extendido"
-    if dia_semana in DIAS_EXTENDIDO_V_S and hora_actual >= EXTENDIDO_V_S_INICIO:
-        return "extendido"
-
-    return "fuera de horario"
-
 def evaluar_horario_estricto(dt_objeto):
     if pd.isna(dt_objeto):
         return False
@@ -694,7 +733,7 @@ def evaluar_horario_estricto(dt_objeto):
     return False
 
 # ==========================================
-# EVALUACIÓN DE SLA Y CÁLCULOS HÁBILES
+# EVALUACIÓN DE SLA
 # ==========================================
 
 def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
@@ -757,52 +796,6 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
         return "no cumple"
         
     return "cumple" if min_1ra <= threshold_1ra else "no cumple"
-
-def es_feriado_paraguay(fecha_date):
-    """Verifica si una fecha es un feriado oficial en Paraguay."""
-    feriados_fijos = [
-        (1, 1), (3, 1), (5, 1), (5, 14), (5, 15), 
-        (6, 12), (8, 15), (9, 29), (12, 8), (12, 25)
-    ]
-    return (fecha_date.month, fecha_date.day) in feriados_fijos
-
-def calcular_minutos_habiles_gestion(row):
-    """
-    Calcula el tiempo real de gestión descontando ÚNICAMENTE los rangos 'fuera de horario'.
-    Versión optimizada de alto rendimiento.
-    """
-    f_inicio = row.get("created_at_dt")
-    col_cierre = "fecha_primer_cierre_dt" if "fecha_primer_cierre_dt" in row and pd.notna(row.get("fecha_primer_cierre_dt")) else "fecha_cierre_dt"
-    f_cierre = row.get(col_cierre)
-    
-    if pd.isna(f_inicio) or pd.isna(f_cierre) or f_cierre <= f_inicio:
-        return row.get("tiempo_resolucion_minutos")
-
-    # Si se creó y cerró en el mismo momento o menos de 1 minuto
-    diff_total_sec = (f_cierre - f_inicio).total_seconds()
-    if diff_total_sec <= 60:
-        estado_inicio = evaluar_horario_dashboard(f_inicio)
-        return round(diff_total_sec / 60.0, 1) if estado_inicio != "fuera de horario" else 0.0
-
-    # Avance optimizado por bloques de 5 minutos para alta velocidad
-    minutos_habiles = 0.0
-    curr = f_inicio
-    paso = timedelta(minutes=5)
-    paso_min = 5.0
-
-    while curr < f_cierre:
-        corte = min(curr + paso, f_cierre)
-        duracion_tramo = (corte - curr).total_seconds() / 60.0
-        
-        # Evaluamos el punto medio del tramo
-        medio = curr + timedelta(seconds=(corte - curr).total_seconds() / 2)
-        
-        if evaluar_horario_dashboard(medio) != "fuera de horario":
-            minutos_habiles += duracion_tramo
-            
-        curr = corte
-
-    return round(minutos_habiles, 1)
 
 def evaluar_sla_gestion_excel(row, threshold_gest):
     dt_obj = row.get("created_at_dt")
