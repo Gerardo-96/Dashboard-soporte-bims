@@ -436,8 +436,8 @@ def obtener_datos_historicos_q():
         try:
             response = supabase.table("conversaciones")\
                 .select(COLUMNAS_DASHBOARD)\
-                .gte("created_at", fecha_inicio_q_ant)\
-                .lt("created_at", fecha_hasta_ayer)\
+                .gte("updated_at", fecha_inicio_q_ant)\
+                .lt("updated_at", fecha_hasta_ayer)\
                 .range(inicio, fin)\
                 .execute()
             
@@ -457,7 +457,7 @@ def obtener_datos_historicos_q():
     return todos_los_datos
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=900, show_spinner=False)
 def obtener_datos_hoy():
     """Descarga conversaciones recientes (últimas 36 horas) evitando desfases de zona horaria UTC vs PY."""
     tz_py = timezone(timedelta(hours=-3))
