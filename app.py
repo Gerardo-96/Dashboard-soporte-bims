@@ -396,34 +396,23 @@ def calcular_minutos_habiles_gestion(row):
     minutos_estimados = dias_totales * 570.0
     return round(minutos_estimados, 1)
 
+import numpy as np  # Asegúrate de tener import numpy as np arriba en las importaciones
+
 def procesar_fechas_df(df):
-    """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas numéricas."""
+    """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas de forma VECTORIZADA."""
     if df.empty or "created_at" not in df.columns:
-        df["created_at_dt"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
-        df["created_at_fmt"] = pd.Series(dtype='str')
-        df["fecha_solo"] = pd.Series(dtype='object')
-        df["hora_solo"] = pd.Series(dtype='object')
-        df["fecha_calificacion_dt"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
-        df["fecha_calificacion_fmt"] = pd.Series(dtype='str')
-        df["fecha_calificacion_solo"] = pd.Series(dtype='object')
-        df["updated_at_local"] = pd.Series(dtype='datetime64[ns, America/Asuncion]')
-        df["es_cerrado"] = pd.Series(dtype='bool')
-        df["por_agente"] = pd.Series(dtype='str')
-        df["agente_asignado"] = pd.Series(dtype='str')
-        df["tenant"] = pd.Series(dtype='str')
-        df["company"] = pd.Series(dtype='str')
-        df["nombre_contacto"] = pd.Series(dtype='str')
-        df["motivo_normalizado"] = pd.Series(dtype='str')
-        df["resumen_ia"] = pd.Series(dtype='str')
         return df
-    
+
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
     local_dt = created_dt.dt.tz_convert("America/Asuncion")
-    
+
     df["created_at_dt"] = local_dt
     df["created_at_fmt"] = local_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
+
+    # Evaluamos el horario sobre la serie completa
+    df["horario_evaluado"] = df["created_at_dt"].apply(evaluar_horario_dashboard)
 
     # Procesamiento de Marca de Tiempo de Puntuación CSAT
     if "fecha_calificacion" in df.columns:
@@ -436,6 +425,7 @@ def procesar_fechas_df(df):
     df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
 
+    # Procesamiento de Fechas de Cierre
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
         cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
@@ -444,13 +434,13 @@ def procesar_fechas_df(df):
         df["fecha_cierre_fmt"] = local_cierre.dt.strftime("%Y-%m-%d %H:%M").fillna("")
 
     if "primera_respuesta_min" in df.columns:
-        df["primera_respuesta_min"] = df["primera_respuesta_min"].apply(convertir_a_minutos)
+        df["primera_respuesta_min"] = pd.to_numeric(df["primera_respuesta_min"], errors="coerce").round(2)
 
-    # RECALCULAMOS EL TIEMPO DE GESTIÓN EN MINUTOS HÁBILES REALES
-    if not df.empty and "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
-        df["tiempo_resolucion_minutos"] = df.apply(calcular_minutos_habiles_gestion, axis=1)
-    elif "tiempo_resolucion_minutos" in df.columns:
-        df["tiempo_resolucion_minutos"] = df["tiempo_resolucion_minutos"].apply(convertir_a_minutos)
+    # RECALCULAMOS EL TIEMPO DE GESTIÓN VECTORIZADO (SÚPER RÁPIDO)
+    if "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
+        diff_min = (df["fecha_cierre_dt"] - df["created_at_dt"]).dt.total_seconds() / 60.0
+        # Si la conversación se inició fuera de horario, descartamos
+        df["tiempo_resolucion_minutos"] = np.where(df["horario_evaluado"] == "fuera de horario", np.nan, diff_min).round(1)
 
     return df
 
