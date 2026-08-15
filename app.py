@@ -348,25 +348,21 @@ def procesar_fechas_df(df):
     df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
 
+    # Dentro de procesar_fechas_df(df):
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
         cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
         local_cierre = cierre_dt.dt.tz_convert("America/Asuncion")
+        df["fecha_cierre_dt"] = local_cierre
         df["fecha_cierre_fmt"] = local_cierre.dt.strftime("%Y-%m-%d %H:%M").fillna("")
-
-    if "updated_at" in df.columns:
-        updated_dt = pd.to_datetime(df["updated_at"], errors="coerce", utc=True)
-        df["updated_at_local"] = updated_dt.dt.tz_convert("America/Asuncion")
-
-    if "id" in df.columns:
-        df["id_str"] = df["id"].astype(str).str.strip()
-        df["intercom_url"] = df["id_str"].apply(
-            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-        )
 
     if "primera_respuesta_min" in df.columns:
         df["primera_respuesta_min"] = df["primera_respuesta_min"].apply(convertir_a_minutos)
-    if "tiempo_resolucion_minutos" in df.columns:
+
+    # RECALCULAMOS EL TIEMPO DE GESTIÓN EN MINUTOS HÁBILES REALES
+    if not df.empty and "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
+        df["tiempo_resolucion_minutos"] = df.apply(calcular_minutos_habiles_gestion, axis=1)
+    elif "tiempo_resolucion_minutos" in df.columns:
         df["tiempo_resolucion_minutos"] = df["tiempo_resolucion_minutos"].apply(convertir_a_minutos)
 
     return df
@@ -398,16 +394,19 @@ def obtener_inicio_trimestre_anterior():
 # 1. CACHÉ HISTÓRICO (CADA 24 HORAS)
 # ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
+@st.cache_data(ttl=86400, show_spinner=False)
 def obtener_datos_historicos_q():
-    """Descarga datos desde el Q anterior hasta el día de ayer (1 vez al día)."""
+    """Descarga datos desde el Q anterior hasta el inicio de hoy (1 vez al día)."""
     todos_los_datos = []
     lote = 0
     tamanio_lote = 1000
 
     fecha_inicio_q_ant = obtener_inicio_trimestre_anterior()
-    # Fecha tope: Inicio del día de hoy
     hoy = obtener_fecha_local_hoy()
     fecha_hasta_ayer = f"{hoy}T00:00:00Z"
+
+    # Condición OR para incluir creaciones O modificaciones en el rango
+    condicion_or = f"created_at.gte.{fecha_inicio_q_ant},updated_at.gte.{fecha_inicio_q_ant}"
 
     while True:
         inicio = lote * tamanio_lote
@@ -416,11 +415,11 @@ def obtener_datos_historicos_q():
         try:
             response = supabase.table("conversaciones")\
                 .select(COLUMNAS_DASHBOARD)\
-                .gte("updated_at", fecha_inicio_q_ant)\
-                .lt("updated_at", fecha_hasta_ayer)\
+                .or_(condicion_or)\
+                .lt("created_at", fecha_hasta_ayer)\
                 .range(inicio, fin)\
                 .execute()
-            datos = response.data
+            datos = response.data or []
         except Exception:
             break
         
@@ -780,6 +779,77 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
         return "no cumple"
         
     return "cumple" if min_1ra <= threshold_1ra else "no cumple"
+
+def es_feriado_paraguay(fecha_date):
+    """Verifica si una fecha es un feriado oficial en Paraguay."""
+    feriados_fijos = [
+        (1, 1), (3, 1), (5, 1), (5, 14), (5, 15), 
+        (6, 12), (8, 15), (9, 29), (12, 8), (12, 25)
+    ]
+    return (fecha_date.month, fecha_date.day) in feriados_fijos
+
+def calcular_minutos_habiles_gestion(row):
+    """
+    Calcula el tiempo de gestión descontando noches, almuerzos, fines de semana y feriados.
+    Soporta Horario Normal (8:00-12:00 / 13:00-17:30) y Horario Extendido.
+    """
+    f_inicio = row.get("created_at_dt")
+    col_cierre = "fecha_primer_cierre_dt" if "fecha_primer_cierre_dt" in row and pd.notna(row.get("fecha_primer_cierre_dt")) else "fecha_cierre_dt"
+    f_cierre = row.get(col_cierre)
+    
+    if pd.isna(f_inicio) or pd.isna(f_cierre) or f_cierre <= f_inicio:
+        # Si aún no está cerrado o la fecha es inválida, retorna la columna original o None
+        return row.get("tiempo_resolucion_minutos")
+
+    tipo_horario = str(row.get("horario_tipo", "ordinario")).lower()
+    minutos_habiles = 0.0
+    curr = f_inicio
+
+    while curr < f_cierre:
+        fecha_curr = curr.date()
+        
+        # 1. Fin de semana o Feriado -> Saltar al siguiente día hábil a las 08:00
+        if curr.weekday() in [5, 6] or es_feriado_paraguay(fecha_curr):
+            curr = (curr + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+            continue
+
+        # 2. Definición de Ventanas de Trabajo
+        if "extendido" in tipo_horario:
+            ventanas = [(curr.replace(hour=8, minute=0, second=0, microsecond=0),
+                         curr.replace(hour=18, minute=0, second=0, microsecond=0))]
+        else:
+            ventanas = [
+                (curr.replace(hour=8, minute=0, second=0, microsecond=0),
+                 curr.replace(hour=12, minute=0, second=0, microsecond=0)),
+                (curr.replace(hour=13, minute=0, second=0, microsecond=0),
+                 curr.replace(hour=17, minute=30, second=0, microsecond=0))
+            ]
+
+        fin_ultima_jornada = ventanas[-1][1]
+
+        if curr >= fin_ultima_jornada:
+            curr = (curr + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+            continue
+
+        avanzado = False
+        for inicio_v, fin_v in ventanas:
+            if curr < inicio_v and f_cierre > inicio_v:
+                curr = inicio_v
+
+            if inicio_v <= curr < fin_v:
+                corte = min(f_cierre, fin_v)
+                minutos_habiles += (corte - curr).total_seconds() / 60.0
+                curr = corte
+                avanzado = True
+                break
+
+        if not avanzado:
+            if curr < ventanas[-1][0]:
+                curr = ventanas[-1][0]
+            else:
+                curr = (curr + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+
+    return round(minutos_habiles, 1)
 
 def evaluar_sla_gestion_excel(row, threshold_gest):
     dt_obj = row.get("created_at_dt")
