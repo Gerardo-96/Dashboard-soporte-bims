@@ -372,7 +372,7 @@ COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
     "feedback, agente_evaluado, cx_score_explanation, tenant, company, nombre_contacto, "
-    "etiquetas, fecha_primer_cierre, fecha_cierre, modulo, cliente, tipo_contacto, nivel"
+    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel"
 )
 
 def obtener_inicio_trimestre_anterior():
