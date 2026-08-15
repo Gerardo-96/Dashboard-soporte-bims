@@ -279,18 +279,27 @@ def obtener_fecha_local_hoy():
     return datetime.now(tz_py).date()
 
 def obtener_tiempo_transcurrido(fecha_dt):
-    """Calcula el tiempo transcurrido relativo desde la última actualización de Supabase."""
+    """Calcula el tiempo transcurrido exacto garantizando la conversión a America/Asuncion."""
     if pd.isna(fecha_dt) or fecha_dt is None:
         return "Sin registros"
+    
+    # Aseguramos hora actual en Paraguay
     now_local = pd.Timestamp.now(tz="America/Asuncion")
+    
+    # Parseo seguro de la fecha recibida
+    fecha_dt = pd.to_datetime(fecha_dt, errors="coerce")
     if fecha_dt.tzinfo is None:
-        fecha_dt = fecha_dt.tz_localize("America/Asuncion")
+        fecha_dt = fecha_dt.tz_localize("UTC").tz_convert("America/Asuncion")
     else:
         fecha_dt = fecha_dt.tz_convert("America/Asuncion")
     
     diff = now_local - fecha_dt
     secs = int(diff.total_seconds())
-    if secs < 60:
+    
+    # Evitamos tiempos negativos por pequeños desajustes de reloj
+    if secs < 0:
+        return "hace un momento"
+    elif secs < 60:
         return "hace un momento"
     elif secs < 3600:
         return f"hace {secs // 60} min"
@@ -341,8 +350,8 @@ def procesar_fechas_df(df):
 
     # Procesamiento de updated_at para controlar frescura en sidebar
     if "updated_at" in df.columns:
-        updated_dt = pd.to_datetime(df["updated_at"], errors="coerce", utc=True)
-        df["updated_at_local"] = updated_dt.dt.tz_convert("America/Asuncion")
+        df["updated_at_dt"] = pd.to_datetime(df["updated_at"], errors="coerce", utc=True).dt.tz_convert("America/Asuncion")
+        df["updated_at_local"] = df["updated_at_dt"]
     else:
         df["updated_at_local"] = df["created_at_dt"]
 
@@ -768,10 +777,10 @@ if "input_f_hasta" not in st.session_state:
 # ==========================================
 df_all = obtener_datos()
 
-if not df_all.empty and "created_at_dt" in df_all.columns:
-    # Evaluamos la fecha de actividad más reciente
-    max_updated = df_all["updated_at_local"].max() if "updated_at_local" in df_all.columns else df_all["created_at_dt"].max()
-    tiempo_hace_str = obtener_tiempo_transcurrido(max_updated)
+if not df_all.empty and "updated_at_local" in df_all.columns:
+    # Tomamos la fecha máxima real parseada
+    max_updated_dt = df_all["updated_at_local"].dropna().max()
+    tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
