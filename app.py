@@ -823,7 +823,7 @@ if not df_all_init.empty and "created_at_dt" in df_all_init.columns and not df_a
     st.sidebar.markdown(f"""
     <div class="db-info-box">
         <b>Estado Base de Datos:</b><br>
-        • <b>Ultima sincronizacion:</b> {tiempo_hace_str}<br>
+        • <b>Ultima sync:</b> {tiempo_hace_str}<br>
     </div>
     """, unsafe_allow_html=True)
 else:
