@@ -416,8 +416,8 @@ def obtener_datos_historicos_q():
         try:
             response = supabase.table("conversaciones")\
                 .select(COLUMNAS_DASHBOARD)\
-                .gte("created_at", fecha_inicio_q_ant)\
-                .lt("created_at", fecha_hasta_ayer)\
+                .gte("updated_at", fecha_inicio_q_ant)\
+                .lt("updated_at", fecha_hasta_ayer)\
                 .range(inicio, fin)\
                 .execute()
             datos = response.data
@@ -833,22 +833,34 @@ def es_chat_cerrado(row):
         return True
     return False
 
-def obtener_df_csat_valido(df_sub):
-    if df_sub.empty:
+def obtener_df_csat_valido(df_in):
+    """Retorna las conversaciones con calificaciones CSAT válidas para agentes humanos.
+    No excluye fuera de horario ni etiquetas operativas (como 'sin respuesta').
+    """
+    if df_in.empty:
         return pd.DataFrame()
-    df_c = df_sub.copy()
-    
+
+    df_c = df_in.copy()
+
+    # 1. Asegurar que existe un rating numérico válido (1 a 5)
     df_c["rating_num"] = pd.to_numeric(df_c["rating"], errors="coerce")
-    
-    df_csat = df_c[
-        df_c["rating_num"].notna() &
-        (df_c["rating_num"] >= 1) & (df_c["rating_num"] <= 5) &
-        (df_c["canal"] != "Correo electrónico") &
-        (df_c["agente_asignado"].fillna("").str.strip() != "") &
-        (df_c["agente_asignado"] != "Sin asignar") &
-        (~df_c["agente_asignado"].str.lower().str.contains("bot")) # Excluir bots por nombre
-    ]
-    return df_csat
+    df_c = df_c.dropna(subset=["rating_num"])
+
+    # 2. Filtrar solo atención humana (excluye flujos 100% de Bots/Autoatención)
+    if "por_agente" in df_c.columns:
+        df_c = df_c[df_c["por_agente"] == "no excluido"]
+
+    # 3. Deduplicar por ID de conversación para evitar duplicaciones
+    df_c = df_c.drop_duplicates(subset=["id"])
+
+    # Parsear fecha de calificación si existe
+    if "fecha_calificacion" in df_c.columns:
+        df_c["fecha_calificacion_dt"] = pd.to_datetime(
+            df_c["fecha_calificacion"], errors="coerce"
+        )
+        df_c["fecha_calificacion_solo"] = df_c["fecha_calificacion_dt"].dt.date
+
+    return df_c
 
 def calcular_csat(df_sub):
     df_valid = obtener_df_csat_valido(df_sub)
