@@ -357,10 +357,11 @@ def evaluar_horario_dashboard(dt_objeto):
 # ==========================================
 
 def procesar_fechas_df(df):
-    """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas de forma VECTORIZADA."""
+    """Convierte las fechas UTC a hora local (UTC-3) y evalúa métricas en MILISEGUNDOS."""
     if df.empty or "created_at" not in df.columns:
         return df
 
+    # 1. Conversión rápida a UTC-3
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
     local_dt = created_dt.dt.tz_convert("America/Asuncion")
 
@@ -369,10 +370,32 @@ def procesar_fechas_df(df):
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
 
-    # Evaluamos la franja de horario sobre la serie completa
-    df["horario_evaluado"] = df["created_at_dt"].apply(evaluar_horario_dashboard)
+    # 2. EVALUACIÓN VECTORIZADA DE HORARIO (PANDAS NATIVO - SIN .apply)
+    # Extraemos componentes de fecha/hora en arrays de C
+    dias_semana = local_dt.dt.dayofweek  # 0: Lunes, 4: Viernes, 5: Sábado, 6: Domingo
+    horas = local_dt.dt.hour
+    minutos = local_dt.dt.minute
+    horas_decimal = horas + (minutos / 60.0)
+    fechas_str = local_dt.dt.strftime("%Y-%m-%d")
 
-    # Marca de tiempo para CSAT
+    # Mascaras booleanas
+    es_feriado = fechas_str.isin(FERIADOS)
+    es_normal_lv = (dias_semana.isin([0, 1, 2, 3, 4])) & (horas_decimal >= 8.0) & (horas_decimal <= 17.5)
+    es_normal_sab = (dias_semana == 5) & (horas_decimal >= 9.0) & (horas_decimal <= 11.75)
+    
+    es_ext_lj = (dias_semana.isin([0, 1, 2, 3])) & ((horas_decimal >= 19.0) | (horas_decimal <= 2.0))
+    es_ext_vs = (dias_semana.isin([4, 5, 6])) & ((horas_decimal >= 18.0) | (horas_decimal <= 3.0))
+
+    # Asignación ultra rápida con np.select
+    condiciones = [
+        es_feriado,
+        es_normal_lv | es_normal_sab,
+        es_ext_lj | es_ext_vs
+    ]
+    elecciones = ["fuera de horario", "normal", "extendido"]
+    df["horario_evaluado"] = np.select(condiciones, elecciones, default="fuera de horario")
+
+    # 3. Procesamiento CSAT
     if "fecha_calificacion" in df.columns:
         calif_utc = pd.to_datetime(df["fecha_calificacion"], errors="coerce", utc=True)
         local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
@@ -383,7 +406,7 @@ def procesar_fechas_df(df):
     df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
 
-    # Fechas de Cierre
+    # 4. Fechas de Cierre
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
         cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
@@ -394,10 +417,9 @@ def procesar_fechas_df(df):
     if "primera_respuesta_min" in df.columns:
         df["primera_respuesta_min"] = pd.to_numeric(df["primera_respuesta_min"], errors="coerce").round(2)
 
-    # CÁLCULO VECTORIZADO ULTRA RÁPIDO DEL TIEMPO DE GESTIÓN (SIN .apply)
+    # 5. CÁLCULO VECTORIZADO DE TIEMPO DE GESTIÓN
     if "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
         diff_min = (df["fecha_cierre_dt"] - df["created_at_dt"]).dt.total_seconds() / 60.0
-        # Asignación nativa con NumPy (np.where)
         df["tiempo_resolucion_minutos"] = np.where(df["horario_evaluado"] == "fuera de horario", np.nan, diff_min).round(1)
 
     if "id" in df.columns:
