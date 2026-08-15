@@ -396,7 +396,7 @@ def procesar_fechas_df(df):
 COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
-    "feedback, agente_evaluado, cx_score_explanation, tenant, company, nombre_contacto, "
+    "feedback, agente_evaluado, tenant, company, nombre_contacto, "
     "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel"
 )
 
@@ -871,7 +871,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
         
     df_reporte["Feedback"] = df_exp.get("feedback", "")
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
-    df_reporte["CX Score explanation"] = df_exp.get("cx_score_explanation", "")
     df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
 
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
@@ -1139,9 +1138,9 @@ with tab_operativo:
         val_gest = ["excluido", "sin cerrar", "cumple"]
         df_all["sla_gest_eval"] = np.select(cond_gest, val_gest, default="no cumple")
 
-        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "resumen_ia"]:
+        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado"]:
             if col not in df_all.columns:
-                df_all[col] = "Sin datos" if col not in ["motivo_normalizado", "resumen_ia"] else ("Consulta General" if col == "motivo_normalizado" else "Pendiente de procesamiento")
+                df_all[col] = "Sin datos" if col not in ["motivo_normalizado"] else ("Consulta General" if col == "motivo_normalizado" else "Pendiente de procesamiento")
 
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
@@ -1313,7 +1312,7 @@ with tab_operativo:
 
             cols_csat_deseadas = [
                 "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
-                "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
+                "nombre_contacto", "tenant", "company", "agente_evaluado"
             ]
 
             st.dataframe(
@@ -1326,8 +1325,7 @@ with tab_operativo:
                     "nombre_contacto": "Contacto",
                     "tenant": "Tenant",
                     "company": "Company",
-                    "agente_evaluado": "Agente Evaluado",
-                    "cx_score_explanation": "Explicacion CX"
+                    "agente_evaluado": "Agente Evaluado"
                 },
                 hide_index=True,
                 use_container_width=True
@@ -1481,7 +1479,7 @@ with tab_operativo:
             df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
         cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                             "nombre_contacto", "tenant", "company", "resumen_ia"]
+                             "nombre_contacto", "tenant", "company"]
 
         st.dataframe(
             df_abiertos_filtrados.reindex(columns=cols_mostrar_filt).dropna(how="all", axis=1),
@@ -1493,7 +1491,6 @@ with tab_operativo:
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
                 "company": "Company",
-                "resumen_ia": "Resumen IA"
             },
             hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_filtrados"
         )
@@ -1520,7 +1517,7 @@ with tab_operativo:
             df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
 
         cols_deseadas = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                         "nombre_contacto", "tenant", "company", "resumen_ia"]
+                         "nombre_contacto", "tenant", "company"]
 
         st.dataframe(
             df_rank.reindex(columns=cols_deseadas).dropna(how="all", axis=1),
@@ -1532,7 +1529,6 @@ with tab_operativo:
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
                 "company": "Company",
-                "resumen_ia": "Resumen IA"
             },
             hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_historico_general"
         )
@@ -1567,7 +1563,7 @@ with tab_operativo:
                 df_busqueda = df_busqueda.sort_values(by="created_at_dt", ascending=False)
                 
                 cols_search = ["intercom_url", "Estado_Texto", "created_at_fmt", "agente_asignado", 
-                               "nombre_contacto", "tenant", "company", "resumen_ia"]
+                               "nombre_contacto", "tenant", "company"]
 
                 st.dataframe(
                     df_busqueda.reindex(columns=cols_search).dropna(how="all", axis=1),
@@ -1579,7 +1575,6 @@ with tab_operativo:
                         "nombre_contacto": "Contacto",
                         "tenant": "Tenant",
                         "company": "Company",
-                        "resumen_ia": "Resumen IA"
                     },
                     hide_index=True, use_container_width=True, key="tabla_busqueda_tenant_agente"
                 )
