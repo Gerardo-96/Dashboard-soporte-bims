@@ -337,7 +337,7 @@ def procesar_fechas_df(df):
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
 
-    # Procesamiento de Marca de Tiempo de Puntuación CSAT (Respaldado en created_at)
+    # Procesamiento de Marca de Tiempo de Puntuación CSAT
     if "fecha_calificacion" in df.columns:
         calif_utc = pd.to_datetime(df["fecha_calificacion"], errors="coerce", utc=True)
         local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
@@ -348,7 +348,6 @@ def procesar_fechas_df(df):
     df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
 
-    # Dentro de procesar_fechas_df(df):
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
         cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
@@ -367,7 +366,7 @@ def procesar_fechas_df(df):
 
     return df
 
-# 1. Columnas necesarias (Livianas para cuidar la red)
+# Columnas necesarias para Supabase
 COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
@@ -392,11 +391,6 @@ def obtener_inicio_trimestre_anterior():
 
 # ==========================================
 # 1. CACHÉ HISTÓRICO (CADA 24 HORAS)
-# ==========================================
-@st.cache_data(ttl=86400, show_spinner=False)
-@st.cache_data(ttl=86400, show_spinner=False)
-# ==========================================
-# 1. CACHÉ HISTÓRICO ROBUSTO (CADA 24 HORAS)
 # ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
 def obtener_datos_historicos_q():
@@ -465,14 +459,12 @@ def obtener_datos():
     datos_historicos = obtener_datos_historicos_q()
     datos_hoy = obtener_datos_hoy()
     
-    # Combinar ambas listas
     todos_los_datos = datos_historicos + datos_hoy
     
     if not todos_los_datos:
         return pd.DataFrame()
         
     df = pd.DataFrame(todos_los_datos)
-    # Eliminar duplicados por ID si algún chat cambió de día
     df = df.drop_duplicates(subset=["id"]).copy()
     
     return procesar_fechas_df(df)
@@ -549,28 +541,19 @@ st.markdown("""
 
 st.markdown("""
 <script>
-    // =========================================================================
-    // 1. WEB WORKER (Mantiene vivo el hilo de ejecucion en SEGUNDO PLANO)
-    // =========================================================================
     const workerCode = `
         setInterval(() => {
             postMessage('ping');
-        }, 10000); // Impulso cada 10 segundos
+        }, 10000);
     `;
     const blob = new Blob([workerCode], { type: 'application/javascript' });
     const worker = new Worker(URL.createObjectURL(blob));
 
     worker.onmessage = function() {
-        // Enviar evento continuo para evitar congelamiento de WebSockets en Streamlit
         window.dispatchEvent(new Event('mousemove'));
-        
-        // Hacer un PING silencioso al servidor de Streamlit para mantener la sesion viva
         fetch(window.location.href, { method: 'HEAD', cache: 'no-store' }).catch(() => {});
     };
 
-    // =========================================================================
-    // 2. SCREEN WAKE LOCK API (Evita que el sistema operativo congele la pantalla)
-    // =========================================================================
     let wakeLock = null;
     async function requestWakeLock() {
         try {
@@ -584,18 +567,13 @@ st.markdown("""
 
     requestWakeLock();
 
-    // Reactivar inmediatamente al volver a enfocar la pestaña
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
             requestWakeLock();
-            // Disparar evento de actividad inmediato
             window.dispatchEvent(new Event('keydown'));
         }
     });
 
-    // =========================================================================
-    // 3. ACTIVACIÓN DE AUDIO CONTEXT (Garantiza alertas sonoras sin bloqueo)
-    // =========================================================================
     document.addEventListener('click', function() {
         if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
             var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -607,7 +585,6 @@ st.markdown("""
 </script>
 """, unsafe_allow_html=True)
 
-# SINTETIZADOR WEB AUDIO API POTENTE (RÁFAGA DE 3 BEEPS AGUDOS)
 AUDIO_ALARM_HTML = """
 <script>
 (function() {
@@ -622,7 +599,7 @@ AUDIO_ALARM_HTML = """
         function emitirBeep(delay, freq, dur) {
             var osc = ctx.createOscillator();
             var gain = ctx.createGain();
-            osc.type = 'square'; // Onda cuadrada para un sonido penetrante estilo alarma
+            osc.type = 'square';
             osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
 
             gain.gain.setValueAtTime(0.35, ctx.currentTime + delay);
@@ -635,7 +612,6 @@ AUDIO_ALARM_HTML = """
             osc.stop(ctx.currentTime + delay + dur);
         }
 
-        // Ráfaga de 3 Beeps potentes y penetrantes (Frecuencias C6 y E6)
         emitirBeep(0.0, 1046.50, 0.18);
         emitirBeep(0.25, 1046.50, 0.18);
         emitirBeep(0.50, 1318.51, 0.30);
@@ -718,7 +694,7 @@ def evaluar_horario_estricto(dt_objeto):
     return False
 
 # ==========================================
-# EVALUACIÓN DE SLA PARA REPORTE EXCEL
+# EVALUACIÓN DE SLA Y CÁLCULOS HÁBILES
 # ==========================================
 
 def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
@@ -727,14 +703,12 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
         return "excluido"
     
     fecha_str = dt_obj.strftime("%Y-%m-%d")
-    dia_semana = dt_obj.weekday() # 0: Lunes, ..., 5: Sábado, 6: Domingo
+    dia_semana = dt_obj.weekday()
     hora_actual = dt_obj.time()
     
-    # Exclusión por Feriado
     if fecha_str in FERIADOS:
         return "excluido"
     
-    # Exclusión por Agente "Sin asignar" o vacío
     agente = str(row.get("agente_asignado", "")).strip()
     if not agente or agente in ["Sin asignar", "None", "nan"]:
         return "excluido"
@@ -794,64 +768,28 @@ def es_feriado_paraguay(fecha_date):
 
 def calcular_minutos_habiles_gestion(row):
     """
-    Calcula el tiempo de gestión descontando noches, almuerzos, fines de semana y feriados.
-    Soporta Horario Normal (8:00-12:00 / 13:00-17:30) y Horario Extendido.
+    Calcula el tiempo real de gestión descontando ÚNICAMENTE los rangos 'fuera de horario'.
+    NO descuenta almuerzo ni fines de semana (si están cubiertos por Normal o Extendido).
     """
     f_inicio = row.get("created_at_dt")
     col_cierre = "fecha_primer_cierre_dt" if "fecha_primer_cierre_dt" in row and pd.notna(row.get("fecha_primer_cierre_dt")) else "fecha_cierre_dt"
     f_cierre = row.get(col_cierre)
     
     if pd.isna(f_inicio) or pd.isna(f_cierre) or f_cierre <= f_inicio:
-        # Si aún no está cerrado o la fecha es inválida, retorna la columna original o None
         return row.get("tiempo_resolucion_minutos")
 
-    tipo_horario = str(row.get("horario_tipo", "ordinario")).lower()
     minutos_habiles = 0.0
     curr = f_inicio
+    paso = timedelta(minutes=1)
 
     while curr < f_cierre:
-        fecha_curr = curr.date()
+        # Se evalúa contra la matriz exacta de turnos (Normal + Extendido)
+        estado_horario = evaluar_horario_dashboard(curr)
         
-        # 1. Fin de semana o Feriado -> Saltar al siguiente día hábil a las 08:00
-        if curr.weekday() in [5, 6] or es_feriado_paraguay(fecha_curr):
-            curr = (curr + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
-            continue
-
-        # 2. Definición de Ventanas de Trabajo
-        if "extendido" in tipo_horario:
-            ventanas = [(curr.replace(hour=8, minute=0, second=0, microsecond=0),
-                         curr.replace(hour=18, minute=0, second=0, microsecond=0))]
-        else:
-            ventanas = [
-                (curr.replace(hour=8, minute=0, second=0, microsecond=0),
-                 curr.replace(hour=12, minute=0, second=0, microsecond=0)),
-                (curr.replace(hour=13, minute=0, second=0, microsecond=0),
-                 curr.replace(hour=17, minute=30, second=0, microsecond=0))
-            ]
-
-        fin_ultima_jornada = ventanas[-1][1]
-
-        if curr >= fin_ultima_jornada:
-            curr = (curr + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
-            continue
-
-        avanzado = False
-        for inicio_v, fin_v in ventanas:
-            if curr < inicio_v and f_cierre > inicio_v:
-                curr = inicio_v
-
-            if inicio_v <= curr < fin_v:
-                corte = min(f_cierre, fin_v)
-                minutos_habiles += (corte - curr).total_seconds() / 60.0
-                curr = corte
-                avanzado = True
-                break
-
-        if not avanzado:
-            if curr < ventanas[-1][0]:
-                curr = ventanas[-1][0]
-            else:
-                curr = (curr + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+        if estado_horario != "fuera de horario":
+            minutos_habiles += 1.0
+            
+        curr += paso
 
     return round(minutos_habiles, 1)
 
@@ -880,7 +818,6 @@ def evaluar_sla_gestion(por_agente, horario, min_gest, threshold, etiquetas=""):
     if por_agente == "excluido" or horario == "fuera de horario":
         return "excluido"
     
-    # Exclusión por etiqueta 'sin respuesta' igual que en Excel
     if "sin respuesta" in str(etiquetas).lower():
         return "excluido"
         
@@ -914,25 +851,20 @@ def obtener_df_csat_valido(df_in):
 
     df_c = df_in.copy()
 
-    # 1. Asegurar que existe un rating numérico válido (1 a 5)
     df_c["rating_num"] = pd.to_numeric(df_c["rating"], errors="coerce")
     df_c = df_c.dropna(subset=["rating_num"])
 
-    # 2. Filtrar solo atención humana
     if "por_agente" in df_c.columns:
         df_c = df_c[df_c["por_agente"] == "no excluido"]
 
-    # 3. Deduplicar por ID
     df_c = df_c.drop_duplicates(subset=["id"])
 
-    # 4. Asegurar columna intercom_url si existe la columna id
     if "id" in df_c.columns and "intercom_url" not in df_c.columns:
         df_c["id_str"] = df_c["id"].astype(str).str.strip()
         df_c["intercom_url"] = df_c["id_str"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
 
-    # 5. Parsear fecha de calificación y formato de texto
     if "fecha_calificacion" in df_c.columns:
         calif_utc = pd.to_datetime(df_c["fecha_calificacion"], errors="coerce", utc=True)
         local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
@@ -1012,18 +944,14 @@ def set_fechas_hoy():
 
 def set_fechas_semana():
     hoy = obtener_fecha_local_hoy()
-    # Lunes de la semana actual (weekday() es 0 para Lunes)
     inicio_semana = hoy - timedelta(days=hoy.weekday())
-    # Domingo de la semana actual (Lunes + 6 días)
     fin_semana = inicio_semana + timedelta(days=6)
     st.session_state["input_f_desde"] = inicio_semana
     st.session_state["input_f_hasta"] = fin_semana
 
 def set_fechas_mes():
     hoy = obtener_fecha_local_hoy()
-    # Primer día del mes actual
     inicio_mes = hoy.replace(day=1)
-    # Último día del mes actual (primer día del mes siguiente menos 1 día)
     if hoy.month == 12:
         fin_mes = date(hoy.year, 12, 31)
     else:
@@ -1032,7 +960,6 @@ def set_fechas_mes():
     st.session_state["input_f_desde"] = inicio_mes
     st.session_state["input_f_hasta"] = fin_mes
 
-# Botones rápidos de selección de rango
 col_b_hoy, col_b_sem, col_b_mes = st.sidebar.columns(3)
 col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
 col_b_sem.button("Semana", on_click=set_fechas_semana, use_container_width=True)
@@ -1213,7 +1140,7 @@ tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
 ])
 
 # ==========================================
-# FRAGMENTO DE ALERTAS EN VIVO (CON REPETICIÓN FORZADA CADA 10s)
+# FRAGMENTO DE ALERTAS EN VIVO (CADA 10s)
 # ==========================================
 @st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
@@ -1230,10 +1157,8 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        # Solo las columnas requeridas para evaluar la alerta sonora
         COLUMNAS_ALERTAS = "id, created_at, estado, canal, primera_respuesta_min"
 
-        # Filtrar directamente en la consulta para no traer chats cerrados obsoletos
         res = supabase.table("conversaciones")\
             .select(COLUMNAS_ALERTAS)\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
@@ -1277,7 +1202,6 @@ def renderizar_alertas_en_vivo():
             
             df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
 
-            # 1. RENDERIZAR TARJETA ROJA Y SONIDO
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
                 st.markdown(f"""
@@ -1288,7 +1212,6 @@ def renderizar_alertas_en_vivo():
                 """, unsafe_allow_html=True)
 
                 if act_sonido:
-                    # Inyectamos el timestamp en el HTML para forzar su re-renderizado sin usar 'key'
                     html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
                     st.components.v1.html(html_con_ts, height=0)
 
@@ -1356,7 +1279,7 @@ with tab_operativo:
     now_dt = pd.Timestamp.now(tz="America/Asuncion")
     df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
-    # CSAT SCORECARD (ALIMENTADO 100% DE LA FECHA DE PUNTUACIÓN DE CSAT)
+    # CSAT SCORECARD
     st.markdown("### CSAT Performance")
     now_date = obtener_fecha_local_hoy()
 
@@ -1427,7 +1350,7 @@ with tab_operativo:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # EVOLUCIÓN HISTÓRICA DE CSAT (ALIMENTADO DE LA FECHA DE CALIFICACIÓN)
+    # EVOLUCIÓN HISTÓRICA DE CSAT
     with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
         if not df_all.empty and "fecha_calificacion_solo" in df_all.columns:
             fecha_6m_atras = (pd.Timestamp.now(tz="America/Asuncion") - timedelta(days=180)).date()
@@ -1501,53 +1424,48 @@ with tab_operativo:
         else:
             st.info("Sin registros en la base de datos.")
 
-    # DETALLE DE CSAT (ALIMENTADO DE LA FECHA DE CALIFICACIÓN)
     # DETALLE DE CSAT PROTEGIDO CONTRA KEYERROR
-if not df_filtered_csat.empty:
-    df_csat_det = obtener_df_csat_valido(df_filtered_csat)
-    if not df_csat_det.empty:
-        with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
-            df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-            
-            if "fecha_calificacion_dt" in df_csat_det.columns:
-                df_csat_det = df_csat_det.sort_values(by=["rating_num", "fecha_calificacion_dt"], ascending=[True, False])
+    if not df_filtered_csat.empty:
+        df_csat_det = obtener_df_csat_valido(df_filtered_csat)
+        if not df_csat_det.empty:
+            with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
+                df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+                
+                if "fecha_calificacion_dt" in df_csat_det.columns:
+                    df_csat_det = df_csat_det.sort_values(by=["rating_num", "fecha_calificacion_dt"], ascending=[True, False])
 
-            # Lista de columnas deseadas
-            cols_csat_deseadas = [
-                "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
-                "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
-            ]
-            
-            # Seleccionar ÚNICAMENTE las columnas presentes en df_csat_det
-            cols_csat_existentes = [c for c in cols_csat_deseadas if c in df_csat_det.columns]
+                cols_csat_deseadas = [
+                    "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
+                    "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
+                ]
+                cols_csat_existentes = [c for c in cols_csat_deseadas if c in df_csat_det.columns]
 
-            st.dataframe(
-                df_csat_det[cols_csat_existentes],
-                column_config={
-                    "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                    "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
-                    "Calificacion": "Puntaje",
-                    "feedback": "Comentario / Feedback",
-                    "nombre_contacto": "Contacto",
-                    "tenant": "Tenant",
-                    "company": "Company",
-                    "agente_evaluado": "Agente Evaluado",
-                    "cx_score_explanation": "Explicacion CX"
-                },
-                hide_index=True,
-                use_container_width=True
-            )
+                st.dataframe(
+                    df_csat_det[cols_csat_existentes],
+                    column_config={
+                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
+                        "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
+                        "Calificacion": "Puntaje",
+                        "feedback": "Comentario / Feedback",
+                        "nombre_contacto": "Contacto",
+                        "tenant": "Tenant",
+                        "company": "Company",
+                        "agente_evaluado": "Agente Evaluado",
+                        "cx_score_explanation": "Explicacion CX"
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
 
     st.markdown("---")
 
     # ==========================================
-    # MÉTRICAS POR AGENTE EN DASHBOARD (INCLUYE SLA 1RA RESPUESTA Y SLA GESTIÓN)
+    # MÉTRICAS POR AGENTE EN DASHBOARD
     # ==========================================
     st.markdown("### Métricas por Agente & SLA Operativo")
     if not df_filtered.empty:
         df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
-        # Filtro global de métricas operativas (Horario hábil y humano)
         v_df = df_f[(df_f["por_agente"] == "no excluido") & (df_f["horario_evaluado"] != "fuera de horario")].copy()
         
         v_df["p_1ra_num"] = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
@@ -1556,7 +1474,6 @@ if not df_filtered_csat.empty:
         p_1r = round(v_df["p_1ra_num"].mean(), 2) if not v_df["p_1ra_num"].dropna().empty else 0.0
         p_gest = round(v_df["p_gest_num"].mean(), 2) if not v_df["p_gest_num"].dropna().empty else 0.0
 
-        # 1. CÁLCULO % SLA 1RA RESPUESTA (TODO EL RANGO FILTRADO)
         if "sla_1ra_eval" in df_f.columns:
             eval_1ra_rango = df_f[df_f["sla_1ra_eval"].isin(["cumple", "no cumple"])]
             if not eval_1ra_rango.empty:
@@ -1567,7 +1484,6 @@ if not df_filtered_csat.empty:
         else:
             pct_sla_1ra_total = 0.0
 
-        # 2. CÁLCULO % SLA TIEMPO DE GESTIÓN (TODO EL RANGO FILTRADO)
         if "sla_gest_eval" in df_f.columns:
             eval_gest_rango = df_f[df_f["sla_gest_eval"].isin(["cumple", "no cumple"])]
             if not eval_gest_rango.empty:
@@ -1578,7 +1494,6 @@ if not df_filtered_csat.empty:
         else:
             pct_sla_gest_total = 0.0
 
-        # CONTEO DE CHATS INGRESADOS Y CERRADOS (TOTAL VS HUMANO)
         df_cerrados = df_f[df_f["es_cerrado"]]
 
         total_ingresados_tot = len(df_f)
@@ -1587,7 +1502,6 @@ if not df_filtered_csat.empty:
         total_cerrados_tot = len(df_cerrados)
         cerrados_humanos = len(df_cerrados[df_cerrados["por_agente"] == "no excluido"])
 
-        # COLORES DINÁMICOS (Verde ≥ 90%, Rojo < 90%)
         es_cumplido_1ra = pct_sla_1ra_total >= 90.0
         color_1ra_val = "#34d399" if es_cumplido_1ra else "#f43f5e"
         border_1ra_card = "#10b981" if es_cumplido_1ra else "#ef4444"
@@ -1596,7 +1510,6 @@ if not df_filtered_csat.empty:
         color_gest_val = "#34d399" if es_cumplido_gest else "#f43f5e"
         border_gest_card = "#10b981" if es_cumplido_gest else "#ef4444"
 
-        # REUTILIZACIÓN DE ESTILO HOMOGÉNEO EN TARJETAS
         def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
             return f"""
             <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 105px; display: flex; flex-direction: column; justify-content: space-between;">
@@ -1655,7 +1568,6 @@ if not df_filtered_csat.empty:
                 f"% SLA Gestion (<= {sla_gest_th}m)": sla_g_str
             })
 
-        # CONVERSIÓN A DATAFRAME Y RENDERIZADO DENTRO DEL BLOQUE 'IF'
         df_res_agentes = pd.DataFrame(res_agentes)
         if not df_res_agentes.empty:
             df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
@@ -1680,17 +1592,24 @@ if not df_filtered_csat.empty:
     
     if not df_abiertos_filtrados.empty:
         df_abiertos_filtrados = df_abiertos_filtrados.drop_duplicates(subset=["id"])
-        df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at_dt"]).dt.total_seconds() / 60).round(1)
-        df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
-        df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
+        
+        if "min_transcurridos" not in df_abiertos_filtrados.columns and "created_at_dt" in df_abiertos_filtrados.columns:
+            df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at_dt"]).dt.total_seconds() / 60).round(1)
+            
+        if "min_transcurridos" in df_abiertos_filtrados.columns:
+            df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
+        else:
+            df_abiertos_filtrados["Horas Transcurridas"] = 0.0
+
+        if "created_at_dt" in df_abiertos_filtrados.columns:
+            df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
         cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                             "nombre_contacto", "tenant", "company"]
-        if "resumen_ia" in df_abiertos_filtrados.columns:
-            cols_mostrar_filt.append("resumen_ia")
+                             "nombre_contacto", "tenant", "company", "resumen_ia"]
+        cols_filt_existentes = [c for c in cols_mostrar_filt if c in df_abiertos_filtrados.columns]
 
         st.dataframe(
-            df_abiertos_filtrados[cols_mostrar_filt],
+            df_abiertos_filtrados[cols_filt_existentes],
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
@@ -1714,19 +1633,23 @@ if not df_filtered_csat.empty:
     
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
-        if "min_transcurridos" not in df_rank.columns:
+        if "min_transcurridos" not in df_rank.columns and "created_at_dt" in df_rank.columns:
             df_rank["min_transcurridos"] = ((now_dt - df_rank["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
-        df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
-        df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
+        if "min_transcurridos" in df_rank.columns:
+            df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
+        else:
+            df_rank["Horas Transcurridas"] = 0.0
 
-        cols_mostrar_gen = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                            "nombre_contacto", "tenant", "company"]
-        if "resumen_ia" in df_rank.columns:
-            cols_mostrar_gen.append("resumen_ia")
+        if "created_at_dt" in df_rank.columns:
+            df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
+
+        cols_deseadas = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+                         "nombre_contacto", "tenant", "company", "resumen_ia"]
+        cols_existentes = [c for c in cols_deseadas if c in df_rank.columns]
 
         st.dataframe(
-            df_rank[cols_mostrar_gen],
+            df_rank[cols_existentes],
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
@@ -1774,8 +1697,10 @@ if not df_filtered_csat.empty:
                 if "resumen_ia" in df_busqueda.columns:
                     cols_search.append("resumen_ia")
                 
+                cols_search_existentes = [c for c in cols_search if c in df_busqueda.columns]
+
                 st.dataframe(
-                    df_busqueda[cols_search],
+                    df_busqueda[cols_search_existentes],
                     column_config={
                         "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                         "Estado_Texto": "Estado",
@@ -1957,7 +1882,6 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tarjeta 1: Sincronización en Hilo Paralelo con Monitoreo Activo
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -1993,7 +1917,6 @@ with tab_admin:
 
             sync_info = GLOBAL_SYNC_STATE
 
-            # Visualización del estado actual
             if sync_info["status"] == "running":
                 st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
                 time_lib.sleep(2)
@@ -2043,7 +1966,6 @@ with tab_admin:
                     
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tarjeta 2: Parámetros Globales
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -2080,7 +2002,6 @@ with tab_admin:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tarjeta 3: Gestión de Usuarios Autorizados
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -2154,24 +2075,24 @@ with tab_faq:
     st.caption("Guía detallada sobre las reglas de negocio, horarios de atención, medición de SLA y evaluación del CSAT.")
 
     with st.expander("1. ¿Cómo se evalúa el SLA en la Pantalla (Dashboard En Vivo)?", expanded=True):
-        st.markdown("""
+        st.markdown(r"""
         * **Chats Evaluados:** Se incluyen solo los chats asignados a agentes humanos (`por_agente == 'no excluido'`) y que hayan sido creados dentro de la jornada operativa (`horario_evaluado != 'fuera de horario'`).
         * **Promedios de Respuesta y Gestión:** Se calcula la media numérica (`mean`) en minutos de la **Primera Respuesta** y del **Tiempo de Resolución/Gestión** de los chats válidos del rango de fechas consultado.
         * **Porcentaje de Cumplimiento:** Es la proporción de conversaciones donde el tiempo de respuesta o gestión fue menor o igual al umbral objetivo configurado (ejemplo: $\le 2.0$ min para 1ra respuesta y $\le 60.0$ min para gestión).
         """)
 
     with st.expander("2. ¿Cuáles son los Horarios y Criterios de Exclusión para la medición del SLA?", expanded=False):
-        st.markdown("""
+        st.markdown(r"""
         #### 📅 Días Feriados
         Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
         
         #### 🕒 Horario Hábil Normal
-        * **Lunes a Viernes:** 08:00 a 18:00 hs.
-        * **Sábados:** 09:00 a 12:00 hs.
+        * **Lunes a Viernes:** 08:00 a 17:30 hs (Jornada continua, sin pausar almuerzo).
+        * **Sábados:** 09:00 a 11:45 hs.
 
         #### 🌙 Horario Extendido (Turno Noche / Fin de Semana)
-        * **Lunes a Miércoles:** 19:00 a 02:00 hs (del día siguiente)
-        * **Jueves a Domingo:** 18:00 a 03:00 hs (del día siguiente)
+        * **Lunes a Miércoles:** 19:00 a 02:00 hs (del día siguiente).
+        * **Jueves a Domingo:** 18:00 a 03:00 hs (del día siguiente, incluye fines de semana).
 
         #### 🚫 Exclusiones Generales
         * Chats asignados únicamente a Bots (`Monica (Bot)`, etc.).
@@ -2179,13 +2100,13 @@ with tab_faq:
         """)
 
     with st.expander("3. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
-        st.markdown("""
+        st.markdown(r"""
         En el archivo Excel descargable, cada conversación contiene tres columnas de evaluación independiente:
 
         * **SLA Normal:** 
           * **Cumple:** Creado en Día Laboral, Horario Normal, con agente asignado, y cuya primera respuesta tomó $\le$ al límite ($2.0$ min).
           * **No Cumple:** Creado en Día Laboral, Horario Normal pero la primera respuesta superó el tiempo límite.
-          * **Excluído** Creado fuera de los días laborales o en feriado, o fuera del Horario Normal, o atendido exclusivamente por el bot.
+          * **Excluído:** Creado fuera de los días laborales o en feriado, o fuera del Horario Normal, o atendido exclusivamente por el bot.
 
         * **SLA Extendido:** 
           * **Cumple:** Creado dentro de la franja de Horario Extendido, con agente asignado, y con primera respuesta $\le$ al límite ($2.0$ min).
@@ -2200,9 +2121,9 @@ with tab_faq:
         """)
 
     with st.expander("4. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
-        st.markdown("""
+        st.markdown(r"""
         * **Origen de la Fecha:** Las métricas, gráficos y tablas de CSAT se alimentan de la **marca de tiempo exacta en que el cliente calificó la atención** (`fecha_calificacion`).
         * **Calificaciones Válidas:** Se consideran las puntuaciones numéricas entre **1 y 5 estrellas** de conversaciones atendidas por agentes humanos.
         * **Fórmula de CSAT:**
-          $$\\text{CSAT (\\%)} = \\left( \\frac{\\text{Total de Calificaciones Positivas (4 y 5 estrellas)}}{\\text{Total de Encuestas Validadas}} \\right) \\times 100$$
+          $$\text{CSAT (\%)} = \left( \frac{\text{Total de Calificaciones Positivas (4 y 5 estrellas)}}{\text{Total de Encuestas Validadas}} \right) \times 100$$
         """)
