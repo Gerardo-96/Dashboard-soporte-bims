@@ -3,6 +3,7 @@ import io
 import time as time_lib
 import threading
 from datetime import datetime, timedelta, time, date, timezone
+import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -267,7 +268,7 @@ if not st.session_state["user_authenticated"]:
                     status_box.error("Credenciales incorrectas o usuario no activo.")
 
     st.stop()
-    
+
 # ==========================================
 # FUNCIONES AUXILIARES DE TIEMPOS Y REGLAS DE NEGOCIO
 # ==========================================
@@ -276,16 +277,6 @@ def obtener_fecha_local_hoy():
     """Retorna la fecha actual exacta en Paraguay (UTC-3)."""
     tz_py = timezone(timedelta(hours=-3))
     return datetime.now(tz_py).date()
-
-def convertir_a_minutos(val):
-    """Garantiza la conversión limpia a minutos numéricos float."""
-    if pd.isna(val) or val is None:
-        return None
-    try:
-        v = float(val)
-        return round(v, 2)
-    except (ValueError, TypeError):
-        return None
 
 def obtener_tiempo_transcurrido(fecha_dt):
     """Calcula el tiempo transcurrido relativo desde la última actualización de Supabase."""
@@ -361,42 +352,9 @@ def evaluar_horario_dashboard(dt_objeto):
 
     return "fuera de horario"
 
-def es_feriado_paraguay(fecha_date):
-    """Verifica si una fecha es un feriado oficial en Paraguay."""
-    feriados_fijos = [
-        (1, 1), (3, 1), (5, 1), (5, 14), (5, 15), 
-        (6, 12), (8, 15), (9, 29), (12, 8), (12, 25)
-    ]
-    return (fecha_date.month, fecha_date.day) in feriados_fijos
-
-def calcular_minutos_habiles_gestion(row):
-    """
-    Calcula el tiempo de gestión de forma ultra rápida sin bucles 'while'.
-    Multiplica el tiempo total según el porcentaje de cobertura operativa del turno.
-    """
-    f_inicio = row.get("created_at_dt")
-    col_cierre = "fecha_primer_cierre_dt" if "fecha_primer_cierre_dt" in row and pd.notna(row.get("fecha_primer_cierre_dt")) else "fecha_cierre_dt"
-    f_cierre = row.get(col_cierre)
-    
-    if pd.isna(f_inicio) or pd.isna(f_cierre) or f_cierre <= f_inicio:
-        return row.get("tiempo_resolucion_minutos")
-
-    diff_sec = (f_cierre - f_inicio).total_seconds()
-    
-    # Si la solución tomó menos de 24 horas, evaluamos el estado del turno
-    if diff_sec <= 86400:
-        # Si cae en fuera de horario al inicio y fin, el tiempo contable es mínimo
-        if evaluar_horario_dashboard(f_inicio) == "fuera de horario" and evaluar_horario_dashboard(f_cierre) == "fuera de horario":
-            return 0.0
-        return round(diff_sec / 60.0, 1)
-
-    # Para casos multidía (tickets de varios días), calculamos de forma directa los días hábiles aproximados
-    dias_totales = (f_cierre - f_inicio).days
-    # Aproximación de jornada operativa activa (9.5 horas útiles por día hábil = 570 min/día)
-    minutos_estimados = dias_totales * 570.0
-    return round(minutos_estimados, 1)
-
-import numpy as np  # Asegúrate de tener import numpy as np arriba en las importaciones
+# ==========================================
+# LIMPIEZA Y PROCESAMIENTO VECTORIZADO (ALTO RENDIMIENTO)
+# ==========================================
 
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas de forma VECTORIZADA."""
@@ -411,10 +369,10 @@ def procesar_fechas_df(df):
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
 
-    # Evaluamos el horario sobre la serie completa
+    # Evaluamos la franja de horario sobre la serie completa
     df["horario_evaluado"] = df["created_at_dt"].apply(evaluar_horario_dashboard)
 
-    # Procesamiento de Marca de Tiempo de Puntuación CSAT
+    # Marca de tiempo para CSAT
     if "fecha_calificacion" in df.columns:
         calif_utc = pd.to_datetime(df["fecha_calificacion"], errors="coerce", utc=True)
         local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
@@ -425,7 +383,7 @@ def procesar_fechas_df(df):
     df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
 
-    # Procesamiento de Fechas de Cierre
+    # Fechas de Cierre
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
         cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
@@ -436,15 +394,20 @@ def procesar_fechas_df(df):
     if "primera_respuesta_min" in df.columns:
         df["primera_respuesta_min"] = pd.to_numeric(df["primera_respuesta_min"], errors="coerce").round(2)
 
-    # RECALCULAMOS EL TIEMPO DE GESTIÓN VECTORIZADO (SÚPER RÁPIDO)
+    # CÁLCULO VECTORIZADO ULTRA RÁPIDO DEL TIEMPO DE GESTIÓN (SIN .apply)
     if "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
         diff_min = (df["fecha_cierre_dt"] - df["created_at_dt"]).dt.total_seconds() / 60.0
-        # Si la conversación se inició fuera de horario, descartamos
+        # Asignación nativa con NumPy (np.where)
         df["tiempo_resolucion_minutos"] = np.where(df["horario_evaluado"] == "fuera de horario", np.nan, diff_min).round(1)
+
+    if "id" in df.columns:
+        df["id_str"] = df["id"].astype(str).str.strip()
+        df["intercom_url"] = df["id_str"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+        )
 
     return df
 
-# Columnas necesarias para Supabase
 COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
@@ -468,7 +431,7 @@ def obtener_inicio_trimestre_anterior():
 
 
 # ==========================================
-# 1. CACHÉ HISTÓRICO (CADA 24 HORAS)
+# CACHÉ DE DATOS EN SUPABASE
 # ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
 def obtener_datos_historicos_q():
@@ -509,9 +472,6 @@ def obtener_datos_historicos_q():
     return todos_los_datos
 
 
-# ==========================================
-# 2. CACHÉ DEL DÍA EN CURSO (CADA 30 MINUTOS)
-# ==========================================
 @st.cache_data(ttl=1800, show_spinner=False)
 def obtener_datos_hoy():
     """Descarga ÚNICAMENTE las conversaciones del día de hoy (cada 30 min)."""
@@ -529,9 +489,6 @@ def obtener_datos_hoy():
         return []
 
 
-# ==========================================
-# 3. UNIFICADOR GENERAL (COMBINA AMBOS)
-# ==========================================
 def obtener_datos():
     """Une los datos históricos de 24h con los datos frescos de hoy."""
     datos_historicos = obtener_datos_historicos_q()
@@ -615,52 +572,6 @@ st.markdown("""
     }
     .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
 </style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<script>
-    const workerCode = `
-        setInterval(() => {
-            postMessage('ping');
-        }, 10000);
-    `;
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const worker = new Worker(URL.createObjectURL(blob));
-
-    worker.onmessage = function() {
-        window.dispatchEvent(new Event('mousemove'));
-        fetch(window.location.href, { method: 'HEAD', cache: 'no-store' }).catch(() => {});
-    };
-
-    let wakeLock = null;
-    async function requestWakeLock() {
-        try {
-            if ('wakeLock' in navigator) {
-                wakeLock = await navigator.wakeLock.request('screen');
-            }
-        } catch (err) {
-            console.log('WakeLock no disponible o denegado');
-        }
-    }
-
-    requestWakeLock();
-
-    document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'visible') {
-            requestWakeLock();
-            window.dispatchEvent(new Event('keydown'));
-        }
-    });
-
-    document.addEventListener('click', function() {
-        if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
-            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-        }
-    }, { once: true });
-</script>
 """, unsafe_allow_html=True)
 
 AUDIO_ALARM_HTML = """
@@ -897,15 +808,14 @@ if "input_f_desde" not in st.session_state:
 if "input_f_hasta" not in st.session_state:
     st.session_state["input_f_hasta"] = hoy_local
 
-# ==========================
-# SIDEBAR / ESTADO & FILTROS DINÁMICOS
-# ==========================
-df_all_init = obtener_datos()
+# ==========================================
+# CARGA ÚNICA GLOBAL DE DATOS (ÓPTIMO EN RAM)
+# ==========================================
+df_all = obtener_datos()
 
-if not df_all_init.empty and "created_at_dt" in df_all_init.columns and not df_all_init["created_at_dt"].dropna().empty:
-    min_created_dt = df_all_init["created_at_dt"].min()
-    max_updated_dt = df_all_init["updated_at_local"].max() if "updated_at_local" in df_all_init.columns else min_created_dt
-    
+if not df_all.empty and "created_at_dt" in df_all.columns and not df_all["created_at_dt"].dropna().empty:
+    min_created_dt = df_all["created_at_dt"].min()
+    max_updated_dt = df_all["updated_at_local"].max() if "updated_at_local" in df_all.columns else min_created_dt
     tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
     
     st.sidebar.markdown(f"""
@@ -1061,12 +971,10 @@ def modal_exportar_excel():
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    df_all_data = obtener_datos()
-    
-    if not df_all_data.empty and "fecha_solo" in df_all_data.columns:
-        df_exp_filt = df_all_data[
-            (df_all_data["fecha_solo"] >= pd.to_datetime(f_exp_inicio).date()) & 
-            (df_all_data["fecha_solo"] <= pd.to_datetime(f_exp_fin).date())
+    if not df_all.empty and "fecha_solo" in df_all.columns:
+        df_exp_filt = df_all[
+            (df_all["fecha_solo"] >= pd.to_datetime(f_exp_inicio).date()) & 
+            (df_all["fecha_solo"] <= pd.to_datetime(f_exp_fin).date())
         ].copy()
         
         if usar_hora_exp and not df_exp_filt.empty:
@@ -1210,7 +1118,7 @@ def renderizar_alertas_en_vivo():
                     if "canal" in df_criticos_sla.columns:
                         cols_check.append("canal")
                     
-                    st.dataframe(df_criticos_sla[cols_check], use_container_width=True)
+                    st.dataframe(df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), use_container_width=True)
                 else:
                     st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
         else:
@@ -1227,13 +1135,11 @@ def renderizar_alertas_en_vivo():
 with tab_operativo:
     renderizar_alertas_en_vivo()
 
-    df_all = obtener_datos()
     sla_1ra_th = st.session_state["sla_1ra_th"]
     sla_gest_th = st.session_state["sla_gest_th"]
     alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
 
     if not df_all.empty:
-        df_all["horario_evaluado"] = df_all["created_at_dt"].apply(evaluar_horario_dashboard)
         df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
 
         df_all["sla_1ra_eval"] = df_all.apply(
@@ -1425,10 +1331,9 @@ with tab_operativo:
                     "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
                     "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
                 ]
-                cols_csat_existentes = [c for c in cols_csat_deseadas if c in df_csat_det.columns]
 
                 st.dataframe(
-                    df_csat_det[cols_csat_existentes],
+                    df_csat_det.reindex(columns=cols_csat_deseadas).dropna(how="all", axis=1),
                     column_config={
                         "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
                         "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
@@ -1593,10 +1498,9 @@ with tab_operativo:
 
         cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
                              "nombre_contacto", "tenant", "company", "resumen_ia"]
-        cols_filt_existentes = [c for c in cols_mostrar_filt if c in df_abiertos_filtrados.columns]
 
         st.dataframe(
-            df_abiertos_filtrados[cols_filt_existentes],
+            df_abiertos_filtrados.reindex(columns=cols_mostrar_filt).dropna(how="all", axis=1),
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
@@ -1633,10 +1537,9 @@ with tab_operativo:
 
         cols_deseadas = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
                          "nombre_contacto", "tenant", "company", "resumen_ia"]
-        cols_existentes = [c for c in cols_deseadas if c in df_rank.columns]
 
         st.dataframe(
-            df_rank[cols_existentes],
+            df_rank.reindex(columns=cols_deseadas).dropna(how="all", axis=1),
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
@@ -1680,14 +1583,10 @@ with tab_operativo:
                 df_busqueda = df_busqueda.sort_values(by="created_at_dt", ascending=False)
                 
                 cols_search = ["intercom_url", "Estado_Texto", "created_at_fmt", "agente_asignado", 
-                               "nombre_contacto", "tenant", "company"]
-                if "resumen_ia" in df_busqueda.columns:
-                    cols_search.append("resumen_ia")
-                
-                cols_search_existentes = [c for c in cols_search if c in df_busqueda.columns]
+                               "nombre_contacto", "tenant", "company", "resumen_ia"]
 
                 st.dataframe(
-                    df_busqueda[cols_search_existentes],
+                    df_busqueda.reindex(columns=cols_search).dropna(how="all", axis=1),
                     column_config={
                         "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                         "Estado_Texto": "Estado",
@@ -1708,11 +1607,11 @@ with tab_operativo:
         st.info("Sin datos para el buscador.")
 
 with tab_resumen:
-    df_all_r = obtener_datos()
+    # Reutilización eficiente de df_all cargado globalmente (Sin llamadas redundantes a obtener_datos)
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
-    if not df_all_r.empty and "fecha_solo" in df_all_r.columns:
-        df_filtered_r = df_all_r[(df_all_r["fecha_solo"] >= f_desde_v) & (df_all_r["fecha_solo"] <= f_hasta_v)].copy()
+    if not df_all.empty and "fecha_solo" in df_all.columns:
+        df_filtered_r = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy()
         
         if usar_filtro_hora and not df_filtered_r.empty:
             df_filtered_r = df_filtered_r[(df_filtered_r["hora_solo"] >= hora_inicio) & (df_filtered_r["hora_solo"] <= hora_fin)]
