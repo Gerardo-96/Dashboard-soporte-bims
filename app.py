@@ -1666,9 +1666,8 @@ with tab_operativo:
         df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
         cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                             "nombre_contacto", "tenant", "company"]
-        if "resumen_ia" in df_abiertos_filtrados.columns:
-            cols_mostrar_filt.append("resumen_ia")
+                     "nombre_contacto", "tenant", "company", "resumen_ia"]
+        cols_filt_existentes = [c for c in cols_mostrar_filt if c in df_abiertos_filtrados.columns]
 
         st.dataframe(
             df_abiertos_filtrados[cols_mostrar_filt],
@@ -1689,25 +1688,34 @@ with tab_operativo:
 
     st.markdown("---")
 
-    # RANKING DE CHATS ABIERTOS GENERAL HISTÓRICO
+    # ==========================================
+    # RANKING GENERAL DE CHATS ABIERTOS HISTÓRICO (PROTEGIDO)
+    # ==========================================
     cant_abiertos_gen = len(df_abiertos_all) if not df_abiertos_all.empty else 0
     st.markdown(f"### Ranking General de Chats Abiertos (Historico Pendiente) — {cant_abiertos_gen} chats")
     
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
-        if "min_transcurridos" not in df_rank.columns:
+        if "min_transcurridos" not in df_rank.columns and "created_at_dt" in df_rank.columns:
             df_rank["min_transcurridos"] = ((now_dt - df_rank["created_at_dt"]).dt.total_seconds() / 60).round(1)
-            
-        df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
-        df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
+        
+        if "min_transcurridos" in df_rank.columns:
+            df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
+        else:
+            df_rank["Horas Transcurridas"] = 0.0
 
-        cols_mostrar_gen = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
-                            "nombre_contacto", "tenant", "company"]
-        if "resumen_ia" in df_rank.columns:
-            cols_mostrar_gen.append("resumen_ia")
+        if "created_at_dt" in df_rank.columns:
+            df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
+
+        # 1. Definimos las columnas deseadas
+        cols_deseadas = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+                         "nombre_contacto", "tenant", "company", "resumen_ia"]
+    
+        # 2. Filtramos SOLO las columnas que sí existen en df_rank para evitar el KeyError
+        cols_existentes = [c for c in cols_deseadas if c in df_rank.columns]
 
         st.dataframe(
-            df_rank[cols_mostrar_gen],
+            df_rank[cols_existentes],
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
                 "created_at_fmt": "Fecha Creacion", 
