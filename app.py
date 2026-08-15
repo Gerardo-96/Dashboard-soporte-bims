@@ -871,8 +871,8 @@ st.sidebar.markdown("### Filtros de Consulta")
 # Botones rápidos de selección de rango
 col_b_hoy, col_b_sem, col_b_mes = st.sidebar.columns(3)
 col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
-col_b_sem.button("Esta Semana", on_click=set_fechas_semana, use_container_width=True)
-col_b_mes.button("Este Mes", on_click=set_fechas_mes, use_container_width=True)
+col_b_sem.button("Semana", on_click=set_fechas_semana, use_container_width=True)
+col_b_mes.button("Mes", on_click=set_fechas_mes, use_container_width=True)
 
 with st.sidebar.form("form_filtros"):
     st.caption("Rango de Fechas")
