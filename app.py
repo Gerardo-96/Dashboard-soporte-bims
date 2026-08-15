@@ -1030,6 +1030,11 @@ def renderizar_alertas_en_vivo():
         estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
         
         df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
+        # Generación de URL hacia Intercom
+        df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
+        df_activos["intercom_url"] = df_activos["id_str"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+        )
         
         if "canal" in df_activos.columns:
             df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
@@ -1072,7 +1077,15 @@ def renderizar_alertas_en_vivo():
                     if "canal" in df_criticos_sla.columns:
                         cols_check.append("canal")
                     
-                    st.dataframe(df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), use_container_width=True)
+                    st.dataframe(df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), 
+                                 column_config={
+                                    "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                                    "created_at_fmt": "Fecha Creación",
+                                    "min_transcurridos": "Min. Transcurridos",
+                                    "estado": "Estado",
+                                    "canal": "Canal"
+                                },
+                                 hide_index=True, use_container_width=True)
                 else:
                     st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
         else:
