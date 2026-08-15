@@ -1537,7 +1537,6 @@ if not df_filtered_csat.empty:
                 hide_index=True,
                 use_container_width=True
             )
-                )
 
     st.markdown("---")
 
