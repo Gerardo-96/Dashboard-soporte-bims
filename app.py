@@ -1110,11 +1110,6 @@ with tab_operativo:
         # Un chat está CERRADO únicamente si su estado en Supabase/Intercom indica cierre explícito
         df_all["es_cerrado"] = estado_clean.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"])
 
-    now_dt = pd.Timestamp.now(tz="America/Asuncion")
-    
-    # Obtenemos el DataFrame con los chats que realmente siguen ABIERTOS
-    df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty else pd.DataFrame()
-
         # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
         cond_1ra = [
             (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario"),
