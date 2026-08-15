@@ -400,7 +400,7 @@ def obtener_inicio_trimestre_anterior():
 # ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
 def obtener_datos_historicos_q():
-    """Descarga datos desde el Q anterior hasta el día de ayer (1 vez al día)."""
+    """Descarga datos históricos desde el Q anterior usando created_at (1 vez al día)."""
     todos_los_datos = []
     lote = 0
     tamanio_lote = 1000
@@ -414,18 +414,16 @@ def obtener_datos_historicos_q():
         fin = inicio + tamanio_lote - 1
         
         try:
-            # Consulta limpia sin sintaxis compleja de OR en cadena
             response = supabase.table("conversaciones")\
                 .select(COLUMNAS_DASHBOARD)\
-                .gte("updated_at", fecha_inicio_q_ant)\
+                .gte("created_at", fecha_inicio_q_ant)\
                 .lt("created_at", fecha_hasta_ayer)\
                 .range(inicio, fin)\
                 .execute()
             
             datos = response.data or []
         except Exception as e:
-            # Imprimir en consola de Streamlit Cloud para ver qué ocurrió si falla
-            print(f"Error cargando histórico: {e}")
+            st.error(f"Error consultando histórico Supabase: {e}")
             break
         
         if not datos:
