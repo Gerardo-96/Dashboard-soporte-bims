@@ -443,18 +443,30 @@ def obtener_datos_historicos_q():
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def obtener_datos_hoy():
-    """Descarga ÚNICAMENTE las conversaciones del día de hoy (cada 30 min)."""
-    hoy = obtener_fecha_local_hoy()
+    """Descarga conversaciones creadas O actualizadas el día de hoy."""
+    hoy = obtener_fecha_local_hoy() # YYYY-MM-DD local
     fecha_inicio_hoy = f"{hoy}T00:00:00Z"
     
     try:
+        # Filtramos por updated_at para incluir chats creados antes pero activos hoy
         response = supabase.table("conversaciones")\
             .select(COLUMNAS_DASHBOARD)\
-            .gte("created_at", fecha_inicio_hoy)\
+            .gte("updated_at", fecha_inicio_hoy)\
             .execute()
-        return response.data or []
+            
+        datos = response.data or []
+        
+        # Si por alguna razón no trae por updated_at, hacemos un fallback por created_at
+        if not datos:
+            response_created = supabase.table("conversaciones")\
+                .select(COLUMNAS_DASHBOARD)\
+                .gte("created_at", fecha_inicio_hoy)\
+                .execute()
+            datos = response_created.data or []
+            
+        return datos
     except Exception as e:
-        st.error(f"Error consultando datos de Hoy: {e}")
+        st.error(f"Error consultando datos de Hoy en Supabase: {e}")
         return []
 
 
