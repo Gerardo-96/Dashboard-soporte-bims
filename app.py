@@ -305,63 +305,32 @@ FERIADOS = [
     "2026-12-08", "2026-12-25"
 ]
 
-DIAS_NORMAL_L_V = [0, 1, 2, 3, 4]
-NORMAL_L_V_INICIO = time(8, 0, 0)
-NORMAL_L_V_FIN = time(17, 30, 0)
+def evaluar_horario_dashboard_dt(dt_series):
+    """Evaluación vectorizada sobre la Serie completa de Datetime de Pandas."""
+    dias_semana = dt_series.dt.dayofweek
+    horas_decimal = dt_series.dt.hour + (dt_series.dt.minute / 60.0)
+    fechas_str = dt_series.dt.strftime("%Y-%m-%d")
 
-DIAS_NORMAL_SABADO = [5]
-NORMAL_SABADO_INICIO = time(9, 0, 0)
-NORMAL_SABADO_FIN = time(11, 45, 0)
+    es_feriado = fechas_str.isin(FERIADOS)
+    es_normal_lv = (dias_semana.isin([0, 1, 2, 3, 4])) & (horas_decimal >= 8.0) & (horas_decimal <= 17.5)
+    es_normal_sab = (dias_semana == 5) & (horas_decimal >= 9.0) & (horas_decimal <= 11.75)
+    
+    es_ext_lj = (dias_semana.isin([0, 1, 2, 3])) & ((horas_decimal >= 19.0) | (horas_decimal <= 2.0))
+    es_ext_vs = (dias_semana.isin([4, 5, 6])) & ((horas_decimal >= 18.0) | (horas_decimal <= 3.0))
 
-DIAS_EXTENDIDO_L_J = [0, 1, 2, 3]
-EXTENDIDO_L_J_INICIO = time(19, 0, 0)
-EXTENDIDO_L_J_FIN = time(2, 0, 0)
-
-DIAS_EXTENDIDO_V_S = [4, 5]
-EXTENDIDO_V_S_INICIO = time(18, 0, 0)
-EXTENDIDO_V_S_FIN = time(3, 0, 0)
-
-def evaluar_horario_dashboard(dt_objeto):
-    if pd.isna(dt_objeto):
-        return "fuera de horario"
-    fecha_str = dt_objeto.strftime("%Y-%m-%d")
-    dia_semana = dt_objeto.weekday()
-    hora_actual = dt_objeto.time()
-
-    dt_ayer = dt_objeto - timedelta(days=1)
-    dia_ayer = dt_ayer.weekday()
-    fecha_ayer_str = dt_ayer.strftime("%Y-%m-%d")
-
-    if dia_ayer in DIAS_EXTENDIDO_L_J and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_L_J_FIN:
-        return "extendido"
-    if dia_ayer in DIAS_EXTENDIDO_V_S and fecha_ayer_str not in FERIADOS and hora_actual <= EXTENDIDO_V_S_FIN:
-        return "extendido"
-
-    if fecha_str in FERIADOS:
-        return "fuera de horario"
-
-    if dia_semana in DIAS_NORMAL_L_V and NORMAL_L_V_INICIO <= hora_actual <= NORMAL_L_V_FIN:
-        return "normal"
-    if dia_semana in DIAS_NORMAL_SABADO and NORMAL_SABADO_INICIO <= hora_actual <= NORMAL_SABADO_FIN:
-        return "normal"
-
-    if dia_semana in DIAS_EXTENDIDO_L_J and hora_actual >= EXTENDIDO_L_J_INICIO:
-        return "extendido"
-    if dia_semana in DIAS_EXTENDIDO_V_S and hora_actual >= EXTENDIDO_V_S_INICIO:
-        return "extendido"
-
-    return "fuera de horario"
-
-# ==========================================
-# LIMPIEZA Y PROCESAMIENTO VECTORIZADO (ALTO RENDIMIENTO)
-# ==========================================
+    condiciones = [
+        es_feriado,
+        es_normal_lv | es_normal_sab,
+        es_ext_lj | es_ext_vs
+    ]
+    elecciones = ["fuera de horario", "normal", "extendido"]
+    return np.select(condiciones, elecciones, default="fuera de horario")
 
 def procesar_fechas_df(df):
-    """Convierte las fechas UTC a hora local (UTC-3) y evalúa métricas en MILISEGUNDOS."""
+    """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas VECTORIZADAS."""
     if df.empty or "created_at" not in df.columns:
         return df
 
-    # 1. Conversión rápida a UTC-3
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
     local_dt = created_dt.dt.tz_convert("America/Asuncion")
 
@@ -370,32 +339,10 @@ def procesar_fechas_df(df):
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
 
-    # 2. EVALUACIÓN VECTORIZADA DE HORARIO (PANDAS NATIVO - SIN .apply)
-    # Extraemos componentes de fecha/hora en arrays de C
-    dias_semana = local_dt.dt.dayofweek  # 0: Lunes, 4: Viernes, 5: Sábado, 6: Domingo
-    horas = local_dt.dt.hour
-    minutos = local_dt.dt.minute
-    horas_decimal = horas + (minutos / 60.0)
-    fechas_str = local_dt.dt.strftime("%Y-%m-%d")
+    # Evaluamos la franja de horario vectorizada
+    df["horario_evaluado"] = evaluar_horario_dashboard_dt(df["created_at_dt"])
 
-    # Mascaras booleanas
-    es_feriado = fechas_str.isin(FERIADOS)
-    es_normal_lv = (dias_semana.isin([0, 1, 2, 3, 4])) & (horas_decimal >= 8.0) & (horas_decimal <= 17.5)
-    es_normal_sab = (dias_semana == 5) & (horas_decimal >= 9.0) & (horas_decimal <= 11.75)
-    
-    es_ext_lj = (dias_semana.isin([0, 1, 2, 3])) & ((horas_decimal >= 19.0) | (horas_decimal <= 2.0))
-    es_ext_vs = (dias_semana.isin([4, 5, 6])) & ((horas_decimal >= 18.0) | (horas_decimal <= 3.0))
-
-    # Asignación ultra rápida con np.select
-    condiciones = [
-        es_feriado,
-        es_normal_lv | es_normal_sab,
-        es_ext_lj | es_ext_vs
-    ]
-    elecciones = ["fuera de horario", "normal", "extendido"]
-    df["horario_evaluado"] = np.select(condiciones, elecciones, default="fuera de horario")
-
-    # 3. Procesamiento CSAT
+    # Marca de tiempo para CSAT
     if "fecha_calificacion" in df.columns:
         calif_utc = pd.to_datetime(df["fecha_calificacion"], errors="coerce", utc=True)
         local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
@@ -406,7 +353,7 @@ def procesar_fechas_df(df):
     df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
     df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
 
-    # 4. Fechas de Cierre
+    # Fechas de Cierre
     col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
     if col_cierre in df.columns:
         cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
@@ -417,7 +364,7 @@ def procesar_fechas_df(df):
     if "primera_respuesta_min" in df.columns:
         df["primera_respuesta_min"] = pd.to_numeric(df["primera_respuesta_min"], errors="coerce").round(2)
 
-    # 5. CÁLCULO VECTORIZADO DE TIEMPO DE GESTIÓN
+    # CÁLCULO VECTORIZADO ULTRA RÁPIDO DE TIEMPO DE GESTIÓN
     if "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
         diff_min = (df["fecha_cierre_dt"] - df["created_at_dt"]).dt.total_seconds() / 60.0
         df["tiempo_resolucion_minutos"] = np.where(df["horario_evaluado"] == "fuera de horario", np.nan, diff_min).round(1)
@@ -727,24 +674,6 @@ def evaluar_sla_gestion_excel(row, threshold_gest):
         return "sin cerrar"
     return "cumple" if min_gest <= threshold_gest else "no cumple"
 
-def evaluar_sla_1ra(por_agente, horario, min_1ra, threshold):
-    if por_agente == "excluido" or horario == "fuera de horario":
-        return "excluido"
-    if pd.isna(min_1ra):
-        return "no cumple"
-    return "cumple" if min_1ra <= threshold else "no cumple"
-
-def evaluar_sla_gestion(por_agente, horario, min_gest, threshold, etiquetas=""):
-    if por_agente == "excluido" or horario == "fuera de horario":
-        return "excluido"
-    
-    if "sin respuesta" in str(etiquetas).lower():
-        return "excluido"
-        
-    if pd.isna(min_gest):
-        return "sin cerrar"
-    return "cumple" if min_gest <= threshold else "no cumple"
-
 def calificacion_a_estrellas(x):
     if pd.isna(x) or str(x).strip() in ["", "None", "nan", "null"]:
         return ""
@@ -764,48 +693,31 @@ def es_chat_cerrado(row):
         return True
     return False
 
+# ==========================================
+# GESTIÓN UNIFICADA Y ULTRA RÁPIDA DE CSAT
+# ==========================================
+
 def obtener_df_csat_valido(df_in):
-    """Retorna las conversaciones con calificaciones CSAT válidas para agentes humanos."""
+    """Retorna las conversaciones con calificaciones CSAT válidas en un solo filtro."""
     if df_in.empty:
         return pd.DataFrame()
 
     df_c = df_in.copy()
-
     df_c["rating_num"] = pd.to_numeric(df_c["rating"], errors="coerce")
     df_c = df_c.dropna(subset=["rating_num"])
 
     if "por_agente" in df_c.columns:
         df_c = df_c[df_c["por_agente"] == "no excluido"]
 
-    df_c = df_c.drop_duplicates(subset=["id"])
+    return df_c.drop_duplicates(subset=["id"])
 
-    if "id" in df_c.columns and "intercom_url" not in df_c.columns:
-        df_c["id_str"] = df_c["id"].astype(str).str.strip()
-        df_c["intercom_url"] = df_c["id_str"].apply(
-            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-        )
-
-    if "fecha_calificacion" in df_c.columns:
-        calif_utc = pd.to_datetime(df_c["fecha_calificacion"], errors="coerce", utc=True)
-        local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
-        df_c["fecha_calificacion_dt"] = local_calif_dt
-        df_c["fecha_calificacion_fmt"] = local_calif_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
-        df_c["fecha_calificacion_solo"] = local_calif_dt.dt.date
-    elif "created_at_dt" in df_c.columns:
-        df_c["fecha_calificacion_dt"] = df_c["created_at_dt"]
-        df_c["fecha_calificacion_fmt"] = df_c.get("created_at_fmt", "Sin fecha")
-        df_c["fecha_calificacion_solo"] = df_c.get("fecha_solo", None)
-
-    return df_c
-    
-def calcular_csat(df_sub):
-    df_valid = obtener_df_csat_valido(df_sub)
-    if df_valid.empty:
+def calcular_csat_rapido(df_csat_preparado):
+    """Calcula CSAT instantáneo sobre DataFrame pre-filtrado."""
+    if df_csat_preparado.empty:
         return 0.0, 0
-    ratings = df_valid["rating_num"]
-    positivas = len(ratings[ratings >= 4])
+    ratings = df_csat_preparado["rating_num"]
+    positivas = (ratings >= 4).sum()
     total = len(ratings)
-    
     return round((positivas / total) * 100, 1), total
 
 # ==========================
@@ -1164,18 +1076,23 @@ with tab_operativo:
     if not df_all.empty:
         df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
 
-        df_all["sla_1ra_eval"] = df_all.apply(
-            lambda r: evaluar_sla_1ra(r.get("por_agente"), r.get("horario_evaluado"), r.get("primera_respuesta_min"), sla_1ra_th), axis=1
-        )
-        df_all["sla_gest_eval"] = df_all.apply(
-            lambda r: evaluar_sla_gestion(
-                r.get("por_agente"), 
-                r.get("horario_evaluado"), 
-                r.get("tiempo_resolucion_minutos"), 
-                sla_gest_th,
-                r.get("etiquetas", "")
-            ), axis=1
-        )
+        # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
+        cond_1ra = [
+            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario"),
+            df_all["primera_respuesta_min"].isna(),
+            df_all["primera_respuesta_min"] <= sla_1ra_th
+        ]
+        val_1ra = ["excluido", "no cumple", "cumple"]
+        df_all["sla_1ra_eval"] = np.select(cond_1ra, val_1ra, default="no cumple")
+
+        es_sin_respuesta = df_all.get("etiquetas", pd.Series(dtype=str)).astype(str).str.lower().str.contains("sin respuesta", na=False)
+        cond_gest = [
+            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario") | es_sin_respuesta,
+            df_all["tiempo_resolucion_minutos"].isna(),
+            df_all["tiempo_resolucion_minutos"] <= sla_gest_th
+        ]
+        val_gest = ["excluido", "sin cerrar", "cumple"]
+        df_all["sla_gest_eval"] = np.select(cond_gest, val_gest, default="no cumple")
 
         for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "resumen_ia"]:
             if col not in df_all.columns:
@@ -1194,45 +1111,47 @@ with tab_operativo:
     now_dt = pd.Timestamp.now(tz="America/Asuncion")
     df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
-    # CSAT SCORECARD
+    # CSAT SCORECARD ULTRA-RÁPIDO (PRE-PROCESADO EN UN SOLO PASO)
     st.markdown("### CSAT Performance")
     now_date = obtener_fecha_local_hoy()
 
-    if not df_all.empty and "fecha_calificacion_solo" in df_all.columns:
-        c_hoy, k_hoy = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == now_date])
-        c_ayer, _ = calcular_csat(df_all[df_all["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
+    df_csat_global = obtener_df_csat_valido(df_all)
+
+    if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
+        c_hoy, k_hoy = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == now_date])
+        c_ayer, _ = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
         diff_hoy = round(c_hoy - c_ayer, 1)
 
         inicio_sem = now_date - timedelta(days=now_date.weekday())
-        c_sem, k_sem = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_sem) & (df_all["fecha_calificacion_solo"] <= now_date)])
+        c_sem, k_sem = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_sem) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
         ini_sem_ant = inicio_sem - timedelta(days=7)
         fin_sem_ant = inicio_sem - timedelta(days=1)
-        c_sem_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_sem_ant) & (df_all["fecha_calificacion_solo"] <= fin_sem_ant)])
+        c_sem_ant, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_sem_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_sem_ant)])
         diff_sem = round(c_sem - c_sem_ant, 1)
 
         inicio_mes = now_date.replace(day=1)
-        c_mes, k_mes = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= inicio_mes) & (df_all["fecha_calificacion_solo"] <= now_date)])
+        c_mes, k_mes = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_mes) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
         fin_mes_ant = inicio_mes - timedelta(days=1)
         ini_mes_ant = fin_mes_ant.replace(day=1)
-        c_mes_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_mes_ant) & (df_all["fecha_calificacion_solo"] <= fin_mes_ant)])
+        c_mes_ant, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_mes_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_mes_ant)])
         diff_mes = round(c_mes - c_mes_ant, 1)
 
         q_act = (now_date.month - 1) // 3 + 1
         ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
-        c_q, k_q = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q) & (df_all["fecha_calificacion_solo"] <= now_date)])
+        c_q, k_q = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
         fin_q_ant = ini_q - timedelta(days=1)
         q_ant = (fin_q_ant.month - 1) // 3 + 1
         ini_q_ant = datetime(fin_q_ant.year, 3 * (q_ant - 1) + 1, 1).date()
-        c_q_ant, _ = calcular_csat(df_all[(df_all["fecha_calificacion_solo"] >= ini_q_ant) & (df_all["fecha_calificacion_solo"] <= fin_q_ant)])
+        c_q_ant, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_q_ant)])
         diff_q = round(c_q - c_q_ant, 1)
 
-        df_filtered_csat = df_all[(df_all["fecha_calificacion_solo"] >= f_desde_v) & (df_all["fecha_calificacion_solo"] <= f_hasta_v)].copy()
-        c_rango, k_rango = calcular_csat(df_filtered_csat)
+        df_filtered_csat = df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= f_desde_v) & (df_csat_global["fecha_calificacion_solo"] <= f_hasta_v)]
+        c_rango, k_rango = calcular_csat_rapido(df_filtered_csat)
         duracion_dias = (f_hasta_v - f_desde_v).days + 1
         f_hasta_prev = f_desde_v - timedelta(days=1)
         f_desde_prev = f_hasta_prev - timedelta(days=duracion_dias - 1)
-        df_prev_rango = df_all[(df_all["fecha_calificacion_solo"] >= f_desde_prev) & (df_all["fecha_calificacion_solo"] <= f_hasta_prev)]
-        c_rango_prev, _ = calcular_csat(df_prev_rango)
+        df_prev_rango = df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= f_desde_prev) & (df_csat_global["fecha_calificacion_solo"] <= f_hasta_prev)]
+        c_rango_prev, _ = calcular_csat_rapido(df_prev_rango)
         diff_rango = round(c_rango - c_rango_prev, 1)
     else:
         c_hoy, k_hoy, diff_hoy = 0.0, 0, 0.0
@@ -1267,10 +1186,9 @@ with tab_operativo:
 
     # EVOLUCIÓN HISTÓRICA DE CSAT
     with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
-        if not df_all.empty and "fecha_calificacion_solo" in df_all.columns:
+        if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
             fecha_6m_atras = (pd.Timestamp.now(tz="America/Asuncion") - timedelta(days=180)).date()
-            df_6m = df_all[df_all["fecha_calificacion_solo"] >= fecha_6m_atras].copy()
-            df_csat_6m = obtener_df_csat_valido(df_6m)
+            df_csat_6m = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_6m_atras].copy()
 
             if not df_csat_6m.empty:
                 df_csat_6m["Periodo_Sort"] = df_csat_6m["fecha_calificacion_dt"].dt.to_period("M")
@@ -1339,37 +1257,36 @@ with tab_operativo:
         else:
             st.info("Sin registros en la base de datos.")
 
-    # DETALLE DE CSAT PROTEGIDO CONTRA KEYERROR
+    # DETALLE CSAT
     if not df_filtered_csat.empty:
-        df_csat_det = obtener_df_csat_valido(df_filtered_csat)
-        if not df_csat_det.empty:
-            with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
-                df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-                
-                if "fecha_calificacion_dt" in df_csat_det.columns:
-                    df_csat_det = df_csat_det.sort_values(by=["rating_num", "fecha_calificacion_dt"], ascending=[True, False])
+        with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_filtered_csat)} Encuestas Validadas)", expanded=False):
+            df_csat_det = df_filtered_csat.copy()
+            df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+            
+            if "fecha_calificacion_dt" in df_csat_det.columns:
+                df_csat_det = df_csat_det.sort_values(by=["rating_num", "fecha_calificacion_dt"], ascending=[True, False])
 
-                cols_csat_deseadas = [
-                    "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
-                    "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
-                ]
+            cols_csat_deseadas = [
+                "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
+                "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
+            ]
 
-                st.dataframe(
-                    df_csat_det.reindex(columns=cols_csat_deseadas).dropna(how="all", axis=1),
-                    column_config={
-                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                        "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
-                        "Calificacion": "Puntaje",
-                        "feedback": "Comentario / Feedback",
-                        "nombre_contacto": "Contacto",
-                        "tenant": "Tenant",
-                        "company": "Company",
-                        "agente_evaluado": "Agente Evaluado",
-                        "cx_score_explanation": "Explicacion CX"
-                    },
-                    hide_index=True,
-                    use_container_width=True
-                )
+            st.dataframe(
+                df_csat_det.reindex(columns=cols_csat_deseadas).dropna(how="all", axis=1),
+                column_config={
+                    "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
+                    "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
+                    "Calificacion": "Puntaje",
+                    "feedback": "Comentario / Feedback",
+                    "nombre_contacto": "Contacto",
+                    "tenant": "Tenant",
+                    "company": "Company",
+                    "agente_evaluado": "Agente Evaluado",
+                    "cx_score_explanation": "Explicacion CX"
+                },
+                hide_index=True,
+                use_container_width=True
+            )
 
     st.markdown("---")
 
@@ -1629,7 +1546,6 @@ with tab_operativo:
         st.info("Sin datos para el buscador.")
 
 with tab_resumen:
-    # Reutilización eficiente de df_all cargado globalmente (Sin llamadas redundantes a obtener_datos)
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
     if not df_all.empty and "fecha_solo" in df_all.columns:
