@@ -874,8 +874,6 @@ col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
 col_b_sem.button("Esta Semana", on_click=set_fechas_semana, use_container_width=True)
 col_b_mes.button("Este Mes", on_click=set_fechas_mes, use_container_width=True)
 
-usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
-
 with st.sidebar.form("form_filtros"):
     st.caption("Rango de Fechas")
     f_col1, f_col2 = st.columns(2)
