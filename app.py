@@ -1008,16 +1008,12 @@ def renderizar_alertas_en_vivo():
     try:
         COLUMNAS_ALERTAS = "id, created_at, estado, canal, primera_respuesta_min"
 
-        # Consulta ultra-filtrada desde Supabase
         res = supabase.table("conversaciones")\
             .select(COLUMNAS_ALERTAS)\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-            .not_.in_("canal", ["email", "correo electrónico", "correo electronico"])\
-            .is_("primera_respuesta_min", "null")\
             .order("created_at", desc=True)\
-            .limit(50)\
+            .limit(100)\
             .execute()
-            
         datos_todos = res.data or []
     except Exception as e:
         error_msg = str(e)
@@ -1028,43 +1024,63 @@ def renderizar_alertas_en_vivo():
         return
 
     if datos_todos:
-        df_activos = pd.DataFrame(datos_todos)
+        df_base = pd.DataFrame(datos_todos)
         
-        created_utc = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True)
-        df_activos["created_at_dt"] = created_utc.dt.tz_convert("America/Asuncion")
-        df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
-        df_activos = df_activos.drop_duplicates(subset=["id"])
+        df_base["estado_clean"] = df_base["estado"].fillna("").astype(str).str.strip().str.lower()
+        estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
         
-        calc_min = (now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60.0
-        df_activos["min_transcurridos"] = calc_min.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
+        df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
-        # Filtramos solo los que superan el umbral configurado
-        df_criticos_sla = df_activos[df_activos["min_transcurridos"] >= alerta_nuevo_th]
-
-        if not df_criticos_sla.empty:
-            cant = len(df_criticos_sla)
-            st.markdown(f"""
-            <div class="alert-card-critical">
-                <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
-                Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
-            </div>
-            """, unsafe_allow_html=True)
-
-            if act_sonido:
-                html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
-                st.components.v1.html(html_con_ts, height=0)
-
-        with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
-            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
+        if "canal" in df_activos.columns:
+            df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
+            df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
+        
+        if not df_activos.empty:
+            created_utc = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True)
+            df_activos["created_at_dt"] = created_utc.dt.tz_convert("America/Asuncion")
+            df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+            df_activos = df_activos.drop_duplicates(subset=["id"])
             
+            df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
+            
+            calc_min = (now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60.0
+            df_activos["min_transcurridos"] = calc_min.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
+            
+            sin_respuesta = df_activos["1ra_resp_num"].isna()
+            tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
+            
+            df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
+
             if not df_criticos_sla.empty:
-                cols_check = ["id", "created_at_fmt", "min_transcurridos", "estado", "canal"]
-                st.dataframe(df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), use_container_width=True)
-            else:
-                st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
+                cant = len(df_criticos_sla)
+                st.markdown(f"""
+                <div class="alert-card-critical">
+                    <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
+                    Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
+                </div>
+                """, unsafe_allow_html=True)
+
+                if act_sonido:
+                    html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
+                    st.components.v1.html(html_con_ts, height=0)
+
+            with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
+                
+                if not df_criticos_sla.empty:
+                    cols_check = ["id", "created_at_fmt", "1ra_resp_num", "min_transcurridos", "estado"]
+                    if "canal" in df_criticos_sla.columns:
+                        cols_check.append("canal")
+                    
+                    st.dataframe(df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), use_container_width=True)
+                else:
+                    st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
+        else:
+            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
     else:
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes sin respuesta.")
+            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
 
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
