@@ -769,7 +769,7 @@ def es_feriado_paraguay(fecha_date):
 def calcular_minutos_habiles_gestion(row):
     """
     Calcula el tiempo real de gestión descontando ÚNICAMENTE los rangos 'fuera de horario'.
-    NO descuenta almuerzo ni fines de semana (si están cubiertos por Normal o Extendido).
+    Versión optimizada de alto rendimiento.
     """
     f_inicio = row.get("created_at_dt")
     col_cierre = "fecha_primer_cierre_dt" if "fecha_primer_cierre_dt" in row and pd.notna(row.get("fecha_primer_cierre_dt")) else "fecha_cierre_dt"
@@ -778,18 +778,29 @@ def calcular_minutos_habiles_gestion(row):
     if pd.isna(f_inicio) or pd.isna(f_cierre) or f_cierre <= f_inicio:
         return row.get("tiempo_resolucion_minutos")
 
+    # Si se creó y cerró en el mismo momento o menos de 1 minuto
+    diff_total_sec = (f_cierre - f_inicio).total_seconds()
+    if diff_total_sec <= 60:
+        estado_inicio = evaluar_horario_dashboard(f_inicio)
+        return round(diff_total_sec / 60.0, 1) if estado_inicio != "fuera de horario" else 0.0
+
+    # Avance optimizado por bloques de 5 minutos para alta velocidad
     minutos_habiles = 0.0
     curr = f_inicio
-    paso = timedelta(minutes=1)
+    paso = timedelta(minutes=5)
+    paso_min = 5.0
 
     while curr < f_cierre:
-        # Se evalúa contra la matriz exacta de turnos (Normal + Extendido)
-        estado_horario = evaluar_horario_dashboard(curr)
+        corte = min(curr + paso, f_cierre)
+        duracion_tramo = (corte - curr).total_seconds() / 60.0
         
-        if estado_horario != "fuera de horario":
-            minutos_habiles += 1.0
+        # Evaluamos el punto medio del tramo
+        medio = curr + timedelta(seconds=(corte - curr).total_seconds() / 2)
+        
+        if evaluar_horario_dashboard(medio) != "fuera de horario":
+            minutos_habiles += duracion_tramo
             
-        curr += paso
+        curr = corte
 
     return round(minutos_habiles, 1)
 
