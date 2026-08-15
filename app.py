@@ -339,6 +339,13 @@ def procesar_fechas_df(df):
     df["fecha_solo"] = local_dt.dt.date
     df["hora_solo"] = local_dt.dt.time
 
+    # Procesamiento de updated_at para controlar frescura en sidebar
+    if "updated_at" in df.columns:
+        updated_dt = pd.to_datetime(df["updated_at"], errors="coerce", utc=True)
+        df["updated_at_local"] = updated_dt.dt.tz_convert("America/Asuncion")
+    else:
+        df["updated_at_local"] = df["created_at_dt"]
+
     # Evaluamos la franja de horario vectorizada
     df["horario_evaluado"] = evaluar_horario_dashboard_dt(df["created_at_dt"])
 
@@ -761,10 +768,10 @@ if "input_f_hasta" not in st.session_state:
 # ==========================================
 df_all = obtener_datos()
 
-if not df_all.empty and "created_at_dt" in df_all.columns and not df_all["created_at_dt"].dropna().empty:
-    min_created_dt = df_all["created_at_dt"].min()
-    max_updated_dt = df_all["updated_at_local"].max() if "updated_at_local" in df_all.columns else min_created_dt
-    tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
+if not df_all.empty and "created_at_dt" in df_all.columns:
+    # Evaluamos la fecha de actividad más reciente
+    max_updated = df_all["updated_at_local"].max() if "updated_at_local" in df_all.columns else df_all["created_at_dt"].max()
+    tiempo_hace_str = obtener_tiempo_transcurrido(max_updated)
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
@@ -1088,7 +1095,11 @@ with tab_operativo:
     alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
 
     if not df_all.empty:
-        df_all["es_cerrado"] = df_all.apply(es_chat_cerrado, axis=1)
+        estado_clean = df_all.get("estado", pd.Series(dtype=str)).astype(str).str.strip().str.lower()
+        cierre_clean = df_all.get("fecha_cierre", pd.Series(dtype=str)).astype(str).str.strip().str.lower()
+    
+        # Mascara booleana vectorizada
+        df_all["es_cerrado"] = estado_clean.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"]) | (~cierre_clean.isin(["", "none", "nan", "nat", "null"]))
 
         # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
         cond_1ra = [
