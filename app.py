@@ -395,8 +395,12 @@ def obtener_inicio_trimestre_anterior():
 # ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
 @st.cache_data(ttl=86400, show_spinner=False)
+# ==========================================
+# 1. CACHÉ HISTÓRICO ROBUSTO (CADA 24 HORAS)
+# ==========================================
+@st.cache_data(ttl=86400, show_spinner=False)
 def obtener_datos_historicos_q():
-    """Descarga datos desde el Q anterior hasta el inicio de hoy (1 vez al día)."""
+    """Descarga datos desde el Q anterior hasta el día de ayer (1 vez al día)."""
     todos_los_datos = []
     lote = 0
     tamanio_lote = 1000
@@ -405,22 +409,23 @@ def obtener_datos_historicos_q():
     hoy = obtener_fecha_local_hoy()
     fecha_hasta_ayer = f"{hoy}T00:00:00Z"
 
-    # Condición OR para incluir creaciones O modificaciones en el rango
-    condicion_or = f"created_at.gte.{fecha_inicio_q_ant},updated_at.gte.{fecha_inicio_q_ant}"
-
     while True:
         inicio = lote * tamanio_lote
         fin = inicio + tamanio_lote - 1
         
         try:
+            # Consulta limpia sin sintaxis compleja de OR en cadena
             response = supabase.table("conversaciones")\
                 .select(COLUMNAS_DASHBOARD)\
-                .or_(condicion_or)\
+                .gte("updated_at", fecha_inicio_q_ant)\
                 .lt("created_at", fecha_hasta_ayer)\
                 .range(inicio, fin)\
                 .execute()
+            
             datos = response.data or []
-        except Exception:
+        except Exception as e:
+            # Imprimir en consola de Streamlit Cloud para ver qué ocurrió si falla
+            print(f"Error cargando histórico: {e}")
             break
         
         if not datos:
@@ -449,7 +454,8 @@ def obtener_datos_hoy():
             .gte("updated_at", fecha_inicio_hoy)\
             .execute()
         return response.data or []
-    except Exception:
+    except Exception as e:
+        print(f"Error cargando hoy: {e}")
         return []
 
 
@@ -983,9 +989,7 @@ if not df_all_init.empty and "created_at_dt" in df_all_init.columns and not df_a
 else:
     st.sidebar.markdown("""
     <div class="db-info-box">
-        <b>Estado Base de Datos:</b><br>
-        • <b>Ultima sincronizacion:</b> Sin registros<br>
-        • <b>Registros desde:</b> N/A
+        <b>Ultima sincronizacion:</b> Sin registros<br>
     </div>
     """, unsafe_allow_html=True)
 
