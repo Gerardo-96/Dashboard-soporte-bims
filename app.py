@@ -865,8 +865,6 @@ def set_fechas_mes():
     st.session_state["input_f_desde"] = inicio_mes
     st.session_state["input_f_hasta"] = fin_mes
 
-st.sidebar.markdown("### Filtros de Consulta")
-
 # Botones rápidos de selección de rango
 col_b_hoy, col_b_sem, col_b_mes = st.sidebar.columns(3)
 col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
