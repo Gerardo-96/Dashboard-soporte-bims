@@ -331,6 +331,10 @@ def procesar_fechas_df(df):
     if df.empty or "created_at" not in df.columns:
         return df
 
+    if "updated_at" in df.columns:
+    updated_dt = pd.to_datetime(df["updated_at"], errors="coerce", utc=True)
+    df["updated_at_local"] = updated_dt.dt.tz_convert("America/Asuncion")
+
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
     local_dt = created_dt.dt.tz_convert("America/Asuncion")
 
