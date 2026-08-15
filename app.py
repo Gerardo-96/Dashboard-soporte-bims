@@ -908,9 +908,7 @@ def es_chat_cerrado(row):
     return False
 
 def obtener_df_csat_valido(df_in):
-    """Retorna las conversaciones con calificaciones CSAT válidas para agentes humanos.
-    No excluye fuera de horario ni etiquetas operativas (como 'sin respuesta').
-    """
+    """Retorna las conversaciones con calificaciones CSAT válidas para agentes humanos."""
     if df_in.empty:
         return pd.DataFrame()
 
@@ -920,22 +918,34 @@ def obtener_df_csat_valido(df_in):
     df_c["rating_num"] = pd.to_numeric(df_c["rating"], errors="coerce")
     df_c = df_c.dropna(subset=["rating_num"])
 
-    # 2. Filtrar solo atención humana (excluye flujos 100% de Bots/Autoatención)
+    # 2. Filtrar solo atención humana
     if "por_agente" in df_c.columns:
         df_c = df_c[df_c["por_agente"] == "no excluido"]
 
-    # 3. Deduplicar por ID de conversación para evitar duplicaciones
+    # 3. Deduplicar por ID
     df_c = df_c.drop_duplicates(subset=["id"])
 
-    # Parsear fecha de calificación si existe
-    if "fecha_calificacion" in df_c.columns:
-        df_c["fecha_calificacion_dt"] = pd.to_datetime(
-            df_c["fecha_calificacion"], errors="coerce"
+    # 4. Asegurar columna intercom_url si existe la columna id
+    if "id" in df_c.columns and "intercom_url" not in df_c.columns:
+        df_c["id_str"] = df_c["id"].astype(str).str.strip()
+        df_c["intercom_url"] = df_c["id_str"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
-        df_c["fecha_calificacion_solo"] = df_c["fecha_calificacion_dt"].dt.date
+
+    # 5. Parsear fecha de calificación y formato de texto
+    if "fecha_calificacion" in df_c.columns:
+        calif_utc = pd.to_datetime(df_c["fecha_calificacion"], errors="coerce", utc=True)
+        local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
+        df_c["fecha_calificacion_dt"] = local_calif_dt
+        df_c["fecha_calificacion_fmt"] = local_calif_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+        df_c["fecha_calificacion_solo"] = local_calif_dt.dt.date
+    elif "created_at_dt" in df_c.columns:
+        df_c["fecha_calificacion_dt"] = df_c["created_at_dt"]
+        df_c["fecha_calificacion_fmt"] = df_c.get("created_at_fmt", "Sin fecha")
+        df_c["fecha_calificacion_solo"] = df_c.get("fecha_solo", None)
 
     return df_c
-
+    
 def calcular_csat(df_sub):
     df_valid = obtener_df_csat_valido(df_sub)
     if df_valid.empty:
@@ -1492,31 +1502,41 @@ with tab_operativo:
             st.info("Sin registros en la base de datos.")
 
     # DETALLE DE CSAT (ALIMENTADO DE LA FECHA DE CALIFICACIÓN)
-    if not df_filtered_csat.empty:
-        df_csat_det = obtener_df_csat_valido(df_filtered_csat)
-        if not df_csat_det.empty:
-            with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
-                df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+    # DETALLE DE CSAT PROTEGIDO CONTRA KEYERROR
+if not df_filtered_csat.empty:
+    df_csat_det = obtener_df_csat_valido(df_filtered_csat)
+    if not df_csat_det.empty:
+        with st.expander(f"Ver Detalle de Calificaciones CSAT del rango seleccionado ({len(df_csat_det)} Encuestas Validadas)", expanded=False):
+            df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+            
+            if "fecha_calificacion_dt" in df_csat_det.columns:
                 df_csat_det = df_csat_det.sort_values(by=["rating_num", "fecha_calificacion_dt"], ascending=[True, False])
 
-                st.dataframe(
-                    df_csat_det[[
-                        "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
-                        "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
-                    ]],
-                    column_config={
-                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                        "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
-                        "Calificacion": "Puntaje",
-                        "feedback": "Comentario / Feedback",
-                        "nombre_contacto": "Contacto",
-                        "tenant": "Tenant",
-                        "company": "Company",
-                        "agente_evaluado": "Agente Evaluado",
-                        "cx_score_explanation": "Explicacion CX"
-                    },
-                    hide_index=True,
-                    use_container_width=True
+            # Lista de columnas deseadas
+            cols_csat_deseadas = [
+                "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
+                "nombre_contacto", "tenant", "company", "agente_evaluado", "cx_score_explanation"
+            ]
+            
+            # Seleccionar ÚNICAMENTE las columnas presentes en df_csat_det
+            cols_csat_existentes = [c for c in cols_csat_deseadas if c in df_csat_det.columns]
+
+            st.dataframe(
+                df_csat_det[cols_csat_existentes],
+                column_config={
+                    "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
+                    "fecha_calificacion_fmt": "Fecha/Hora Calificacion",
+                    "Calificacion": "Puntaje",
+                    "feedback": "Comentario / Feedback",
+                    "nombre_contacto": "Contacto",
+                    "tenant": "Tenant",
+                    "company": "Company",
+                    "agente_evaluado": "Agente Evaluado",
+                    "cx_score_explanation": "Explicacion CX"
+                },
+                hide_index=True,
+                use_container_width=True
+            )
                 )
 
     st.markdown("---")
