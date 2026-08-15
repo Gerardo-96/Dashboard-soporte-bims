@@ -443,24 +443,27 @@ def obtener_datos_historicos_q():
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def obtener_datos_hoy():
-    """Descarga conversaciones creadas O actualizadas el día de hoy."""
-    hoy = obtener_fecha_local_hoy() # YYYY-MM-DD local
-    fecha_inicio_hoy = f"{hoy}T00:00:00Z"
+    """Descarga conversaciones recientes (últimas 36 horas) evitando desfases de zona horaria UTC vs PY."""
+    tz_py = timezone(timedelta(hours=-3))
+    ahora_py = datetime.now(tz_py)
+    
+    # Consultamos 36 horas hacia atrás en ISO UTC limpia para no perder ningún chat de la madrugada
+    hace_36h_utc = (ahora_py - timedelta(hours=36)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     try:
-        # Filtramos por updated_at para incluir chats creados antes pero activos hoy
+        # 1. Intentamos por updated_at (actividad reciente)
         response = supabase.table("conversaciones")\
             .select(COLUMNAS_DASHBOARD)\
-            .gte("updated_at", fecha_inicio_hoy)\
+            .gte("updated_at", hace_36h_utc)\
             .execute()
             
         datos = response.data or []
         
-        # Si por alguna razón no trae por updated_at, hacemos un fallback por created_at
+        # 2. Fallback por created_at si no devolvió por updated_at
         if not datos:
             response_created = supabase.table("conversaciones")\
                 .select(COLUMNAS_DASHBOARD)\
-                .gte("created_at", fecha_inicio_hoy)\
+                .gte("created_at", hace_36h_utc)\
                 .execute()
             datos = response_created.data or []
             
@@ -468,7 +471,6 @@ def obtener_datos_hoy():
     except Exception as e:
         st.error(f"Error consultando datos de Hoy en Supabase: {e}")
         return []
-
 
 def obtener_datos():
     """Une los datos históricos de 24h con los datos frescos de hoy."""
