@@ -371,19 +371,55 @@ def procesar_fechas_df(df):
 
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
-def obtener_datos():
-    """Obtiene todos los registros de la tabla 'conversaciones' paginando en lotes de 1000."""
+# 1. Columnas necesarias (Livianas para cuidar la red)
+COLUMNAS_DASHBOARD = (
+    "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
+    "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
+    "feedback, agente_evaluado, cx_score_explanation, tenant, company, nombre_contacto, "
+    "etiquetas, fecha_primer_cierre, fecha_cierre, modulo, cliente, tipo_contacto, nivel"
+)
+
+def obtener_inicio_trimestre_anterior():
+    """Calcula el primer día del trimestre anterior a la fecha actual."""
+    hoy = obtener_fecha_local_hoy()
+    q_actual = (hoy.month - 1) // 3 + 1
+    
+    if q_actual == 1:
+        anio = hoy.year - 1
+        mes = 10
+    else:
+        anio = hoy.year
+        mes = 3 * (q_actual - 2) + 1
+        
+    return f"{anio}-{mes:02d}-01T00:00:00Z"
+
+
+# ==========================================
+# 1. CACHÉ HISTÓRICO (CADA 24 HORAS)
+# ==========================================
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_datos_historicos_q():
+    """Descarga datos desde el Q anterior hasta el día de ayer (1 vez al día)."""
     todos_los_datos = []
     lote = 0
     tamanio_lote = 1000
+
+    fecha_inicio_q_ant = obtener_inicio_trimestre_anterior()
+    # Fecha tope: Inicio del día de hoy
+    hoy = obtener_fecha_local_hoy()
+    fecha_hasta_ayer = f"{hoy}T00:00:00Z"
 
     while True:
         inicio = lote * tamanio_lote
         fin = inicio + tamanio_lote - 1
         
         try:
-            response = supabase.table("conversaciones").select("*").range(inicio, fin).execute()
+            response = supabase.table("conversaciones")\
+                .select(COLUMNAS_DASHBOARD)\
+                .gte("created_at", fecha_inicio_q_ant)\
+                .lt("created_at", fecha_hasta_ayer)\
+                .range(inicio, fin)\
+                .execute()
             datos = response.data
         except Exception:
             break
@@ -392,13 +428,50 @@ def obtener_datos():
             break
             
         todos_los_datos.extend(datos)
-        
         if len(datos) < tamanio_lote:
             break
-            
         lote += 1
 
+    return todos_los_datos
+
+
+# ==========================================
+# 2. CACHÉ DEL DÍA EN CURSO (CADA 30 MINUTOS)
+# ==========================================
+@st.cache_data(ttl=1800, show_spinner=False)
+def obtener_datos_hoy():
+    """Descarga ÚNICAMENTE las conversaciones del día de hoy (cada 30 min)."""
+    hoy = obtener_fecha_local_hoy()
+    fecha_inicio_hoy = f"{hoy}T00:00:00Z"
+    
+    try:
+        response = supabase.table("conversaciones")\
+            .select(COLUMNAS_DASHBOARD)\
+            .gte("updated_at", fecha_inicio_hoy)\
+            .execute()
+        return response.data or []
+    except Exception:
+        return []
+
+
+# ==========================================
+# 3. UNIFICADOR GENERAL (COMBINA AMBOS)
+# ==========================================
+def obtener_datos():
+    """Une los datos históricos de 24h con los datos frescos de hoy."""
+    datos_historicos = obtener_datos_historicos_q()
+    datos_hoy = obtener_datos_hoy()
+    
+    # Combinar ambas listas
+    todos_los_datos = datos_historicos + datos_hoy
+    
+    if not todos_los_datos:
+        return pd.DataFrame()
+        
     df = pd.DataFrame(todos_los_datos)
+    # Eliminar duplicados por ID si algún chat cambió de día
+    df = df.drop_duplicates(subset=["id"]).copy()
+    
     return procesar_fechas_df(df)
 
 st.markdown("""
@@ -1063,10 +1136,15 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
+        # Solo las columnas requeridas para evaluar la alerta sonora
+        COLUMNAS_ALERTAS = "id, created_at, estado, canal, primera_respuesta_min"
+
+        # Filtrar directamente en la consulta para no traer chats cerrados obsoletos
         res = supabase.table("conversaciones")\
-            .select("*")\
+            .select(COLUMNAS_ALERTAS)\
+            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
             .order("created_at", desc=True)\
-            .limit(1000)\
+            .limit(100)\
             .execute()
         datos_todos = res.data or []
     except Exception as e:
