@@ -436,8 +436,8 @@ def obtener_datos_historicos_q():
         try:
             response = supabase.table("conversaciones")\
                 .select(COLUMNAS_DASHBOARD)\
-                .gte("updated_at", fecha_inicio_q_ant)\
-                .lt("updated_at", fecha_hasta_ayer)\
+                .gte("created_at", fecha_inicio_q_ant)\
+                .lt("created_at", fecha_hasta_ayer)\
                 .range(inicio, fin)\
                 .execute()
             
@@ -712,16 +712,6 @@ def calificacion_a_estrellas(x):
         return "★" * val if val > 0 else ""
     except:
         return ""
-
-def es_chat_cerrado(row):
-    estado = str(row.get("estado", "")).strip().lower()
-    fecha_cierre = str(row.get("fecha_primer_cierre", row.get("fecha_cierre", ""))).strip().lower()
-    
-    if estado in ["cerrado", "closed", "resolved", "resuelto", "snoozed"]:
-        return True
-    if fecha_cierre not in ["", "none", "nan", "nat", "null"]:
-        return True
-    return False
 
 # ==========================================
 # GESTIÓN UNIFICADA Y ULTRA RÁPIDA DE CSAT
@@ -1811,7 +1801,10 @@ with tab_admin:
 
                             tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
                             GLOBAL_SYNC_STATE["status"] = "completed"
-                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {datetime.now().strftime('%H:%M:%S')}."
+                            tz_py = timezone(timedelta(hours=-3))
+                            hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
+
+                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
                         except Exception as ex_thread:
                             GLOBAL_SYNC_STATE["status"] = "error"
                             GLOBAL_SYNC_STATE["error"] = str(ex_thread)
