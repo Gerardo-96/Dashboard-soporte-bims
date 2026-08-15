@@ -164,6 +164,9 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             conv = get_conversation_detail(conv_id) or conv_summary
 
             created_at_orig = conv.get("created_at")
+            # Extraemos la marca de tiempo de actualización nativa de Intercom
+            updated_at_orig = conv.get("updated_at") or conv_summary.get("updated_at")
+            
             statistics = conv.get("statistics", {}) or {}
 
             # =========================================================================
@@ -305,6 +308,12 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                     company = get_attr(c_data, "Company")
                     nombre_contacto = c_data.get("name") or c_data.get("email") or "Sin nombre"
 
+            # Formateamos la marca de tiempo REAL de actualización desde Intercom
+            if updated_at_orig:
+                fecha_actualizacion_iso = datetime.fromtimestamp(updated_at_orig, tz=tz_local).isoformat()
+            else:
+                fecha_actualizacion_iso = datetime.now(tz=tz_local).isoformat()
+
             registro = {
                 "id": conv_id,
                 "created_at": inicio_real.isoformat(),
@@ -334,7 +343,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 "nivel": nivel,
                 "motivo_normalizado": motivo,
                 "estado": estado,
-                "updated_at": datetime.now(tz=tz_local).isoformat()
+                "updated_at": fecha_actualizacion_iso
             }
             lote_registros.append(registro)
 
