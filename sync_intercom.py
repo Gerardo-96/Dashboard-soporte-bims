@@ -257,7 +257,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                         agente = assigned_to.get("name", "Sin asignar")
 
             # Regla de exclusión
-            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica (Bot)", "Mónica (Bot)"] or "Bot" in agente else "no excluido"
+            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica", "Mónica"] or "Bot" in agente else "no excluido"
 
             # Extracción de CSAT / Rating (Filtrado estricto: Solo evaluaciones a Agentes Humanos)
             rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
