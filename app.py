@@ -695,21 +695,43 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
     return "cumple" if min_1ra <= threshold_1ra else "no cumple"
 
 def evaluar_sla_gestion_excel(row, threshold_gest):
+    # 1. Exclusión por Agente (Monica, Sin Asignar, Bots)
     agente = str(row.get("agente_asignado", "")).strip().lower()
-    if not agente or agente in ["sin asignar", "none", "nan", "monica"]:
+    if not agente or agente in ["sin asignar", "none", "nan", "monica", "monica (bot)"]:
         return "excluido por agente"
-    
+
     dt_obj = row.get("created_at_dt")
-    if not evaluar_horario_estricto(dt_obj):
+    if pd.isna(dt_obj):
+        return "excluido por filtro"
+
+    fecha_str = dt_obj.strftime("%Y-%m-%d")
+    dia_semana = dt_obj.weekday()
+    hora_actual = dt_obj.time()
+
+    # 2. Exclusión por Feriados
+    if fecha_str in FERIADOS:
+        return "excluido por feriado"
+
+    # 3. Horario Hábil Unificado (Coincidente 100% con el Dashboard)
+    en_horario = False
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
+        en_horario = True
+    elif dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(11, 45, 0):
+        en_horario = True
+
+    if not en_horario:
         return "excluido por horario"
-    
+
+    # 4. Exclusión por Etiqueta "Sin Respuesta"
     etiquetas = str(row.get("etiquetas", "")).lower()
     if "sin respuesta" in etiquetas:
         return "excluido por etiqueta"
-    
+
+    # 5. Evaluación de Tiempo de Resolución
     min_gest = row.get("tiempo_resolucion_minutos")
     if pd.isna(min_gest):
         return "sin cerrar"
+
     return "cumple" if min_gest <= threshold_gest else "no cumple"
 
 def calificacion_a_estrellas(x):
