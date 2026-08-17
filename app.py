@@ -639,11 +639,11 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
     hora_actual = dt_obj.time()
     
     if fecha_str in FERIADOS:
-        return "excluido"
+        return "excluido por feriado"
     
     agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan"]:
-        return "excluido"
+    if not agente or agente in ["Sin asignar", "None", "nan", "monica"]:
+        return "excluido por agente"
         
     en_horario = False
     if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
@@ -652,7 +652,7 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
         en_horario = True
         
     if not en_horario:
-        return "excluido"
+        return "excluido por horario"
         
     min_1ra = row.get("primera_respuesta_min")
     if pd.isna(min_1ra):
@@ -665,13 +665,17 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
     dt_obj = row.get("created_at_dt")
     if pd.isna(dt_obj):
         return "excluido"
-        
+
+    fecha_str = dt_obj.strftime("%Y-%m-%d")
     dia_semana = dt_obj.weekday()
     hora_actual = dt_obj.time()
+
+    if fecha_str in FERIADOS:
+        return "excluido por feriado"
     
     agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan"]:
-        return "excluido"
+    if not agente or agente in ["Sin asignar", "None", "nan", "monica"]:
+        return "excluido por agente"
         
     en_horario = False
     if dia_semana in [0, 1, 2]:
@@ -682,7 +686,7 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
             en_horario = True
             
     if not en_horario:
-        return "excluido"
+        return "excluido por horario"
         
     min_1ra = row.get("primera_respuesta_min")
     if pd.isna(min_1ra):
@@ -691,13 +695,17 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
     return "cumple" if min_1ra <= threshold_1ra else "no cumple"
 
 def evaluar_sla_gestion_excel(row, threshold_gest):
+    agente = str(row.get("agente_asignado", "")).strip().lower()
+    if not agente or agente in ["sin asignar", "none", "nan", "monica"]:
+        return "excluido por agente"
+    
     dt_obj = row.get("created_at_dt")
     if not evaluar_horario_estricto(dt_obj):
-        return "excluido por filtro"
+        return "excluido por horario"
     
     etiquetas = str(row.get("etiquetas", "")).lower()
     if "sin respuesta" in etiquetas:
-        return "excluido por filtro"
+        return "excluido por etiqueta"
     
     min_gest = row.get("tiempo_resolucion_minutos")
     if pd.isna(min_gest):
@@ -859,10 +867,21 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Company"] = df_exp.get("company", "Sin datos")
     df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
-    df_reporte["Primera respuesta (min)"] = df_exp.get("primera_respuesta_min", None)
-    
-    df_reporte["SLA Normal"] = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
-    df_reporte["SLA Extendido"] = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else []
+ 
+    # 1. Evaluamos primero los SLA de 1ra Respuesta
+    sla_norm_series = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+    sla_ext_series = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+
+    df_reporte["SLA Normal"] = sla_norm_series
+    df_reporte["SLA Extendido"] = sla_ext_series
+
+    # 2. Filtrar Primera Respuesta (min): solo si SLA Normal o Extendido es 'cumple' o 'no cumple'
+    if not df_exp.empty:
+        prim_resp_raw = df_exp.get("primera_respuesta_min", pd.Series(dtype=float))
+        es_valido_1ra = sla_norm_series.isin(["cumple", "no cumple"]) | sla_ext_series.isin(["cumple", "no cumple"])
+        df_reporte["Primera respuesta (min)"] = np.where(es_valido_1ra, prim_resp_raw, np.nan)
+    else:
+        df_reporte["Primera respuesta (min)"] = None
     
     if "rating" in df_exp and not df_exp.empty:
         df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
@@ -879,10 +898,20 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
     
-    df_reporte["Tiempo resolucion (horas)"] = df_exp.get("tiempo_resolucion_horas", None)
-    df_reporte["Tiempo resolucion (min)"] = df_exp.get("tiempo_resolucion_minutos", None)
-    
-    df_reporte["SLA Tiempo Gestion"] = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else []
+    # Evaluar SLA de Gestión primero
+    sla_gest_series = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+    df_reporte["SLA Tiempo Gestion"] = sla_gest_series
+
+    # Filtrar tiempo de resolución en minutos y horas: solo se completa si es 'cumple' o 'no cumple'
+    if not df_exp.empty:
+        minutos_raw = df_exp.get("tiempo_resolucion_minutos", pd.Series(dtype=float))
+        es_valido_gestion = sla_gest_series.isin(["cumple", "no cumple"])
+        
+        df_reporte["Tiempo resolucion (min)"] = np.where(es_valido_gestion, minutos_raw, np.nan)
+        df_reporte["Tiempo resolucion (horas)"] = np.where(es_valido_gestion, (minutos_raw / 60.0).round(2), np.nan)
+    else:
+        df_reporte["Tiempo resolucion (min)"] = None
+        df_reporte["Tiempo resolucion (horas)"] = None
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_meta = pd.DataFrame([
@@ -1120,9 +1149,13 @@ with tab_operativo:
         # Un chat está CERRADO únicamente si su estado en Supabase/Intercom indica cierre explícito
         df_all["es_cerrado"] = estado_clean.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"])
 
+        # Identificamos si el agente asignado es sin asignar o Mónica
+        agente_clean = df_all.get("agente_asignado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
+        es_monica_o_sin_asignar = agente_clean.isin(["sin asignar", "none", "nan", "monica", "monica (bot)"])
+        
         # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
         cond_1ra = [
-            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario"),
+            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario") | es_monica_o_sin_asignar,
             df_all["primera_respuesta_min"].isna(),
             df_all["primera_respuesta_min"] <= sla_1ra_th
         ]
@@ -1131,7 +1164,7 @@ with tab_operativo:
 
         es_sin_respuesta = df_all.get("etiquetas", pd.Series(dtype=str)).astype(str).str.lower().str.contains("sin respuesta", na=False)
         cond_gest = [
-            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario") | es_sin_respuesta,
+            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario") | es_sin_respuesta | es_monica_o_sin_asignar,
             df_all["tiempo_resolucion_minutos"].isna(),
             df_all["tiempo_resolucion_minutos"] <= sla_gest_th
         ]
