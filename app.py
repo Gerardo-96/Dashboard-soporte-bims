@@ -642,7 +642,7 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
         return "excluido por feriado"
     
     agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan", "monica"]:
+    if not agente or agente in ["Sin asignar", "None", "nan", "Monica"]:
         return "excluido por agente"
         
     en_horario = False
@@ -674,7 +674,7 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
         return "excluido por feriado"
     
     agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan", "monica"]:
+    if not agente or agente in ["Sin asignar", "None", "nan", "Monica"]:
         return "excluido por agente"
         
     en_horario = False
