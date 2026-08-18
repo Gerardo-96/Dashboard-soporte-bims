@@ -2156,38 +2156,24 @@ with tab_faq:
 
         El sistema contabiliza únicamente los minutos que se encuentran dentro de las **jornadas operativas definidas**. Por lo tanto, las horas que están fuera de estas jornadas **no suman tiempo al SLA**.
 
+        #### 📅 Días Feriados
+        Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
+        
         #### 🕘 Horario hábil normal
 
-        **Lunes a viernes**
-        - Inicio: **08:00 hs**
-        - Fin: **17:30 hs**
-        - Se contabiliza todo el intervalo comprendido entre 08:00 y 17:30.
+        #### 🕒 Horario Hábil Normal
+        * **Lunes a Viernes:** 08:00 a 17:30 hs (Jornada continua, sin pausar almuerzo).
+        * **Sábados:** 09:00 a 11:45 hs.
 
-        **Sábados**
-        - Inicio: **09:00 hs**
-        - Fin: **11:45 hs**
-        - Solo se contabiliza el intervalo comprendido entre 09:00 y 11:45.
-
-        **Domingos y feriados**
-        - No se contabiliza tiempo hábil dentro del horario normal.
-
-        #### 🌙 Horario hábil extendido
-
-        Para la atención fuera del horario normal también existen jornadas extendidas:
-
-        **Lunes, martes y miércoles**
-        - Inicio: **19:00 hs**
-        - Fin: **02:00 hs del día siguiente**
-
-        **Jueves, viernes, sábados y domingos**
-        - Inicio: **18:00 hs**
-        - Fin: **03:00 hs del día siguiente**
+        #### 🌙 Horario Extendido (Turno Noche / Fin de Semana)
+        * **Lunes a Miércoles:** 19:00 a 02:00 hs (del día siguiente).
+        * **Jueves a Domingo:** 18:00 a 03:00 hs (del día siguiente, incluye fines de semana).
 
         Cuando una jornada termina después de medianoche, el sistema entiende correctamente que la jornada continúa durante la madrugada del día siguiente.
 
         #### 📌 Ejemplo práctico
 
-        Si una conversación se crea un lunes a las **16:00 hs** y recibe respuesta el martes a las **09:00 hs**, el SLA **no contabiliza las 17 horas de tiempo calendario**.
+        Si una conversación se crea un lunes a las **16:00 hs** y se cierra el martes a las **09:00 hs**, el SLA **no contabiliza las 17 horas de tiempo calendario sino 9,5 horas habiles**.
 
         Solo se contabilizan los períodos que pertenecen a las jornadas hábiles correspondientes. El tiempo transcurrido durante la noche y fuera de las franjas operativas no incrementa el SLA.
 
@@ -2199,7 +2185,7 @@ with tab_faq:
         - Domingos fuera de la jornada extendida correspondiente.
         - Días feriados cuando la conversación queda excluida por las reglas de SLA.
 
-        **En resumen:** el SLA mide **tiempo operativo**, no tiempo de reloj. Por eso una conversación puede haber estado abierta durante muchas horas y, aun así, tener pocos minutos contabilizados para el SLA.
+        **En resumen:** el SLA mide **tiempo operativo**, no tiempo de reloj. Por eso una conversación puede haber estado abierta durante muchas horas, pero tener contabilizado menos tiempo para el SLA.
         """)
 
 
