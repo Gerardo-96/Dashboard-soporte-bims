@@ -335,6 +335,56 @@ def evaluar_horario_dashboard_dt(dt_series):
     elecciones = ["fuera de horario", "normal", "extendido"]
     return np.select(condiciones, elecciones, default="fuera de horario")
 
+def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
+    """Calcula minutos hábiles reales sumando traslapes con Turno Normal y Extendido."""
+    if pd.isna(dt_inicio) or pd.isna(dt_fin) or dt_fin <= dt_inicio:
+        return np.nan
+
+    total_minutos_habiles = 0.0
+    dia_actual = dt_inicio.date()
+    dia_fin = dt_fin.date()
+
+    while dia_actual <= dia_fin:
+        fecha_str = dia_actual.strftime("%Y-%m-%d")
+        dia_semana = dia_actual.weekday()
+
+        # Si es feriado oficial, omitimos el día completo
+        if fecha_str in FERIADOS:
+            dia_actual += timedelta(days=1)
+            continue
+
+        franjas_hoy = []
+
+        # A) FRANJAS TURNO NORMAL
+        if dia_semana in [0, 1, 2, 3, 4]:  # L-V
+            franjas_hoy.append((time(8, 0), time(17, 30)))
+        elif dia_semana == 5:  # Sábados
+            franjas_hoy.append((time(9, 0), time(11, 45)))
+
+        # B) FRANJAS TURNO EXTENDIDO
+        if dia_semana in [0, 1, 2]:  # Lunes a Miércoles (19:00 a 02:00 hs)
+            franjas_hoy.append((time(19, 0), time(23, 59, 59)))
+            franjas_hoy.append((time(0, 0), time(2, 0)))
+        elif dia_semana in [3, 4, 5, 6]:  # Jueves a Domingo (18:00 a 03:00 hs)
+            franjas_hoy.append((time(18, 0), time(23, 59, 59)))
+            franjas_hoy.append((time(0, 0), time(3, 0)))
+
+        # Sumar intersecciones reales del ticket con las franjas
+        for h_inicio, h_fin in franjas_hoy:
+            inicio_franja = datetime.combine(dia_actual, h_inicio).tz_localize("America/Asuncion")
+            fin_franja = datetime.combine(dia_actual, h_fin).tz_localize("America/Asuncion")
+
+            start_overlap = max(dt_inicio, inicio_franja)
+            end_overlap = min(dt_fin, fin_franja)
+
+            if start_overlap < end_overlap:
+                minutos_tramo = (end_overlap - start_overlap).total_seconds() / 60.0
+                total_minutos_habiles += minutos_tramo
+
+        dia_actual += timedelta(days=1)
+
+    return round(total_minutos_habiles, 1)
+
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas VECTORIZADAS."""
     if df.empty or "created_at" not in df.columns:
@@ -382,8 +432,12 @@ def procesar_fechas_df(df):
 
     # CÁLCULO VECTORIZADO ULTRA RÁPIDO DE TIEMPO DE GESTIÓN
     if "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
-        diff_min = (df["fecha_cierre_dt"] - df["created_at_dt"]).dt.total_seconds() / 60.0
-        df["tiempo_resolucion_minutos"] = np.where(df["horario_evaluado"] == "fuera de horario", np.nan, diff_min).round(1)
+        # Aplicamos el cálculo de minutos hábiles descontando noches y tiempo muerto
+        df["tiempo_resolucion_minutos"] = df.apply(
+            lambda r: calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"])
+            if r.get("horario_evaluado") != "fuera de horario" else np.nan,
+            axis=1
+        )
 
     if "id" in df.columns:
         df["id_str"] = df["id"].astype(str).str.strip()
