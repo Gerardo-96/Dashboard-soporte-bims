@@ -362,17 +362,18 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
             franjas_hoy.append((time(9, 0), time(11, 45)))
 
         # B) FRANJAS TURNO EXTENDIDO
-        if dia_semana in [0, 1, 2]:  # Lunes a Miércoles (19:00 a 02:00 hs)
+        if dia_semana in [0, 1, 2]:  # Lunes a Miércoles (19:00 a 02:00 hs del día siguiente)
             franjas_hoy.append((time(19, 0), time(23, 59, 59)))
             franjas_hoy.append((time(0, 0), time(2, 0)))
-        elif dia_semana in [3, 4, 5, 6]:  # Jueves a Domingo (18:00 a 03:00 hs)
+        elif dia_semana in [3, 4, 5, 6]:  # Jueves a Domingo (18:00 a 03:00 hs del día siguiente)
             franjas_hoy.append((time(18, 0), time(23, 59, 59)))
             franjas_hoy.append((time(0, 0), time(3, 0)))
 
         # Sumar intersecciones reales del ticket con las franjas
         for h_inicio, h_fin in franjas_hoy:
-            inicio_franja = datetime.combine(dia_actual, h_inicio).tz_localize("America/Asuncion")
-            fin_franja = datetime.combine(dia_actual, h_fin).tz_localize("America/Asuncion")
+            # Usamos pd.Timestamp.combine para asegurar compatibilidad con tz_localize/America/Asuncion
+            inicio_franja = pd.Timestamp.combine(dia_actual, h_inicio).tz_localize("America/Asuncion")
+            fin_franja = pd.Timestamp.combine(dia_actual, h_fin).tz_localize("America/Asuncion")
 
             start_overlap = max(dt_inicio, inicio_franja)
             end_overlap = min(dt_fin, fin_franja)
