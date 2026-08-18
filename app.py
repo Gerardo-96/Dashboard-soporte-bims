@@ -1461,24 +1461,61 @@ with tab_operativo:
     if not df_filtered.empty:
         df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
-        # Universo único para las métricas de Gestión: debe coincidir con el Excel.
-        # Se excluyen agentes/bots, fuera de horario, "Sin Respuesta", abiertos y tiempos nulos.
-        es_sin_respuesta_f = df_f.get("etiquetas", pd.Series(index=df_f.index, dtype=str)).astype(str).str.lower().str.contains("sin respuesta", na=False)
+        # Universos independientes para que cada métrica coincida con su Excel.
+        # 1) Primera respuesta: NO exige cierre ni excluye "Sin Respuesta".
+        #    Debe incluir exactamente los registros evaluables por SLA 1ra respuesta.
+        # 2) Gestión: sí exige cierre y excluye "Sin Respuesta".
+        etiquetas_f = df_f.get("etiquetas", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.lower()
+        es_sin_respuesta_f = etiquetas_f.str.contains("sin respuesta", na=False)
         agente_f = df_f.get("agente_asignado", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
-        es_agente_valido_f = (df_f["por_agente"].astype(str).str.strip().str.lower() == "no excluido") & ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+        por_agente_f = df_f.get("por_agente", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
 
+        # Primera respuesta: mismo universo que el Excel (SLA Normal O Extendido).
+        # Importante: aquí NO exigimos cierre ni excluimos la etiqueta "Sin Respuesta".
+        es_agente_valido_1ra = (
+            (por_agente_f == "no excluido") &
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+        )
+        dt_1ra = df_f["created_at_dt"]
+        dia_1ra = dt_1ra.dt.dayofweek
+        hora_1ra = dt_1ra.dt.time
+        fecha_1ra = dt_1ra.dt.strftime("%Y-%m-%d")
+        normal_1ra = (
+            (dia_1ra.isin([0,1,2,3,4])) &
+            (hora_1ra >= time(8,0)) & (hora_1ra <= time(17,30))
+        ) | (
+            (dia_1ra == 5) &
+            (hora_1ra >= time(9,0)) & (hora_1ra <= time(11,45))
+        )
+        extendido_1ra = (
+            (dia_1ra.isin([0,1,2])) &
+            ((hora_1ra >= time(19,0)) | (hora_1ra <= time(1,45)))
+        ) | (
+            (dia_1ra.isin([3,4,5,6])) &
+            ((hora_1ra >= time(18,0)) | (hora_1ra <= time(2,45)))
+        )
+        no_feriado_1ra = ~fecha_1ra.isin(FERIADOS)
+        es_horario_1ra = (normal_1ra | extendido_1ra) & no_feriado_1ra
+        v_1ra = df_f[es_agente_valido_1ra & es_horario_1ra].copy()
+        v_1ra["p_1ra_num"] = pd.to_numeric(v_1ra["primera_respuesta_min"], errors="coerce")
+        s_1ra_total = v_1ra["p_1ra_num"].dropna()
+        p_1r = round(s_1ra_total.mean(), 2) if not s_1ra_total.empty else 0.0
+
+        # Gestión: mismas reglas que el Excel.
+        es_agente_valido_gest = (
+            (por_agente_f == "no excluido") &
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+        )
+        es_horario_gest = df_f["horario_evaluado"] != "fuera de horario"
         v_df = df_f[
-            es_agente_valido_f
-            & (df_f["horario_evaluado"] != "fuera de horario")
-            & (~es_sin_respuesta_f)
-            & (df_f["es_cerrado"])
+            es_agente_valido_gest &
+            es_horario_gest &
+            (~es_sin_respuesta_f) &
+            (df_f["es_cerrado"])
         ].copy()
-        
-        v_df["p_1ra_num"] = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
         v_df["p_gest_num"] = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
-
-        p_1r = round(v_df["p_1ra_num"].mean(), 2) if not v_df["p_1ra_num"].dropna().empty else 0.0
-        p_gest = round(v_df["p_gest_num"].mean(), 2) if not v_df["p_gest_num"].dropna().empty else 0.0
+        s_gest_total = v_df["p_gest_num"].dropna()
+        p_gest = round(s_gest_total.mean(), 2) if not s_gest_total.empty else 0.0
 
         if "sla_1ra_eval" in df_f.columns:
             eval_1ra_rango = df_f[df_f["sla_1ra_eval"].isin(["cumple", "no cumple"])]
@@ -1503,10 +1540,16 @@ with tab_operativo:
         df_cerrados = df_f[df_f["es_cerrado"]]
 
         total_ingresados_tot = len(df_f)
-        ingresados_humanos = len(df_f[df_f["por_agente"] == "no excluido"])
+        # "Humano": incluye a Monica; excluye bots/sin asignar y únicamente
+        # descarta conversaciones con la etiqueta "Sin Respuesta".
+        es_humano_f = (
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica (bot)"])
+            & (~es_sin_respuesta_f)
+        )
+        ingresados_humanos = int(es_humano_f.sum())
 
         total_cerrados_tot = len(df_cerrados)
-        cerrados_humanos = len(df_cerrados[df_cerrados["por_agente"] == "no excluido"])
+        cerrados_humanos = int((es_humano_f & df_f["es_cerrado"]).sum())
 
         es_cumplido_1ra = pct_sla_1ra_total >= 90.0
         color_1ra_val = "#34d399" if es_cumplido_1ra else "#f43f5e"
@@ -1543,20 +1586,25 @@ with tab_operativo:
             cerrados_totales = len(grp[grp["es_cerrado"]])
             
             agente_g = grp.get("agente_asignado", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
-            es_sin_respuesta_g = grp.get("etiquetas", pd.Series(index=grp.index, dtype=str)).astype(str).str.lower().str.contains("sin respuesta", na=False)
-            es_agente_valido_g = (grp["por_agente"].astype(str).str.strip().str.lower() == "no excluido") & ~agente_g.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+            etiquetas_g = grp.get("etiquetas", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.lower()
+            es_sin_respuesta_g = etiquetas_g.str.contains("sin respuesta", na=False)
+            por_agente_g = grp.get("por_agente", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
+            es_agente_valido_g = (por_agente_g == "no excluido") & ~agente_g.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
 
+            # Primera respuesta: mismo criterio que el promedio general.
+            v_1ra_g = grp[es_agente_valido_g & (grp["horario_evaluado"] != "fuera de horario")].copy()
+            v_1ra_g["p_1ra_num"] = pd.to_numeric(v_1ra_g["primera_respuesta_min"], errors="coerce")
+
+            # Gestión: mismas exclusiones que Excel.
             v_g = grp[
                 es_agente_valido_g
                 & (grp["horario_evaluado"] != "fuera de horario")
                 & (~es_sin_respuesta_g)
                 & (grp["es_cerrado"])
             ].copy()
-            
-            v_g["p_1ra_num"] = pd.to_numeric(v_g["primera_respuesta_min"], errors="coerce")
             v_g["p_gest_num"] = pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce")
 
-            s_1ra = v_g["p_1ra_num"].dropna()
+            s_1ra = v_1ra_g["p_1ra_num"].dropna()
             if not s_1ra.empty:
                 p_1 = round(s_1ra.mean(), 2)
                 cumplen_1ra = (s_1ra <= sla_1ra_th).sum()
