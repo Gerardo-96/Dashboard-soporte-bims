@@ -2148,7 +2148,62 @@ with tab_faq:
         * Conversaciones del canal de Correo Electrónico (`email`).
         """)
 
-    with st.expander("3. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
+    with st.expander("3. ¿Cómo se contabiliza el tiempo hábil para el SLA?", expanded=False):
+        st.markdown(r"""
+        ### ⏱️ El SLA contabiliza únicamente tiempo hábil
+
+        El tiempo utilizado para medir los SLA **no corresponde al tiempo calendario transcurrido** entre la creación y la respuesta o cierre de una conversación.
+
+        El sistema contabiliza únicamente los minutos que se encuentran dentro de las **jornadas operativas definidas**. Por lo tanto, las horas que están fuera de estas jornadas **no suman tiempo al SLA**.
+
+        #### 🕘 Horario hábil normal
+
+        **Lunes a viernes**
+        - Inicio: **08:00 hs**
+        - Fin: **17:30 hs**
+        - Se contabiliza todo el intervalo comprendido entre 08:00 y 17:30.
+
+        **Sábados**
+        - Inicio: **09:00 hs**
+        - Fin: **11:45 hs**
+        - Solo se contabiliza el intervalo comprendido entre 09:00 y 11:45.
+
+        **Domingos y feriados**
+        - No se contabiliza tiempo hábil dentro del horario normal.
+
+        #### 🌙 Horario hábil extendido
+
+        Para la atención fuera del horario normal también existen jornadas extendidas:
+
+        **Lunes, martes y miércoles**
+        - Inicio: **19:00 hs**
+        - Fin: **02:00 hs del día siguiente**
+
+        **Jueves, viernes, sábados y domingos**
+        - Inicio: **18:00 hs**
+        - Fin: **03:00 hs del día siguiente**
+
+        Cuando una jornada termina después de medianoche, el sistema entiende correctamente que la jornada continúa durante la madrugada del día siguiente.
+
+        #### 📌 Ejemplo práctico
+
+        Si una conversación se crea un lunes a las **16:00 hs** y recibe respuesta el martes a las **09:00 hs**, el SLA **no contabiliza las 17 horas de tiempo calendario**.
+
+        Solo se contabilizan los períodos que pertenecen a las jornadas hábiles correspondientes. El tiempo transcurrido durante la noche y fuera de las franjas operativas no incrementa el SLA.
+
+        #### 🚫 ¿Qué períodos no cuentan?
+
+        No se acumulan minutos de SLA durante:
+        - Horas fuera de las jornadas operativas.
+        - Períodos nocturnos que no formen parte de la jornada extendida.
+        - Domingos fuera de la jornada extendida correspondiente.
+        - Días feriados cuando la conversación queda excluida por las reglas de SLA.
+
+        **En resumen:** el SLA mide **tiempo operativo**, no tiempo de reloj. Por eso una conversación puede haber estado abierta durante muchas horas y, aun así, tener pocos minutos contabilizados para el SLA.
+        """)
+
+
+    with st.expander("4. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
         st.markdown(r"""
         En el archivo Excel descargable, cada conversación contiene tres columnas de evaluación independiente:
 
@@ -2169,7 +2224,7 @@ with tab_faq:
           * **Excluido por filtro:** Conversación que contiene la etiqueta *"sin respuesta"*, creada en feriado o fuera de horario hábil.
         """)
 
-    with st.expander("4. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
+    with st.expander("5. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
         st.markdown(r"""
         * **Origen de la Fecha:** Las métricas, gráficos y tablas de CSAT se alimentan de la **marca de tiempo exacta en que el cliente calificó la atención** (`fecha_calificacion`).
         * **Calificaciones Válidas:** Se consideran las puntuaciones numéricas entre **1 y 5 estrellas** de conversaciones atendidas por agentes humanos.
