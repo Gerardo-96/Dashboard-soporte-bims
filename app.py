@@ -971,12 +971,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
 
-    # Indicador explícito del universo válido de Gestión. Facilita reconciliar Excel vs Dashboard.
-    df_reporte["Gestion valida para promedio"] = df_exp.apply(
-        lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold) in ["cumple", "no cumple"],
-        axis=1
-    ) if not df_exp.empty else False
-
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
     df_reporte["Modulo"] = df_exp.get("modulo", "")
     df_reporte["Cliente"] = df_exp.get("cliente", "")
@@ -1540,11 +1534,10 @@ with tab_operativo:
         df_cerrados = df_f[df_f["es_cerrado"]]
 
         total_ingresados_tot = len(df_f)
-        # "Humano": incluye a Monica; excluye bots/sin asignar y únicamente
-        # descarta conversaciones con la etiqueta "Sin Respuesta".
+        # "Humano": incluye a Monica y también conversaciones con etiqueta
+        # "Sin Respuesta". Solo se excluyen bots/sin asignar.
         es_humano_f = (
             ~agente_f.isin(["", "sin asignar", "none", "nan", "monica (bot)"])
-            & (~es_sin_respuesta_f)
         )
         ingresados_humanos = int(es_humano_f.sum())
 
