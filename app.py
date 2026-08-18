@@ -2130,25 +2130,7 @@ with tab_faq:
         * **Porcentaje de Cumplimiento:** Es la proporción de conversaciones donde el tiempo de respuesta o gestión fue menor o igual al umbral objetivo configurado (ejemplo: $\le 2.0$ min para 1ra respuesta y $\le 60.0$ min para gestión).
         """)
 
-    with st.expander("2. ¿Cuáles son los Horarios y Criterios de Exclusión para la medición del SLA?", expanded=False):
-        st.markdown(r"""
-        #### 📅 Días Feriados
-        Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
-        
-        #### 🕒 Horario Hábil Normal
-        * **Lunes a Viernes:** 08:00 a 17:30 hs (Jornada continua, sin pausar almuerzo).
-        * **Sábados:** 09:00 a 11:45 hs.
-
-        #### 🌙 Horario Extendido (Turno Noche / Fin de Semana)
-        * **Lunes a Miércoles:** 19:00 a 02:00 hs (del día siguiente).
-        * **Jueves a Domingo:** 18:00 a 03:00 hs (del día siguiente, incluye fines de semana).
-
-        #### 🚫 Exclusiones Generales
-        * Chats asignados únicamente a Bots (`Monica (Bot)`, etc.).
-        * Conversaciones del canal de Correo Electrónico (`email`).
-        """)
-
-    with st.expander("3. ¿Cómo se contabiliza el tiempo hábil para el SLA?", expanded=False):
+    with st.expander("2. ¿Cómo se contabiliza el tiempo hábil para el SLA?", expanded=False):
         st.markdown(r"""
         ### ⏱️ El SLA contabiliza únicamente tiempo hábil
 
