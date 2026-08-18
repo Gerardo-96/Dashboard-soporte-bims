@@ -2140,8 +2140,6 @@ with tab_faq:
 
         #### 📅 Días Feriados
         Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
-        
-        #### 🕘 Horario hábil normal
 
         #### 🕒 Horario Hábil Normal
         * **Lunes a Viernes:** 08:00 a 17:30 hs (Jornada continua, sin pausar almuerzo).
@@ -2171,7 +2169,7 @@ with tab_faq:
         """)
 
 
-    with st.expander("4. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
+    with st.expander("3. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
         st.markdown(r"""
         En el archivo Excel descargable, cada conversación contiene tres columnas de evaluación independiente:
 
@@ -2192,7 +2190,7 @@ with tab_faq:
           * **Excluido por filtro:** Conversación que contiene la etiqueta *"sin respuesta"*, creada en feriado o fuera de horario hábil.
         """)
 
-    with st.expander("5. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
+    with st.expander("4. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
         st.markdown(r"""
         * **Origen de la Fecha:** Las métricas, gráficos y tablas de CSAT se alimentan de la **marca de tiempo exacta en que el cliente calificó la atención** (`fecha_calificacion`).
         * **Calificaciones Válidas:** Se consideran las puntuaciones numéricas entre **1 y 5 estrellas** de conversaciones atendidas por agentes humanos.
