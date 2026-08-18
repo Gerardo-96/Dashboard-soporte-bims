@@ -755,17 +755,17 @@ def evaluar_sla_gestion_excel(row, threshold_gest):
     por_agente = str(row.get("por_agente", "")).strip().lower()
     
     if por_agente == "excluido" or not agente or agente in ["sin asignar", "none", "nan", "monica", "monica (bot)"]:
-        return "excluido por filtro"
+        return "excluido por agente"
 
     # 2. Exclusión por Horario (Usa exactamente la misma franja que el Dashboard: Normal + Extendido)
     horario_eval = str(row.get("horario_evaluado", "")).strip().lower()
     if horario_eval == "fuera de horario":
-        return "excluido por filtro"
+        return "excluido por horario"
 
     # 3. Exclusión por Etiqueta "Sin Respuesta"
     etiquetas = str(row.get("etiquetas", "")).lower()
     if "sin respuesta" in etiquetas:
-        return "excluido por filtro"
+        return "excluido por etiqueta"
 
     # 4. Verificación de Estado (Abierto vs Cerrado)
     estado_raw = str(row.get("estado", "")).strip().lower()
@@ -1473,7 +1473,8 @@ with tab_operativo:
         df_cerrados = df_f[df_f["es_cerrado"]]
 
         total_ingresados_tot = len(df_f)
-        ingresados_humanos = len(df_f[df_f["por_agente"] == "no excluido"])
+        agente_clean = df_f["agente_asignado"].fillna("sin asignar").astype(str).str.strip().str.lower()
+        ingresados_humanos = len(df_f[~agente_clean.isin(["sin asignar", "none", "nan", ""])])
 
         total_cerrados_tot = len(df_cerrados)
         cerrados_humanos = len(df_cerrados[df_cerrados["por_agente"] == "no excluido"])
