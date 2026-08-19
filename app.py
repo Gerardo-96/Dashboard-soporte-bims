@@ -12,7 +12,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
-from supabase import create_client, Client
+from supabase import create_async_client, create_client, Client
 import extra_streamlit_components as stx
 
 # ==========================================
