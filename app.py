@@ -1029,7 +1029,8 @@ if st.sidebar.button("🧪 Simular Chat Crítico"):
             "created_at": "2026-08-19T00:00:00.000Z", # Hora pasada para forzar la alerta
             "es_cerrado": False,
             "primera_respuesta_min": None,
-            "por_agente": "no"
+            "por_agente": "no",
+            "estado": "Pendiente"
         }
     }
     st.session_state.event_queue.put(event_falso)
