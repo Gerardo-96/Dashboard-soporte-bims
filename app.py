@@ -166,6 +166,7 @@ def iniciar_escuchador_realtime(queue_ref, url, key):
         # Callback asíncrono que recibe los cambios
         def al_recibir_cambio(payload):
             # Encolar de manera segura
+            print("⚡ Evento Realtime recibido:", payload.get("eventType"))  # <-- LOG
             queue_ref.put(payload)
 
         # Suscribirse al canal Realtime
@@ -177,6 +178,8 @@ def iniciar_escuchador_realtime(queue_ref, url, key):
             callback=al_recibir_cambio
         ).subscribe()
 
+        print("✅ WebSocket de Supabase Realtime CONECTADO y escuchando...")  # <-- LOG
+        
         # Mantener el bucle asíncrono corriendo indefinidamente
         while True:
             await asyncio.sleep(3600)
@@ -1013,6 +1016,24 @@ renderizar_indicador_sync_sidebar()
 st.sidebar.markdown("### Filtros de Consulta")
 
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
+
+# Agregar en tu sidebar para pruebas rápidos
+if st.sidebar.button("🧪 Simular Chat Crítico"):
+    event_falso = {
+        "eventType": "INSERT",
+        "new": {
+            "id": "test-1234",
+            "nombre_contacto": "Cliente de Prueba",
+            "tenant": "Empresa Test",
+            "intercom_url": "https://example.com",
+            "created_at": "2026-08-19T00:00:00.000Z", # Hora pasada para forzar la alerta
+            "es_cerrado": False,
+            "primera_respuesta_min": None,
+            "por_agente": "no"
+        }
+    }
+    st.session_state.event_queue.put(event_falso)
+    st.toast("Evento de prueba enviado a la cola")
 
 def set_fechas_hoy():
     hoy = obtener_fecha_local_hoy()
