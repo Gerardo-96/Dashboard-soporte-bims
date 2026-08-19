@@ -1,8 +1,5 @@
 import os
 import io
-import asyncio
-import queue
-import threading
 import time as time_lib
 import threading
 from datetime import datetime, timedelta, time, date, timezone
@@ -12,7 +9,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
-from supabase import create_async_client, create_client, Client
+from supabase import create_client, Client
 import extra_streamlit_components as stx
 
 # ==========================================
@@ -100,110 +97,6 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
-# ==========================================
-# RECARGA AUTOMÁTICA DE PESTAÑA CADA 15 MIN
-# ==========================================
-st.components.v1.html(
-    """
-    <script>
-        // 900,000 ms = 15 minutos
-        setTimeout(function() {
-            window.location.reload();
-        }, 900000);
-    </script>
-    """,
-    height=0,
-)
-
-# --- CALLBACK DE SUPABASE REALTIME (Hilo Secundario) ---
-def manejar_evento_realtime(payload):
-    """
-    Este callback corre en el hilo del WebSocket.
-    NO toca st.session_state ni hace st.rerun(). Solo pone el payload en la cola.
-    """
-    try:
-        st.session_state.event_queue.put(payload)
-    except Exception as e:
-        pass
-
-# Cola thread-safe para recibir eventos de Supabase Realtime
-# Asegurar la cola de eventos y el diccionario en memoria
-# 1. Cola de eventos Realtime
-if "event_queue" not in st.session_state:
-    st.session_state.event_queue = queue.Queue()
-
-# 2. Hidratación inicial de chats pendientes (Solo se ejecuta 1 vez al cargar/recargar la página)
-if "chats_pendientes" not in st.session_state:
-    st.session_state.chats_pendientes = {}
-
-    # OPCIÓN B: O hacer 1 sola consulta ultra rápida a Supabase al abrir la pestaña
-    # (Descomenta esto si 'df_all' no tiene los datos en tiempo real al arrancar)
-    try:
-        res = supabase.table("chats") \
-            .select("*") \
-            .eq("es_cerrado", False) \
-            .is_("primera_respuesta_min", "null") \
-            .neq("por_agente", "excluido") \
-            .execute()
-        
-        for chat in (res.data or []):
-            st.session_state.chats_pendientes[chat["id"]] = chat
-    except Exception as e:
-        pass
-
-# ------------------------------------------------------------------
-# 2. FUNCIÓN DE ESCUCHA ASÍNCRONA EN SEGUNDO PLANO
-# ------------------------------------------------------------------
-def iniciar_escuchador_realtime(queue_ref, url, key):
-    """
-    Función que se ejecuta en un hilo separado.
-    Mantiene vivo el WebSocket asíncrono de Supabase.
-    """
-    async def worker():
-        # Crear cliente asíncrono de Supabase
-        client = await create_async_client(url, key)
-
-        # Callback asíncrono que recibe los cambios
-        def al_recibir_cambio(payload):
-            # Encolar de manera segura
-            print("⚡ Evento Realtime recibido:", payload.get("eventType"))  # <-- LOG
-            queue_ref.put(payload)
-
-        # Suscribirse al canal Realtime
-        channel = client.channel("realtime_chats")
-        await channel.on_postgres_changes(
-            event="*",
-            schema="public",
-            table="chats",
-            callback=al_recibir_cambio
-        ).subscribe()
-
-        print("✅ WebSocket de Supabase Realtime CONECTADO y escuchando...", flush=True)  # <-- LOG
-        
-        # Mantener el bucle asíncrono corriendo indefinidamente
-        while True:
-            await asyncio.sleep(3600)
-
-    # Crear y asignar un nuevo bucle de eventos de asyncio para este hilo
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(worker())
-    except Exception as e:
-        print(f"Error en hilo de Supabase Realtime: {e}")
-
-# ------------------------------------------------------------------
-# 3. LANZAR EL HILO DE REALTIME (Solo 1 vez por sesión de servidor)
-# ------------------------------------------------------------------
-if "realtime_thread_started" not in st.session_state:
-    thread = threading.Thread(
-        target=iniciar_escuchador_realtime,
-        args=(st.session_state.event_queue, SUPABASE_URL, SUPABASE_KEY),
-        daemon=True  # daemon=True garantiza que el hilo muera si se apaga Streamlit
-    )
-    thread.start()
-    st.session_state.realtime_thread_started = True
-
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
 def obtener_estado_sync_global():
@@ -223,17 +116,6 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return len(res.data) > 0, res.data[0] if res.data else None
     except Exception:
         return False, None
-
-# Objeto persistente compartido por todos los usuarios/pestañas
-@st.cache_resource
-def obtener_estado_sync():
-    return {"ultima_sync": None}
-
-def registrar_sync_exitosa():
-    """Llama a esta función inmediatamente después de terminar la rutina de 900s"""
-    tz_py = timezone(timedelta(hours=-3))
-    estado = obtener_estado_sync()
-    estado["ultima_sync"] = datetime.now(tz_py)
 
 # ==========================================
 # PANTALLA DE LOGIN CENTRADA Y ACOTADA
@@ -395,34 +277,6 @@ def obtener_fecha_local_hoy():
     """Retorna la fecha actual exacta en Paraguay (UTC-3)."""
     tz_py = timezone(timedelta(hours=-3))
     return datetime.now(tz_py).date()
-
-def obtener_texto_transcurrido():
-    estado = obtener_estado_sync()
-    ultima_sync = estado.get("ultima_sync")
-    
-    if not ultima_sync:
-        return " Pendiente..."
-    
-    tz_py = timezone(timedelta(hours=-3))
-    ahora = datetime.now(tz_py)
-    
-    # Asegurar que ambos tengan zona horaria
-    if ultima_sync.tzinfo is None:
-        ultima_sync = ultima_sync.replace(tzinfo=tz_py)
-        
-    segundos_transcurridos = int((ahora - ultima_sync).total_seconds())
-    
-    # Prevenir valores negativos por pequeños desfases de reloj
-    if segundos_transcurridos < 0:
-        return " Hace un instante"
-    elif segundos_transcurridos < 60:
-        return f" Hace {segundos_transcurridos} seg"
-    elif segundos_transcurridos < 3600:
-        minutos = segundos_transcurridos // 60
-        return f" Hace {minutos} min"
-    else:
-        horas = segundos_transcurridos // 3600
-        return f" Hace {horas} h"
 
 def obtener_tiempo_transcurrido(fecha_dt):
     """Calcula el tiempo transcurrido exacto garantizando la conversión a America/Asuncion."""
@@ -693,8 +547,7 @@ def obtener_datos_hoy():
                 .gte("created_at", hace_36h_utc)\
                 .execute()
             datos = response_created.data or []
-
-        registrar_sync_exitosa()
+            
         return datos
     except Exception as e:
         st.error(f"Error consultando datos de Hoy en Supabase: {e}")
@@ -1001,40 +854,26 @@ if "input_f_hasta" not in st.session_state:
 # ==========================================
 df_all = obtener_datos()
 
-@st.fragment(run_every=300)
-def renderizar_indicador_sync_sidebar():
-    texto_sync = obtener_texto_transcurrido()
+if not df_all.empty and "updated_at_local" in df_all.columns:
+    # Tomamos la fecha máxima real parseada
+    max_updated_dt = df_all["updated_at_local"].dropna().max()
+    tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
-        • <b>Última sync:</b> {texto_sync}<br>
+        • <b>Ultima sync:</b> {tiempo_hace_str}<br>
     </div>
     """, unsafe_allow_html=True)
-
-renderizar_indicador_sync_sidebar()
+else:
+    st.sidebar.markdown("""
+    <div class="db-info-box">
+        <b>Ultima sincronizacion:</b> Sin registros<br>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.sidebar.markdown("### Filtros de Consulta")
 
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
-
-# Agregar en tu sidebar para pruebas rápidos
-if st.sidebar.button("🧪 Simular Chat Crítico"):
-    event_falso = {
-        "eventType": "INSERT",
-        "new": {
-            "id": "test-1234",
-            "nombre_contacto": "Cliente de Prueba",
-            "tenant": "Empresa Test",
-            "intercom_url": "https://example.com",
-            "created_at": "2026-08-19T00:00:00.000Z", # Hora pasada para forzar la alerta
-            "es_cerrado": False,
-            "primera_respuesta_min": None,
-            "por_agente": "no",
-            "estado": "Pendiente"
-        }
-    }
-    st.session_state.event_queue.put(event_falso)
-    st.toast("Evento de prueba enviado a la cola")
 
 def set_fechas_hoy():
     hoy = obtener_fecha_local_hoy()
@@ -1256,88 +1095,120 @@ tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
     "FAQ"
 ])
 
-@st.fragment(run_every=5)
+# ==========================================
+# FRAGMENTO DE ALERTAS EN VIVO (CADA 10s)
+# ==========================================
+@st.fragment(run_every=10)
 def renderizar_alertas_en_vivo():
-    # -------------------------------------------------------------
-    # A. VACIAR Y PROCESAR COLA REALTIME (Hilo Principal)
-    # -------------------------------------------------------------
-    q = st.session_state.get("event_queue")
-    if q:
-        while not q.empty():
-            try:
-                payload = q.get_nowait()
-                event_type = payload.get("eventType")
-                new_rec = payload.get("new") or {}
-                old_rec = payload.get("old") or {}
-                
-                chat_id = new_rec.get("id") or old_rec.get("id")
-                if not chat_id:
-                    continue
+    try:
+        alerta_nuevo_th = float(st.session_state.get("alerta_nuevo_th", 1.0))
+    except (ValueError, TypeError):
+        alerta_nuevo_th = 1.0
 
-                if event_type in ["INSERT", "UPDATE"]:
-                    es_cerrado = new_rec.get("es_cerrado", False)
-                    primera_resp = new_rec.get("primera_respuesta_min")
-                    por_agente = new_rec.get("por_agente")
-
-                    # Si fue respondido, cerrado o excluido -> Lo eliminamos de alertas
-                    if es_cerrado or primera_resp is not None or por_agente == "excluido":
-                        st.session_state.chats_pendientes.pop(chat_id, None)
-                    else:
-                        # Si sigue abierto y sin respuesta -> Actualizar estado en memoria
-                        st.session_state.chats_pendientes[chat_id] = new_rec
-
-                elif event_type == "DELETE":
-                    st.session_state.chats_pendientes.pop(chat_id, None)
-
-            except queue.Empty:
-                break
-
-    # -------------------------------------------------------------
-    # B. EVALUAR ALERTAS EN MEMORIA (Sin consultar Supabase DB)
-    # -------------------------------------------------------------
+    act_sonido = bool(st.session_state.get("act_sonido", True))
     tz_py = timezone(timedelta(hours=-3))
     now_dt = datetime.now(tz_py)
     
-    alerta_nuevo_th = float(st.session_state.get("alerta_nuevo_th", 1.0))
-    act_sonido = bool(st.session_state.get("act_sonido", True))
+    error_msg = None
+    datos_todos = []
 
-    criticos = []
-    
-    for c_id, chat in list(st.session_state.chats_pendientes.items()):
-        created_at_str = chat.get("created_at")
-        if created_at_str:
-            created_at_dt = pd.to_datetime(created_at_str).tz_convert(tz_py)
-            min_transcurridos = round((now_dt - created_at_dt).total_seconds() / 60.0, 1)
+    try:
+        # Solicitamos tenant y nombre_contacto desde Supabase
+        COLUMNAS_ALERTAS = "id, created_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto"
 
-            if min_transcurridos >= alerta_nuevo_th:
-                chat_copy = chat.copy()
-                chat_copy["min_transcurridos"] = min_transcurridos
-                criticos.append(chat_copy)
+        res = supabase.table("conversaciones")\
+            .select(COLUMNAS_ALERTAS)\
+            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+            .order("created_at", desc=True)\
+            .limit(100)\
+            .execute()
+        datos_todos = res.data or []
+    except Exception as e:
+        error_msg = str(e)
 
-    # -------------------------------------------------------------
-    # C. RENDERIZAR INTERFAZ Y AUDIO
-    # -------------------------------------------------------------
-    if criticos:
-        df_criticos = pd.DataFrame(criticos)
-        cant = len(df_criticos)
+    if error_msg:
+        with st.expander("Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
+            st.error(f"❌ Error al consultar Supabase: {error_msg}")
+        return
+
+    if datos_todos:
+        df_base = pd.DataFrame(datos_todos)
         
-        st.markdown(f"""
-        <div class="alert-card-critical">
-            <b>🚨 ALERTA CRÍTICA EN VIVO ({cant})</b><br>
-            Hay chats en espera sin respuesta que superan los {alerta_nuevo_th} min.
-        </div>
-        """, unsafe_allow_html=True)
-
-        if act_sonido:
-            # Timestamp fuerza al navegador a ejecutar el componente de audio
-            html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
-            st.components.v1.html(html_con_ts, height=0)
-
-        st.dataframe(
-            df_criticos[["intercom_url", "nombre_contacto", "tenant", "min_transcurridos", "estado"]],
-            hide_index=True,
-            use_container_width=True
+        df_base["estado_clean"] = df_base["estado"].fillna("").astype(str).str.strip().str.lower()
+        estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+        
+        df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
+        
+        # Generación de URL hacia Intercom
+        df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
+        df_activos["intercom_url"] = df_activos["id_str"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
+        
+        if "canal" in df_activos.columns:
+            df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
+            df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
+        
+        if not df_activos.empty:
+            created_utc = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True)
+            df_activos["created_at_dt"] = created_utc.dt.tz_convert("America/Asuncion")
+            df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+            df_activos = df_activos.drop_duplicates(subset=["id"])
+            
+            df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
+            
+            calc_min = (now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60.0
+            df_activos["min_transcurridos"] = calc_min.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
+            
+            sin_respuesta = df_activos["1ra_resp_num"].isna()
+            tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
+            
+            df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
+
+            if not df_criticos_sla.empty:
+                cant = len(df_criticos_sla)
+                st.markdown(f"""
+                <div class="alert-card-critical">
+                    <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
+                    Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
+                </div>
+                """, unsafe_allow_html=True)
+
+                if act_sonido:
+                    html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
+                    st.components.v1.html(html_con_ts, height=0)
+
+            with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
+                
+                if not df_criticos_sla.empty:
+                    # Incluimos intercom_url, tenant y nombre_contacto
+                    cols_check = ["intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "estado"]
+                    if "canal" in df_criticos_sla.columns:
+                        cols_check.append("canal")
+                    
+                    st.dataframe(
+                        df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), 
+                        column_config={
+                            "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                            "created_at_fmt": "Fecha Creación",
+                            "min_transcurridos": "Min. Transcurridos",
+                            "nombre_contacto": "Contacto",
+                            "tenant": "Tenant",
+                            "estado": "Estado",
+                            "canal": "Canal"
+                        },
+                        hide_index=True, 
+                        use_container_width=True
+                    )
+                else:
+                    st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
+        else:
+            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
+    else:
+        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
 
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
@@ -2326,3 +2197,4 @@ with tab_faq:
         * **Fórmula de CSAT:**
           $$\text{CSAT (\%)} = \left( \frac{\text{Total de Calificaciones Positivas (4 y 5 estrellas)}}{\text{Total de Encuestas Validadas}} \right) \times 100$$
         """)
+
