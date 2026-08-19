@@ -112,6 +112,62 @@ st.components.v1.html(
     height=0,
 )
 
+# --- CALLBACK DE SUPABASE REALTIME (Hilo Secundario) ---
+def manejar_evento_realtime(payload):
+    """
+    Este callback corre en el hilo del WebSocket.
+    NO toca st.session_state ni hace st.rerun(). Solo pone el payload en la cola.
+    """
+    try:
+        st.session_state.event_queue.put(payload)
+    except Exception as e:
+        pass
+
+# Cola thread-safe para recibir eventos de Supabase Realtime
+# Asegurar la cola de eventos y el diccionario en memoria
+# 1. Cola de eventos Realtime
+if "event_queue" not in st.session_state:
+    st.session_state.event_queue = queue.Queue()
+
+# 2. Hidratación inicial de chats pendientes (Solo se ejecuta 1 vez al cargar/recargar la página)
+if "chats_pendientes" not in st.session_state:
+    st.session_state.chats_pendientes = {}
+
+    # OPCIÓN B: O hacer 1 sola consulta ultra rápida a Supabase al abrir la pestaña
+    # (Descomenta esto si 'df_all' no tiene los datos en tiempo real al arrancar)
+    try:
+        res = supabase.table("chats") \
+            .select("*") \
+            .eq("es_cerrado", False) \
+            .is_("primera_respuesta_min", "null") \
+            .neq("por_agente", "excluido") \
+            .execute()
+        
+        for chat in (res.data or []):
+            st.session_state.chats_pendientes[chat["id"]] = chat
+    except Exception as e:
+        pass
+
+# ------------------------------------------------------------------
+# 4. SUSCRIPCIÓN A REALTIME (Solo se ejecuta 1 vez por sesión)
+# ------------------------------------------------------------------
+if "realtime_subscribed" not in st.session_state:
+    try:
+        # Se crea un canal único para escuchar cambios en la tabla 'chats'
+        channel = supabase.channel("realtime_chats")
+        
+        channel.on_postgres_changes(
+            event="*",                       # Escucha INSERT, UPDATE y DELETE
+            schema="public",
+            table="chats",
+            callback=manejar_evento_realtime # Envía el payload a la cola
+        ).subscribe()
+
+        # Marcamos como suscrito para evitar reconexiones en futuros reruns
+        st.session_state.realtime_subscribed = True
+    except Exception as e:
+        st.error(f"Error al conectar Supabase Realtime: {e}")
+
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
 def obtener_estado_sync_global():
@@ -1145,145 +1201,88 @@ tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
     "FAQ"
 ])
 
-# ==========================================
-# 1. INICIALIZACIÓN DE MEMORIA RAM
-# ==========================================
-if "chats_pendientes" not in st.session_state:
-    st.session_state.chats_pendientes = {}
-
-# ==========================================
-# 2. CALLBACK OPTIMIZADO (FILTRADO INTELIGENTE)
-# ==========================================
-def manejar_evento_realtime(payload):
-    """
-    Procesa eventos de Supabase en microsegundos y solo fuerza rerun 
-    si el cambio altera la lista de chats en alerta.
-    """
-    event_type = payload.get("eventType")  # 'INSERT' o 'UPDATE'
-    record = payload.get("new", {})
-    chat_id = str(record.get("id"))
-    
-    estado = str(record.get("estado", "")).lower().strip()
-    primera_resp = record.get("primera_respuesta_min")
-    estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
-
-    chat_esta_en_espera = chat_id in st.session_state.chats_pendientes
-
-    # CASO 1: El chat se cerró o el agente ya respondió
-    if estado in estados_cerrados or primera_resp is not None:
-        if chat_esta_en_espera:
-            # Solo si estaba en la lista de alerta, lo quitamos y refrescamos
-            del st.session_state.chats_pendientes[chat_id]
-            st.rerun()
-        # Si NO estaba en la lista (evento de chat ya atendido), NO hacemos nada.
-
-    # CASO 2: Entra un nuevo chat a la bandeja de espera humana
-    elif event_type == "INSERT":
-        if not chat_esta_en_espera and estado not in estados_cerrados and primera_resp is None:
-            tz_py = timezone(timedelta(hours=-3))
-            fecha_str = record.get("created_at")
-            
-            try:
-                dt_inicio = pd.to_datetime(fecha_str).tz_convert("America/Asuncion")
-            except Exception:
-                dt_inicio = datetime.now(tz_py)
-
-            st.session_state.chats_pendientes[chat_id] = {
-                "id": chat_id,
-                "inicio_espera": dt_inicio,
-                "tenant": record.get("tenant", "N/A"),
-                "nombre_contacto": record.get("nombre_contacto", "Cliente"),
-                "canal": record.get("canal", "web"),
-                "estado": estado
-            }
-            st.rerun()
-
-# ==========================================
-# 3. SUSCRIPCIÓN ÚNICA A SUPABASE REALTIME
-# ==========================================
-@st.cache_resource
-def iniciar_listener_realtime():
-    """
-    Asegura que el WebSocket se abra UNA sola vez por instancia de la app.
-    """
-    try:
-        canal = supabase.channel("realtime_alertas")
-        canal.on(
-            "postgres_changes",
-            event="*",  # Escucha INSERT y UPDATE
-            schema="public",
-            table="conversaciones",
-            callback=manejar_evento_realtime
-        ).subscribe()
-        return True
-    except Exception as e:
-        st.error(f"Error conectando a Supabase Realtime: {e}")
-        return False
-
-# Invocar la suscripción (st.cache_resource evita duplicados)
-iniciar_listener_realtime()
-
-# ==========================================
-# 4. RENDERING DE ALERTAS EN VIVO (EVALUACIÓN CADA 5s EN RAM)
-# ==========================================
 @st.fragment(run_every=5)
 def renderizar_alertas_en_vivo():
+    # -------------------------------------------------------------
+    # A. VACIAR Y PROCESAR COLA REALTIME (Hilo Principal)
+    # -------------------------------------------------------------
+    q = st.session_state.get("event_queue")
+    if q:
+        while not q.empty():
+            try:
+                payload = q.get_nowait()
+                event_type = payload.get("eventType")
+                new_rec = payload.get("new") or {}
+                old_rec = payload.get("old") or {}
+                
+                chat_id = new_rec.get("id") or old_rec.get("id")
+                if not chat_id:
+                    continue
+
+                if event_type in ["INSERT", "UPDATE"]:
+                    es_cerrado = new_rec.get("es_cerrado", False)
+                    primera_resp = new_rec.get("primera_respuesta_min")
+                    por_agente = new_rec.get("por_agente")
+
+                    # Si fue respondido, cerrado o excluido -> Lo eliminamos de alertas
+                    if es_cerrado or primera_resp is not None or por_agente == "excluido":
+                        st.session_state.chats_pendientes.pop(chat_id, None)
+                    else:
+                        # Si sigue abierto y sin respuesta -> Actualizar estado en memoria
+                        st.session_state.chats_pendientes[chat_id] = new_rec
+
+                elif event_type == "DELETE":
+                    st.session_state.chats_pendientes.pop(chat_id, None)
+
+            except queue.Empty:
+                break
+
+    # -------------------------------------------------------------
+    # B. EVALUAR ALERTAS EN MEMORIA (Sin consultar Supabase DB)
+    # -------------------------------------------------------------
     tz_py = timezone(timedelta(hours=-3))
     now_dt = datetime.now(tz_py)
     
-    try:
-        alerta_nuevo_th = float(st.session_state.get("alerta_nuevo_th", 1.0))
-    except (ValueError, TypeError):
-        alerta_nuevo_th = 1.0
-
+    alerta_nuevo_th = float(st.session_state.get("alerta_nuevo_th", 1.0))
     act_sonido = bool(st.session_state.get("act_sonido", True))
-    
-    chats_criticos = []
-    
-    # Recorremos la RAM local
-    for chat_id, info in list(st.session_state.chats_pendientes.items()):
-        min_transcurridos = (now_dt - info["inicio_espera"]).total_seconds() / 60.0
-        
-        # Evaluación del umbral (ej. >= 1.0 min)
-        if min_transcurridos >= alerta_nuevo_th:
-            info_copy = info.copy()
-            info_copy["min_transcurridos"] = round(min_transcurridos, 1)
-            chats_criticos.append(info_copy)
 
-    if chats_criticos:
-        cant = len(chats_criticos)
+    criticos = []
+    
+    for c_id, chat in list(st.session_state.chats_pendientes.items()):
+        created_at_str = chat.get("created_at")
+        if created_at_str:
+            created_at_dt = pd.to_datetime(created_at_str).tz_convert(tz_py)
+            min_transcurridos = round((now_dt - created_at_dt).total_seconds() / 60.0, 1)
+
+            if min_transcurridos >= alerta_nuevo_th:
+                chat_copy = chat.copy()
+                chat_copy["min_transcurridos"] = min_transcurridos
+                criticos.append(chat_copy)
+
+    # -------------------------------------------------------------
+    # C. RENDERIZAR INTERFAZ Y AUDIO
+    # -------------------------------------------------------------
+    if criticos:
+        df_criticos = pd.DataFrame(criticos)
+        cant = len(df_criticos)
+        
         st.markdown(f"""
         <div class="alert-card-critical">
-            <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
-            Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
+            <b>🚨 ALERTA CRÍTICA EN VIVO ({cant})</b><br>
+            Hay chats en espera sin respuesta que superan los {alerta_nuevo_th} min.
         </div>
         """, unsafe_allow_html=True)
 
         if act_sonido:
+            # Timestamp fuerza al navegador a ejecutar el componente de audio
             html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
             st.components.v1.html(html_con_ts, height=0)
 
-        df_criticos = pd.DataFrame(chats_criticos)
-        df_criticos["intercom_url"] = df_criticos["id"].apply(
-            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+        st.dataframe(
+            df_criticos[["intercom_url", "nombre_contacto", "tenant", "min_transcurridos", "estado"]],
+            hide_index=True,
+            use_container_width=True
         )
-        
-        with st.expander("Panel de Verificación de Alertas en Vivo", expanded=True):
-            st.dataframe(
-                df_criticos[["intercom_url", "nombre_contacto", "tenant", "min_transcurridos", "estado"]],
-                column_config={
-                    "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
-                    "nombre_contacto": "Contacto",
-                    "min_transcurridos": "Min. Transcurridos",
-                    "tenant": "Tenant",
-                    "estado": "Estado"
-                },
-                hide_index=True,
-                use_container_width=True
-            )
-    else:
-        with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
-            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin chats en alerta crítica.")
 
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
