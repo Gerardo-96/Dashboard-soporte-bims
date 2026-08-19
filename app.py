@@ -1,6 +1,8 @@
 import os
 import io
+import asyncio
 import queue
+import threading
 import time as time_lib
 import threading
 from datetime import datetime, timedelta, time, date, timezone
@@ -150,24 +152,54 @@ if "chats_pendientes" not in st.session_state:
         pass
 
 # ------------------------------------------------------------------
-# 4. SUSCRIPCIÓN A REALTIME (Solo se ejecuta 1 vez por sesión)
+# 2. FUNCIÓN DE ESCUCHA ASÍNCRONA EN SEGUNDO PLANO
 # ------------------------------------------------------------------
-if "realtime_subscribed" not in st.session_state:
-    try:
-        # Se crea un canal único para escuchar cambios en la tabla 'chats'
-        channel = supabase.channel("realtime_chats")
-        
-        channel.on_postgres_changes(
-            event="*",                       # Escucha INSERT, UPDATE y DELETE
+def iniciar_escuchador_realtime(queue_ref, url, key):
+    """
+    Función que se ejecuta en un hilo separado.
+    Mantiene vivo el WebSocket asíncrono de Supabase.
+    """
+    async def worker():
+        # Crear cliente asíncrono de Supabase
+        client = await create_async_client(url, key)
+
+        # Callback asíncrono que recibe los cambios
+        def al_recibir_cambio(payload):
+            # Encolar de manera segura
+            queue_ref.put(payload)
+
+        # Suscribirse al canal Realtime
+        channel = client.channel("realtime_chats")
+        await channel.on_postgres_changes(
+            event="*",
             schema="public",
             table="chats",
-            callback=manejar_evento_realtime # Envía el payload a la cola
+            callback=al_recibir_cambio
         ).subscribe()
 
-        # Marcamos como suscrito para evitar reconexiones en futuros reruns
-        st.session_state.realtime_subscribed = True
+        # Mantener el bucle asíncrono corriendo indefinidamente
+        while True:
+            await asyncio.sleep(3600)
+
+    # Crear y asignar un nuevo bucle de eventos de asyncio para este hilo
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(worker())
     except Exception as e:
-        st.error(f"Error al conectar Supabase Realtime: {e}")
+        print(f"Error en hilo de Supabase Realtime: {e}")
+
+# ------------------------------------------------------------------
+# 3. LANZAR EL HILO DE REALTIME (Solo 1 vez por sesión de servidor)
+# ------------------------------------------------------------------
+if "realtime_thread_started" not in st.session_state:
+    thread = threading.Thread(
+        target=iniciar_escuchador_realtime,
+        args=(st.session_state.event_queue, SUPABASE_URL, SUPABASE_KEY),
+        daemon=True  # daemon=True garantiza que el hilo muera si se apaga Streamlit
+    )
+    thread.start()
+    st.session_state.realtime_thread_started = True
 
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
