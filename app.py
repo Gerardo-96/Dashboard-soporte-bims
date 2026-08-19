@@ -971,12 +971,6 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
 
-    # Indicador explícito del universo válido de Gestión. Facilita reconciliar Excel vs Dashboard.
-    df_reporte["Gestion valida para promedio"] = df_exp.apply(
-        lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold) in ["cumple", "no cumple"],
-        axis=1
-    ) if not df_exp.empty else False
-
     df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
     df_reporte["Modulo"] = df_exp.get("modulo", "")
     df_reporte["Cliente"] = df_exp.get("cliente", "")
@@ -1461,24 +1455,61 @@ with tab_operativo:
     if not df_filtered.empty:
         df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
         
-        # Universo único para las métricas de Gestión: debe coincidir con el Excel.
-        # Se excluyen agentes/bots, fuera de horario, "Sin Respuesta", abiertos y tiempos nulos.
-        es_sin_respuesta_f = df_f.get("etiquetas", pd.Series(index=df_f.index, dtype=str)).astype(str).str.lower().str.contains("sin respuesta", na=False)
+        # Universos independientes para que cada métrica coincida con su Excel.
+        # 1) Primera respuesta: NO exige cierre ni excluye "Sin Respuesta".
+        #    Debe incluir exactamente los registros evaluables por SLA 1ra respuesta.
+        # 2) Gestión: sí exige cierre y excluye "Sin Respuesta".
+        etiquetas_f = df_f.get("etiquetas", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.lower()
+        es_sin_respuesta_f = etiquetas_f.str.contains("sin respuesta", na=False)
         agente_f = df_f.get("agente_asignado", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
-        es_agente_valido_f = (df_f["por_agente"].astype(str).str.strip().str.lower() == "no excluido") & ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+        por_agente_f = df_f.get("por_agente", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
 
+        # Primera respuesta: mismo universo que el Excel (SLA Normal O Extendido).
+        # Importante: aquí NO exigimos cierre ni excluimos la etiqueta "Sin Respuesta".
+        es_agente_valido_1ra = (
+            (por_agente_f == "no excluido") &
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+        )
+        dt_1ra = df_f["created_at_dt"]
+        dia_1ra = dt_1ra.dt.dayofweek
+        hora_1ra = dt_1ra.dt.time
+        fecha_1ra = dt_1ra.dt.strftime("%Y-%m-%d")
+        normal_1ra = (
+            (dia_1ra.isin([0,1,2,3,4])) &
+            (hora_1ra >= time(8,0)) & (hora_1ra <= time(17,30))
+        ) | (
+            (dia_1ra == 5) &
+            (hora_1ra >= time(9,0)) & (hora_1ra <= time(11,45))
+        )
+        extendido_1ra = (
+            (dia_1ra.isin([0,1,2])) &
+            ((hora_1ra >= time(19,0)) | (hora_1ra <= time(1,45)))
+        ) | (
+            (dia_1ra.isin([3,4,5,6])) &
+            ((hora_1ra >= time(18,0)) | (hora_1ra <= time(2,45)))
+        )
+        no_feriado_1ra = ~fecha_1ra.isin(FERIADOS)
+        es_horario_1ra = (normal_1ra | extendido_1ra) & no_feriado_1ra
+        v_1ra = df_f[es_agente_valido_1ra & es_horario_1ra].copy()
+        v_1ra["p_1ra_num"] = pd.to_numeric(v_1ra["primera_respuesta_min"], errors="coerce")
+        s_1ra_total = v_1ra["p_1ra_num"].dropna()
+        p_1r = round(s_1ra_total.mean(), 2) if not s_1ra_total.empty else 0.0
+
+        # Gestión: mismas reglas que el Excel.
+        es_agente_valido_gest = (
+            (por_agente_f == "no excluido") &
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+        )
+        es_horario_gest = df_f["horario_evaluado"] != "fuera de horario"
         v_df = df_f[
-            es_agente_valido_f
-            & (df_f["horario_evaluado"] != "fuera de horario")
-            & (~es_sin_respuesta_f)
-            & (df_f["es_cerrado"])
+            es_agente_valido_gest &
+            es_horario_gest &
+            (~es_sin_respuesta_f) &
+            (df_f["es_cerrado"])
         ].copy()
-        
-        v_df["p_1ra_num"] = pd.to_numeric(v_df["primera_respuesta_min"], errors="coerce")
         v_df["p_gest_num"] = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
-
-        p_1r = round(v_df["p_1ra_num"].mean(), 2) if not v_df["p_1ra_num"].dropna().empty else 0.0
-        p_gest = round(v_df["p_gest_num"].mean(), 2) if not v_df["p_gest_num"].dropna().empty else 0.0
+        s_gest_total = v_df["p_gest_num"].dropna()
+        p_gest = round(s_gest_total.mean(), 2) if not s_gest_total.empty else 0.0
 
         if "sla_1ra_eval" in df_f.columns:
             eval_1ra_rango = df_f[df_f["sla_1ra_eval"].isin(["cumple", "no cumple"])]
@@ -1503,10 +1534,15 @@ with tab_operativo:
         df_cerrados = df_f[df_f["es_cerrado"]]
 
         total_ingresados_tot = len(df_f)
-        ingresados_humanos = len(df_f[df_f["por_agente"] == "no excluido"])
+        # "Humano": incluye a Monica y también conversaciones con etiqueta
+        # "Sin Respuesta". Solo se excluyen bots/sin asignar.
+        es_humano_f = (
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica (bot)"])
+        )
+        ingresados_humanos = int(es_humano_f.sum())
 
         total_cerrados_tot = len(df_cerrados)
-        cerrados_humanos = len(df_cerrados[df_cerrados["por_agente"] == "no excluido"])
+        cerrados_humanos = int((es_humano_f & df_f["es_cerrado"]).sum())
 
         es_cumplido_1ra = pct_sla_1ra_total >= 90.0
         color_1ra_val = "#34d399" if es_cumplido_1ra else "#f43f5e"
@@ -1543,20 +1579,25 @@ with tab_operativo:
             cerrados_totales = len(grp[grp["es_cerrado"]])
             
             agente_g = grp.get("agente_asignado", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
-            es_sin_respuesta_g = grp.get("etiquetas", pd.Series(index=grp.index, dtype=str)).astype(str).str.lower().str.contains("sin respuesta", na=False)
-            es_agente_valido_g = (grp["por_agente"].astype(str).str.strip().str.lower() == "no excluido") & ~agente_g.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+            etiquetas_g = grp.get("etiquetas", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.lower()
+            es_sin_respuesta_g = etiquetas_g.str.contains("sin respuesta", na=False)
+            por_agente_g = grp.get("por_agente", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
+            es_agente_valido_g = (por_agente_g == "no excluido") & ~agente_g.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
 
+            # Primera respuesta: mismo criterio que el promedio general.
+            v_1ra_g = grp[es_agente_valido_g & (grp["horario_evaluado"] != "fuera de horario")].copy()
+            v_1ra_g["p_1ra_num"] = pd.to_numeric(v_1ra_g["primera_respuesta_min"], errors="coerce")
+
+            # Gestión: mismas exclusiones que Excel.
             v_g = grp[
                 es_agente_valido_g
                 & (grp["horario_evaluado"] != "fuera de horario")
                 & (~es_sin_respuesta_g)
                 & (grp["es_cerrado"])
             ].copy()
-            
-            v_g["p_1ra_num"] = pd.to_numeric(v_g["primera_respuesta_min"], errors="coerce")
             v_g["p_gest_num"] = pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce")
 
-            s_1ra = v_g["p_1ra_num"].dropna()
+            s_1ra = v_1ra_g["p_1ra_num"].dropna()
             if not s_1ra.empty:
                 p_1 = round(s_1ra.mean(), 2)
                 cumplen_1ra = (s_1ra <= sla_1ra_th).sum()
@@ -2089,11 +2130,17 @@ with tab_faq:
         * **Porcentaje de Cumplimiento:** Es la proporción de conversaciones donde el tiempo de respuesta o gestión fue menor o igual al umbral objetivo configurado (ejemplo: $\le 2.0$ min para 1ra respuesta y $\le 60.0$ min para gestión).
         """)
 
-    with st.expander("2. ¿Cuáles son los Horarios y Criterios de Exclusión para la medición del SLA?", expanded=False):
+    with st.expander("2. ¿Cómo se contabiliza el tiempo hábil para el SLA?", expanded=False):
         st.markdown(r"""
+        ### ⏱️ El SLA contabiliza únicamente tiempo hábil
+
+        El tiempo utilizado para medir los SLA **no corresponde al tiempo calendario transcurrido** entre la creación y la respuesta o cierre de una conversación.
+
+        El sistema contabiliza únicamente los minutos que se encuentran dentro de las **jornadas operativas definidas**. Por lo tanto, las horas que están fuera de estas jornadas **no suman tiempo al SLA**.
+
         #### 📅 Días Feriados
         Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
-        
+
         #### 🕒 Horario Hábil Normal
         * **Lunes a Viernes:** 08:00 a 17:30 hs (Jornada continua, sin pausar almuerzo).
         * **Sábados:** 09:00 a 11:45 hs.
@@ -2102,10 +2149,25 @@ with tab_faq:
         * **Lunes a Miércoles:** 19:00 a 02:00 hs (del día siguiente).
         * **Jueves a Domingo:** 18:00 a 03:00 hs (del día siguiente, incluye fines de semana).
 
-        #### 🚫 Exclusiones Generales
-        * Chats asignados únicamente a Bots (`Monica (Bot)`, etc.).
-        * Conversaciones del canal de Correo Electrónico (`email`).
+        Cuando una jornada termina después de medianoche, el sistema entiende correctamente que la jornada continúa durante la madrugada del día siguiente.
+
+        #### 📌 Ejemplo práctico
+
+        Si una conversación se crea un lunes a las **16:00 hs** y se cierra el martes a las **09:00 hs**, el SLA **no contabiliza las 17 horas de tiempo calendario sino 9,5 horas habiles**.
+
+        Solo se contabilizan los períodos que pertenecen a las jornadas hábiles correspondientes. El tiempo transcurrido durante la noche y fuera de las franjas operativas no incrementa el SLA.
+
+        #### 🚫 ¿Qué períodos no cuentan?
+
+        No se acumulan minutos de SLA durante:
+        - Horas fuera de las jornadas operativas.
+        - Períodos nocturnos que no formen parte de la jornada extendida.
+        - Domingos fuera de la jornada extendida correspondiente.
+        - Días feriados cuando la conversación queda excluida por las reglas de SLA.
+
+        **En resumen:** el SLA mide **tiempo operativo**, no tiempo de reloj. Por eso una conversación puede haber estado abierta durante muchas horas, pero tener contabilizado menos tiempo para el SLA.
         """)
+
 
     with st.expander("3. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
         st.markdown(r"""
@@ -2135,4 +2197,3 @@ with tab_faq:
         * **Fórmula de CSAT:**
           $$\text{CSAT (\%)} = \left( \frac{\text{Total de Calificaciones Positivas (4 y 5 estrellas)}}{\text{Total de Encuestas Validadas}} \right) \times 100$$
         """)
-
