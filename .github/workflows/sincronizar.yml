@@ -3,7 +3,7 @@ name: Sincronizar Intercom a Supabase
 on:
   schedule:
     # Cada 5 minutos (sincronización rápida de 1 día)
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
     # Una vez al día a las 03:00 AM UTC (sincronización profunda de 7 días)
     - cron: '0 3 * * *'
   workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub cuando quieras
