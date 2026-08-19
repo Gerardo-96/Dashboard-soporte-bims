@@ -1096,119 +1096,144 @@ tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
 ])
 
 # ==========================================
-# FRAGMENTO DE ALERTAS EN VIVO (CADA 10s)
+# 1. INICIALIZACIÓN DE MEMORIA RAM
 # ==========================================
-@st.fragment(run_every=10)
+if "chats_pendientes" not in st.session_state:
+    st.session_state.chats_pendientes = {}
+
+# ==========================================
+# 2. CALLBACK OPTIMIZADO (FILTRADO INTELIGENTE)
+# ==========================================
+def manejar_evento_realtime(payload):
+    """
+    Procesa eventos de Supabase en microsegundos y solo fuerza rerun 
+    si el cambio altera la lista de chats en alerta.
+    """
+    event_type = payload.get("eventType")  # 'INSERT' o 'UPDATE'
+    record = payload.get("new", {})
+    chat_id = str(record.get("id"))
+    
+    estado = str(record.get("estado", "")).lower().strip()
+    primera_resp = record.get("primera_respuesta_min")
+    estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+
+    chat_esta_en_espera = chat_id in st.session_state.chats_pendientes
+
+    # CASO 1: El chat se cerró o el agente ya respondió
+    if estado in estados_cerrados or primera_resp is not None:
+        if chat_esta_en_espera:
+            # Solo si estaba en la lista de alerta, lo quitamos y refrescamos
+            del st.session_state.chats_pendientes[chat_id]
+            st.rerun()
+        # Si NO estaba en la lista (evento de chat ya atendido), NO hacemos nada.
+
+    # CASO 2: Entra un nuevo chat a la bandeja de espera humana
+    elif event_type == "INSERT":
+        if not chat_esta_en_espera and estado not in estados_cerrados and primera_resp is None:
+            tz_py = timezone(timedelta(hours=-3))
+            fecha_str = record.get("created_at")
+            
+            try:
+                dt_inicio = pd.to_datetime(fecha_str).tz_convert("America/Asuncion")
+            except Exception:
+                dt_inicio = datetime.now(tz_py)
+
+            st.session_state.chats_pendientes[chat_id] = {
+                "id": chat_id,
+                "inicio_espera": dt_inicio,
+                "tenant": record.get("tenant", "N/A"),
+                "nombre_contacto": record.get("nombre_contacto", "Cliente"),
+                "canal": record.get("canal", "web"),
+                "estado": estado
+            }
+            st.rerun()
+
+# ==========================================
+# 3. SUSCRIPCIÓN ÚNICA A SUPABASE REALTIME
+# ==========================================
+@st.cache_resource
+def iniciar_listener_realtime():
+    """
+    Asegura que el WebSocket se abra UNA sola vez por instancia de la app.
+    """
+    try:
+        canal = supabase.channel("realtime_alertas")
+        canal.on(
+            "postgres_changes",
+            event="*",  # Escucha INSERT y UPDATE
+            schema="public",
+            table="conversaciones",
+            callback=manejar_evento_realtime
+        ).subscribe()
+        return True
+    except Exception as e:
+        st.error(f"Error conectando a Supabase Realtime: {e}")
+        return False
+
+# Invocar la suscripción (st.cache_resource evita duplicados)
+iniciar_listener_realtime()
+
+# ==========================================
+# 4. RENDERING DE ALERTAS EN VIVO (EVALUACIÓN CADA 5s EN RAM)
+# ==========================================
+@st.fragment(run_every=5)
 def renderizar_alertas_en_vivo():
+    tz_py = timezone(timedelta(hours=-3))
+    now_dt = datetime.now(tz_py)
+    
     try:
         alerta_nuevo_th = float(st.session_state.get("alerta_nuevo_th", 1.0))
     except (ValueError, TypeError):
         alerta_nuevo_th = 1.0
 
     act_sonido = bool(st.session_state.get("act_sonido", True))
-    tz_py = timezone(timedelta(hours=-3))
-    now_dt = datetime.now(tz_py)
     
-    error_msg = None
-    datos_todos = []
-
-    try:
-        # Solicitamos tenant y nombre_contacto desde Supabase
-        COLUMNAS_ALERTAS = "id, created_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto"
-
-        res = supabase.table("conversaciones")\
-            .select(COLUMNAS_ALERTAS)\
-            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-            .order("created_at", desc=True)\
-            .limit(100)\
-            .execute()
-        datos_todos = res.data or []
-    except Exception as e:
-        error_msg = str(e)
-
-    if error_msg:
-        with st.expander("Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
-            st.error(f"❌ Error al consultar Supabase: {error_msg}")
-        return
-
-    if datos_todos:
-        df_base = pd.DataFrame(datos_todos)
+    chats_criticos = []
+    
+    # Recorremos la RAM local
+    for chat_id, info in list(st.session_state.chats_pendientes.items()):
+        min_transcurridos = (now_dt - info["inicio_espera"]).total_seconds() / 60.0
         
-        df_base["estado_clean"] = df_base["estado"].fillna("").astype(str).str.strip().str.lower()
-        estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
-        
-        df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
-        
-        # Generación de URL hacia Intercom
-        df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
-        df_activos["intercom_url"] = df_activos["id_str"].apply(
+        # Evaluación del umbral (ej. >= 1.0 min)
+        if min_transcurridos >= alerta_nuevo_th:
+            info_copy = info.copy()
+            info_copy["min_transcurridos"] = round(min_transcurridos, 1)
+            chats_criticos.append(info_copy)
+
+    if chats_criticos:
+        cant = len(chats_criticos)
+        st.markdown(f"""
+        <div class="alert-card-critical">
+            <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
+            Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
+        </div>
+        """, unsafe_allow_html=True)
+
+        if act_sonido:
+            html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
+            st.components.v1.html(html_con_ts, height=0)
+
+        df_criticos = pd.DataFrame(chats_criticos)
+        df_criticos["intercom_url"] = df_criticos["id"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
         
-        if "canal" in df_activos.columns:
-            df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
-            df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
-        
-        if not df_activos.empty:
-            created_utc = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True)
-            df_activos["created_at_dt"] = created_utc.dt.tz_convert("America/Asuncion")
-            df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
-            df_activos = df_activos.drop_duplicates(subset=["id"])
-            
-            df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
-            
-            calc_min = (now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60.0
-            df_activos["min_transcurridos"] = calc_min.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
-            
-            sin_respuesta = df_activos["1ra_resp_num"].isna()
-            tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
-            
-            df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
-
-            if not df_criticos_sla.empty:
-                cant = len(df_criticos_sla)
-                st.markdown(f"""
-                <div class="alert-card-critical">
-                    <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
-                    Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
-                </div>
-                """, unsafe_allow_html=True)
-
-                if act_sonido:
-                    html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
-                    st.components.v1.html(html_con_ts, height=0)
-
-            with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
-                
-                if not df_criticos_sla.empty:
-                    # Incluimos intercom_url, tenant y nombre_contacto
-                    cols_check = ["intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "estado"]
-                    if "canal" in df_criticos_sla.columns:
-                        cols_check.append("canal")
-                    
-                    st.dataframe(
-                        df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), 
-                        column_config={
-                            "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
-                            "created_at_fmt": "Fecha Creación",
-                            "min_transcurridos": "Min. Transcurridos",
-                            "nombre_contacto": "Contacto",
-                            "tenant": "Tenant",
-                            "estado": "Estado",
-                            "canal": "Canal"
-                        },
-                        hide_index=True, 
-                        use_container_width=True
-                    )
-                else:
-                    st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
-        else:
-            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
+        with st.expander("Panel de Verificación de Alertas en Vivo", expanded=True):
+            st.dataframe(
+                df_criticos[["intercom_url", "nombre_contacto", "tenant", "min_transcurridos", "estado"]],
+                column_config={
+                    "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                    "nombre_contacto": "Contacto",
+                    "min_transcurridos": "Min. Transcurridos",
+                    "tenant": "Tenant",
+                    "estado": "Estado"
+                },
+                hide_index=True,
+                use_container_width=True
+            )
     else:
-        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
+        with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
+            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin chats en alerta crítica.")
 
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
