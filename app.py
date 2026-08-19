@@ -304,6 +304,34 @@ def obtener_fecha_local_hoy():
     tz_py = timezone(timedelta(hours=-3))
     return datetime.now(tz_py).date()
 
+def obtener_texto_transcurrido():
+    estado = obtener_estado_sync()
+    ultima_sync = estado.get("ultima_sync")
+    
+    if not ultima_sync:
+        return "Última sync: Pendiente..."
+    
+    tz_py = timezone(timedelta(hours=-3))
+    ahora = datetime.now(tz_py)
+    
+    # Asegurar que ambos tengan zona horaria
+    if ultima_sync.tzinfo is None:
+        ultima_sync = ultima_sync.replace(tzinfo=tz_py)
+        
+    segundos_transcurridos = int((ahora - ultima_sync).total_seconds())
+    
+    # Prevenir valores negativos por pequeños desfases de reloj
+    if segundos_transcurridos < 0:
+        return "Última sync: Hace un instante"
+    elif segundos_transcurridos < 60:
+        return f"Última sync: Hace {segundos_transcurridos} seg"
+    elif segundos_transcurridos < 3600:
+        minutos = segundos_transcurridos // 60
+        return f"Última sync: Hace {minutos} min"
+    else:
+        horas = segundos_transcurridos // 3600
+        return f"Última sync: Hace {horas} h"
+
 def obtener_tiempo_transcurrido(fecha_dt):
     """Calcula el tiempo transcurrido exacto garantizando la conversión a America/Asuncion."""
     if pd.isna(fecha_dt) or fecha_dt is None:
