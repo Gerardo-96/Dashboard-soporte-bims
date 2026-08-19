@@ -97,6 +97,21 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
+# ==========================================
+# RECARGA AUTOMÁTICA DE PESTAÑA CADA 15 MIN
+# ==========================================
+st.components.v1.html(
+    """
+    <script>
+        // 900,000 ms = 15 minutos
+        setTimeout(function() {
+            window.location.reload();
+        }, 900000);
+    </script>
+    """,
+    height=0,
+)
+
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
 def obtener_estado_sync_global():
@@ -116,6 +131,17 @@ def verificar_credenciales_supabase(email_val, pass_val):
         return len(res.data) > 0, res.data[0] if res.data else None
     except Exception:
         return False, None
+
+# Objeto persistente compartido por todos los usuarios/pestañas
+@st.cache_resource
+def obtener_estado_sync():
+    return {"ultima_sync": None}
+
+def registrar_sync_exitosa():
+    """Llama a esta función inmediatamente después de terminar la rutina de 900s"""
+    tz_py = timezone(timedelta(hours=-3))
+    estado = obtener_estado_sync()
+    estado["ultima_sync"] = datetime.now(tz_py)
 
 # ==========================================
 # PANTALLA DE LOGIN CENTRADA Y ACOTADA
@@ -547,7 +573,8 @@ def obtener_datos_hoy():
                 .gte("created_at", hace_36h_utc)\
                 .execute()
             datos = response_created.data or []
-            
+
+        registrar_sync_exitosa()
         return datos
     except Exception as e:
         st.error(f"Error consultando datos de Hoy en Supabase: {e}")
@@ -854,22 +881,17 @@ if "input_f_hasta" not in st.session_state:
 # ==========================================
 df_all = obtener_datos()
 
-if not df_all.empty and "updated_at_local" in df_all.columns:
-    # Tomamos la fecha máxima real parseada
-    max_updated_dt = df_all["updated_at_local"].dropna().max()
-    tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
+@st.fragment(run_every=300)
+def renderizar_indicador_sync_sidebar():
+    texto_sync = obtener_texto_transcurrido()
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
-        • <b>Ultima sync:</b> {tiempo_hace_str}<br>
+        • <b>Última sync:</b> {texto_sync}<br>
     </div>
     """, unsafe_allow_html=True)
-else:
-    st.sidebar.markdown("""
-    <div class="db-info-box">
-        <b>Ultima sincronizacion:</b> Sin registros<br>
-    </div>
-    """, unsafe_allow_html=True)
+
+renderizar_indicador_sync_sidebar()
 
 st.sidebar.markdown("### Filtros de Consulta")
 
