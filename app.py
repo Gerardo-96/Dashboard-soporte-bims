@@ -309,7 +309,7 @@ def obtener_texto_transcurrido():
     ultima_sync = estado.get("ultima_sync")
     
     if not ultima_sync:
-        return "Última sync: Pendiente..."
+        return " Pendiente..."
     
     tz_py = timezone(timedelta(hours=-3))
     ahora = datetime.now(tz_py)
@@ -322,15 +322,15 @@ def obtener_texto_transcurrido():
     
     # Prevenir valores negativos por pequeños desfases de reloj
     if segundos_transcurridos < 0:
-        return "Última sync: Hace un instante"
+        return " Hace un instante"
     elif segundos_transcurridos < 60:
-        return f"Última sync: Hace {segundos_transcurridos} seg"
+        return f" Hace {segundos_transcurridos} seg"
     elif segundos_transcurridos < 3600:
         minutos = segundos_transcurridos // 60
-        return f"Última sync: Hace {minutos} min"
+        return f" Hace {minutos} min"
     else:
         horas = segundos_transcurridos // 3600
-        return f"Última sync: Hace {horas} h"
+        return f" Hace {horas} h"
 
 def obtener_tiempo_transcurrido(fecha_dt):
     """Calcula el tiempo transcurrido exacto garantizando la conversión a America/Asuncion."""
