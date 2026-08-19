@@ -178,7 +178,7 @@ def iniciar_escuchador_realtime(queue_ref, url, key):
             callback=al_recibir_cambio
         ).subscribe()
 
-        print("✅ WebSocket de Supabase Realtime CONECTADO y escuchando...")  # <-- LOG
+        print("✅ WebSocket de Supabase Realtime CONECTADO y escuchando...", flush=True)  # <-- LOG
         
         # Mantener el bucle asíncrono corriendo indefinidamente
         while True:
