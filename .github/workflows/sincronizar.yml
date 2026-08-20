@@ -2,7 +2,7 @@ name: Sincronizar Intercom a Supabase
 
 on:
   schedule:
-    # Cada 5 minutos (sincronización rápida de 1 día)
+    # Cada 15 minutos (sincronización rápida de 1 día)
     - cron: '*/15 * * * *'
     # Una vez al día a las 03:00 AM UTC (sincronización profunda de 30 días)
     - cron: '0 3 * * *'
