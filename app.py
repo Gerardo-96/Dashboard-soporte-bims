@@ -309,9 +309,21 @@ def obtener_tiempo_transcurrido(fecha_dt):
         return f"hace {secs // 86400} días"
 
 FERIADOS = [
-    "2026-04-02", "2026-04-03", "2026-05-01", "2026-05-14", "2026-05-15",
-    "2026-06-12", "2026-06-22", "2026-06-30", "2026-08-15", "2026-09-29",
-    "2026-12-08", "2026-12-25"
+    "2026-01-01",  # Año Nuevo
+    "2026-03-02",  # Día de los Héroes (Trasladado de domingo 1 a lunes 2)
+    "2026-04-02",  # Jueves Santo
+    "2026-04-03",  # Viernes Santo
+    "2026-05-01",  # Día de los Trabajadores
+    "2026-05-14",  # Día de la Independencia Nacional (Día 1)
+    "2026-05-15",  # Día de la Independencia Nacional (Día 2)
+    "2026-06-12",  # Día de la Paz del Chaco
+    "2026-06-22",  # Día de la Jura de la Constitución (Trasladado de sábado 20 a lunes 22)
+    "2026-06-30",  # Feriado Nacional Extraordinario (Decreto Presidencial - Clasificación a Octavos)
+    "2026-08-15",  # Fundación de Asunción (Inamovible)
+    "2026-09-28",  # Victoria de Boquerón (Adelantado de martes 29 a lunes 28)
+    "2026-12-08",  # Día de la Virgen de Caacupé
+    "2026-12-25",  # Navidad
+    "2026-12-31",  # Víspera de Año Nuevo (Cierre/Feriado Bancario y Operativo)
 ]
 
 def evaluar_horario_dashboard_dt(dt_series):
