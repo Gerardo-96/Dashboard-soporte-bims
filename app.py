@@ -477,7 +477,7 @@ COLUMNAS_DASHBOARD = (
     "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado, ticket_relacionado"
 )
 
-@st.cache_data(ttl=86400, show_spinner=False)
+@st.cache_data(ttl=10, show_spinner=False)
 def obtener_lista_motivos_csat():
     """Recupera la lista de motivos activos guardados en Supabase."""
     try:
