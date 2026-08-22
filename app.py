@@ -503,8 +503,7 @@ def obtener_datos_historicos_q():
     tamanio_lote = 1000
 
     hoy = obtener_fecha_local_hoy()
-    #fecha_inicio_q_ant = f"{obtener_inicio_trimestre_anterior()[:10]}T00:00:00Z" reemplazamos temporalmente por solicitud de Andrea Sosa
-    fecha_inicio_q_ant = f"{hoy.year}-01-01T00:00:00Z"
+    fecha_inicio_q_ant = f"{obtener_inicio_trimestre_anterior()[:10]}T00:00:00Z"
     fecha_hasta_ayer = f"{hoy}T00:00:00Z"
 
     while True:
