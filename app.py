@@ -474,7 +474,7 @@ COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
     "feedback, agente_evaluado, tenant, company, nombre_contacto, "
-    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado"
+    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado, ticket_relacionado"
 )
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -997,6 +997,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
         df_reporte["Calificacion"] = ""
 
     df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "")
+    df_reporte["Ticket Relacionado"] = df_exp.get("ticket_relacionado", "") 
     df_reporte["Feedback"] = df_exp.get("feedback", "")
     df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
     df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
@@ -1460,51 +1461,61 @@ with tab_operativo:
             df_csat_det = df_filtered_csat.copy()
             df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
             df_negativos = df_csat_det[df_csat_det["rating_num"] <= 3].copy()
-        
-            # 🔒 EL FORMULARIO SOLO SE MUESTRA SI ERES TÚ O TIENES SESIÓN ADMIN
-            if es_super_usuario and not df_negativos.empty:
-                st.markdown("#### Categorización de Calificaciones Negativas (1, 2 y 3 ★)")
             
-                # Carga dinámica de la lista desde Supabase
+            if es_super_usuario and not df_negativos.empty:
+                st.markdown("#### ⚠️ Categorización y Ticket de Calificaciones Negativas (1, 2 y 3 ★)")
+                
                 OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
 
-                col_sel1, col_sel2, col_sel3 = st.columns([2, 2, 1], vertical_alignment="bottom")
-                
-                chat_ids = df_negativos["id_str"].tolist()
-                chat_sel = col_sel1.selectbox("Seleccionar Chat a Categorizar:", options=chat_ids)
+                col_sel1, col_sel2, col_sel3, col_sel4 = st.columns([2, 2, 2, 1], vertical_alignment="bottom")
             
-                motivo_actual = df_negativos[df_negativos["id_str"] == chat_sel]["motivo_normalizado"].iloc[0] if "motivo_normalizado" in df_negativos.columns else "Sin categorizar"
+                chat_ids = df_negativos["id_str"].tolist()
+                chat_sel = col_sel1.selectbox("Seleccionar Chat:", options=chat_ids, key="sb_chat_csat")
+            
+                row_sel = df_negativos[df_negativos["id_str"] == chat_sel].iloc[0]
+            
+                # Recuperar motivo y ticket actual
+                motivo_actual = str(row_sel.get("motivo_normalizado", "Sin categorizar"))
+                ticket_actual = str(row_sel.get("ticket_relacionado", ""))
+                if ticket_actual in ["None", "nan", "null"]:
+                    ticket_actual = ""
+            
                 idx_pref = OPCIONES_MOTIVOS.index(motivo_actual) if motivo_actual in OPCIONES_MOTIVOS else 0
             
-                nuevo_motivo = col_sel2.selectbox("Motivo Normalizado:", options=OPCIONES_MOTIVOS, index=idx_pref)
+                nuevo_motivo = col_sel2.selectbox("Motivo Normalizado:", options=OPCIONES_MOTIVOS, index=idx_pref, key="sb_motivo_csat")
+                nuevo_ticket = col_sel3.text_input("Ticket / Tarea (ej: BIMS-1234):", value=ticket_actual, key="txt_ticket_csat")
             
-                if col_sel3.button("Guardar Motivo", use_container_width=True):
+                if col_sel4.button("Guardar", use_container_width=True, key="btn_save_csat"):
                     try:
                         supabase.table("conversaciones")\
-                            .update({"motivo_normalizado": nuevo_motivo})\
+                            .update({
+                                "motivo_normalizado": nuevo_motivo,
+                                "ticket_relacionado": nuevo_ticket.strip()
+                            })\
                             .eq("id", chat_sel)\
                             .execute()
-                        st.success(f"Motivo actualizado para el chat {chat_sel}.")
+                        st.success(f"Guardado para el chat {chat_sel}.")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as ex:
-                        st.error(f"Error al guardar motivo: {ex}")
+                        st.error(f"Error al guardar: {ex}")
                 st.markdown("---")
 
-            # TABLA DE LECTURA (Visible para todos)
+            # TABLA DE CONSULTA
             cols_csat_deseadas = [
                 "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
-                "motivo_normalizado", "nombre_contacto", "tenant", "company", "agente_evaluado"
+                "motivo_normalizado", "ticket_relacionado", "nombre_contacto", "tenant", "company", "agente_evaluado"
             ]
 
             st.dataframe(
-                df_csat_det.reindex(columns=cols_csat_deseadas).fillna("Sin categorizar"),
+                df_csat_det.reindex(columns=cols_csat_deseadas).fillna(""),
                 column_config={
                     "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
                     "fecha_calificacion_fmt": "Fecha/Hora Calificación",
                     "Calificacion": "Puntaje",
                     "feedback": "Comentario / Feedback",
                     "motivo_normalizado": "Motivo Normalizado",
+                    "ticket_relacionado": "Ticket Relacionado",
                     "nombre_contacto": "Contacto",
                     "tenant": "Tenant",
                     "company": "Company",
