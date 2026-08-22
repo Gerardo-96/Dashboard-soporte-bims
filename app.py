@@ -2193,7 +2193,7 @@ with tab_admin:
             <div class="admin-card">
                 <h4 style="margin-top:0; color:#38bdf8;">4. Gestión de Motivos Normalizados (CSAT)</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Crea y administra los motivos que estarán disponibles para categorizar los chats con calificaciones negativas.
+                    Crea y desactiva los motivos que se muestran al categorizar chats negativos.
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -2209,18 +2209,19 @@ with tab_admin:
                     if txt_motivo:
                         try:
                             supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
-                            st.success(f"Motivo '{txt_motivo}' guardado con éxito.")
+                            st.success(f"Motivo '{txt_motivo}' creado con éxito.")
                             st.cache_data.clear()
                             st.rerun()
                         except Exception as ex:
                             st.error(f"Error o motivo duplicado: {ex}")
                     else:
-                        st.warning("Por favor escribe el nombre del motivo.")
+                        st.warning("Escribe un nombre para el motivo.")
 
-            # Listado de motivos existentes con opción de activar/desactivar
+            # Listado de motivos con opción de Cambiar Estado (Activar / Deshabilitar)
             try:
                 res_mot = supabase.table("motivos_csat").select("*").order("id", desc=False).execute()
                 df_motivos = pd.DataFrame(res_mot.data or [])
+                
                 if not df_motivos.empty:
                     st.markdown("<b>Motivos Configurados Actualmente:</b>", unsafe_allow_html=True)
                     st.dataframe(
@@ -2233,6 +2234,31 @@ with tab_admin:
                         hide_index=True,
                         use_container_width=True
                     )
+
+                    # Control para Deshabilitar / Activar Motivo
+                    col_dis1, col_dis2 = st.columns([2, 1], vertical_alignment="bottom")
+                    
+                    motivos_dict = {f"ID {r['id']}: {r['nombre']} ({'Activo' if r['activo'] else 'Inactivo'})": r['id'] for _, r in df_motivos.iterrows()}
+                    motivo_seleccionado_str = col_dis1.selectbox("Seleccionar Motivo a Cambiar Estado:", options=list(motivos_dict.keys()))
+                    
+                    if col_dis2.button("Alternar Estado (Activar/Deshabilitar)", use_container_width=True):
+                        id_motivo_sel = motivos_dict[motivo_seleccionado_str]
+                        motivo_row = df_motivos[df_motivos["id"] == id_motivo_sel].iloc[0]
+                        nuevo_estado = not bool(motivo_row["activo"])
+                        
+                        try:
+                            supabase.table("motivos_csat")\
+                                .update({"activo": nuevo_estado})\
+                                .eq("id", id_motivo_sel)\
+                                .execute()
+                            
+                            st.success(f"El motivo ID {id_motivo_sel} ahora está {'Activo' if nuevo_estado else 'Deshabilitado'}.")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error al actualizar motivo: {ex}")
+                else:
+                    st.info("No hay motivos registrados en la base de datos.")
             except Exception as e:
                 st.error(f"No se pudieron cargar los motivos: {e}")
 
