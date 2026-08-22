@@ -1455,9 +1455,8 @@ with tab_operativo:
         or st.session_state.get("admin_authenticated", False)
     )
 
-    # DETALLE Y CATEGORIZACIÓN CSAT
+    # DETALLE Y CATEGORIZACIÓN CSAT (Sin Parpadeo con st.form)
     if not df_filtered.empty and "rating" in df_filtered.columns:
-        # 1. Usamos df_filtered exactamente como antes
         df_csat_det = df_filtered.dropna(subset=["rating"]).copy()
         df_csat_det["rating_num"] = pd.to_numeric(df_csat_det["rating"], errors="coerce")
         df_csat_det = df_csat_det.dropna(subset=["rating_num"])
@@ -1467,16 +1466,15 @@ with tab_operativo:
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
                 df_negativos = df_csat_det[df_csat_det["rating_num"] <= 3].copy()
             
-                # Formulario de categorización
+                # Formulario de Categorización Aislado (Sin recargas intermedias)
                 if es_super_usuario and not df_negativos.empty:
                     st.markdown("#### ⚠️ Categorización y Ticket de Calificaciones Negativas (1, 2 y 3 ★)")
-                
+                    
                     OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
-
-                    col_sel1, col_sel2, col_sel3, col_sel4 = st.columns([2, 2, 2, 1], vertical_alignment="bottom")
-                
                     chat_ids = df_negativos["id_str"].tolist()
-                    chat_sel = col_sel1.selectbox("Seleccionar Chat:", options=chat_ids, key="sb_chat_csat_sel")
+
+                    # 1. Selector de chat fuera del form para actualizar los campos base
+                    chat_sel = st.selectbox("Seleccionar Chat a Categorizar:", options=chat_ids, key="sb_chat_csat_sel")
                     
                     row_sel = df_negativos[df_negativos["id_str"] == chat_sel].iloc[0]
                     motivo_actual = str(row_sel.get("motivo_normalizado", "Sin categorizar"))
@@ -1486,42 +1484,46 @@ with tab_operativo:
                         ticket_actual = ""
                 
                     idx_pref = OPCIONES_MOTIVOS.index(motivo_actual) if motivo_actual in OPCIONES_MOTIVOS else 0
-                
-                    nuevo_motivo = col_sel2.selectbox(
-                        "Motivo Normalizado:", 
-                        options=OPCIONES_MOTIVOS, 
-                        index=idx_pref, 
-                        key=f"sb_motivo_{chat_sel}"
-                    )
+
+                    # 2. Contenedor st.form para evitar parpadeos al cambiar valores o escribir
+                    with st.form(key=f"form_categorizar_{chat_sel}", clear_on_submit=False):
+                        col_f1, col_f2 = st.columns(2)
                     
-                    nuevo_ticket = col_sel3.text_input(
-                        "Ticket / Tarea (ej: BIMS-1234):", 
-                        value=ticket_actual, 
-                        key=f"txt_ticket_{chat_sel}"
-                    )
+                        nuevo_motivo = col_f1.selectbox(
+                            "Motivo Normalizado:", 
+                            options=OPCIONES_MOTIVOS, 
+                            index=idx_pref
+                        )
                     
-                    if col_sel4.button("Guardar", use_container_width=True, key=f"btn_save_{chat_sel}"):
-                        try:
-                            id_chat_val = int(chat_sel) if str(chat_sel).isdigit() else chat_sel
-                        
-                            supabase.table("conversaciones")\
-                                .update({
-                                    "motivo_normalizado": nuevo_motivo,
-                                    "ticket_relacionado": nuevo_ticket.strip()
-                                })\
-                                .eq("id", id_chat_val)\
-                                .execute()
-                        
-                            st.cache_data.clear()
-                            st.success(f"✅ Guardado para el chat {chat_sel}.")
-                            time_lib.sleep(0.4)
-                            st.rerun()
-                        except Exception as ex:
-                            st.error(f"❌ Error al guardar: {ex}")
+                        nuevo_ticket = col_f2.text_input(
+                            "Ticket / Tarea (ej: BIMS-1234):", 
+                            value=ticket_actual
+                        )
+                    
+                        btn_guardar_csat = st.form_submit_button("💾 Guardar Categorización", use_container_width=True)
+
+                        if btn_guardar_csat:
+                            try:
+                                id_chat_val = int(chat_sel) if str(chat_sel).isdigit() else chat_sel
+                            
+                                supabase.table("conversaciones")\
+                                    .update({
+                                        "motivo_normalizado": nuevo_motivo,
+                                        "ticket_relacionado": nuevo_ticket.strip()
+                                    })\
+                                    .eq("id", id_chat_val)\
+                                    .execute()
+                                
+                                st.cache_data.clear()
+                                st.success(f"✅ Guardado con éxito para el chat {chat_sel}.")
+                                time_lib.sleep(0.4)
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ Error al guardar en Supabase: {ex}")
                         
                     st.markdown("---")
 
-                # TABLA DE CONSULTA COMPLETA
+                # TABLA GENERAL COMPLETA
                 cols_csat_deseadas = [
                     "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
                     "motivo_normalizado", "ticket_relacionado", "nombre_contacto", "tenant", "company", "agente_evaluado"
@@ -1543,7 +1545,7 @@ with tab_operativo:
                     },
                     hide_index=True,
                     use_container_width=True
-                )    
+                )
         st.markdown("---")
 
     # ==========================================
