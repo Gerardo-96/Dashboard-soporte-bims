@@ -1447,72 +1447,72 @@ with tab_operativo:
             st.info("Sin registros en la base de datos.")
 
     # DEFINIR CORREO AUTORIZADO A EDITAR (Tu usuario o Sesión Admin)
-USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital" 
+    USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital" 
 
-es_super_usuario = (
-    st.session_state.get("user_email", "").strip().lower() == USUARIO_ADMIN_EMAIL.lower()
-    or st.session_state.get("admin_authenticated", False)
-)
+    es_super_usuario = (
+        st.session_state.get("user_email", "").strip().lower() == USUARIO_ADMIN_EMAIL.lower()
+        or st.session_state.get("admin_authenticated", False)
+    )
 
-# DETALLE Y CATEGORIZACIÓN CSAT
-if not df_filtered_csat.empty:
-    with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_filtered_csat)} Encuestas)", expanded=False):
-        df_csat_det = df_filtered_csat.copy()
-        df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-        df_negativos = df_csat_det[df_csat_det["rating_num"] <= 3].copy()
+    # DETALLE Y CATEGORIZACIÓN CSAT
+    if not df_filtered_csat.empty:
+        with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_filtered_csat)} Encuestas)", expanded=False):
+            df_csat_det = df_filtered_csat.copy()
+            df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+            df_negativos = df_csat_det[df_csat_det["rating_num"] <= 3].copy()
         
-        # 🔒 EL FORMULARIO SOLO SE MUESTRA SI ERES TÚ O TIENES SESIÓN ADMIN
-        if es_super_usuario and not df_negativos.empty:
-            st.markdown("#### Categorización de Calificaciones Negativas (1, 2 y 3 ★)")
+            # 🔒 EL FORMULARIO SOLO SE MUESTRA SI ERES TÚ O TIENES SESIÓN ADMIN
+            if es_super_usuario and not df_negativos.empty:
+                st.markdown("#### Categorización de Calificaciones Negativas (1, 2 y 3 ★)")
             
-            # Carga dinámica de la lista desde Supabase
-            OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
+                # Carga dinámica de la lista desde Supabase
+                OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
 
-            col_sel1, col_sel2, col_sel3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+                col_sel1, col_sel2, col_sel3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+                
+                chat_ids = df_negativos["id_str"].tolist()
+                chat_sel = col_sel1.selectbox("Seleccionar Chat a Categorizar:", options=chat_ids)
             
-            chat_ids = df_negativos["id_str"].tolist()
-            chat_sel = col_sel1.selectbox("Seleccionar Chat a Categorizar:", options=chat_ids)
+                motivo_actual = df_negativos[df_negativos["id_str"] == chat_sel]["motivo_normalizado"].iloc[0] if "motivo_normalizado" in df_negativos.columns else "Sin categorizar"
+                idx_pref = OPCIONES_MOTIVOS.index(motivo_actual) if motivo_actual in OPCIONES_MOTIVOS else 0
             
-            motivo_actual = df_negativos[df_negativos["id_str"] == chat_sel]["motivo_normalizado"].iloc[0] if "motivo_normalizado" in df_negativos.columns else "Sin categorizar"
-            idx_pref = OPCIONES_MOTIVOS.index(motivo_actual) if motivo_actual in OPCIONES_MOTIVOS else 0
+                nuevo_motivo = col_sel2.selectbox("Motivo Normalizado:", options=OPCIONES_MOTIVOS, index=idx_pref)
             
-            nuevo_motivo = col_sel2.selectbox("Motivo Normalizado:", options=OPCIONES_MOTIVOS, index=idx_pref)
-            
-            if col_sel3.button("Guardar Motivo", use_container_width=True):
-                try:
-                    supabase.table("conversaciones")\
-                        .update({"motivo_normalizado": nuevo_motivo})\
-                        .eq("id", chat_sel)\
-                        .execute()
-                    st.success(f"Motivo actualizado para el chat {chat_sel}.")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as ex:
-                    st.error(f"Error al guardar motivo: {ex}")
-            st.markdown("---")
+                if col_sel3.button("Guardar Motivo", use_container_width=True):
+                    try:
+                        supabase.table("conversaciones")\
+                            .update({"motivo_normalizado": nuevo_motivo})\
+                            .eq("id", chat_sel)\
+                            .execute()
+                        st.success(f"Motivo actualizado para el chat {chat_sel}.")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"Error al guardar motivo: {ex}")
+                st.markdown("---")
 
-        # TABLA DE LECTURA (Visible para todos)
-        cols_csat_deseadas = [
-            "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
-            "motivo_normalizado", "nombre_contacto", "tenant", "company", "agente_evaluado"
-        ]
+            # TABLA DE LECTURA (Visible para todos)
+            cols_csat_deseadas = [
+                "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
+                "motivo_normalizado", "nombre_contacto", "tenant", "company", "agente_evaluado"
+            ]
 
-        st.dataframe(
-            df_csat_det.reindex(columns=cols_csat_deseadas).fillna("Sin categorizar"),
-            column_config={
-                "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                "fecha_calificacion_fmt": "Fecha/Hora Calificación",
-                "Calificacion": "Puntaje",
-                "feedback": "Comentario / Feedback",
-                "motivo_normalizado": "Motivo Normalizado",
-                "nombre_contacto": "Contacto",
-                "tenant": "Tenant",
-                "company": "Company",
-                "agente_evaluado": "Agente Evaluado"
-            },
-            hide_index=True,
-            use_container_width=True
-        )
+            st.dataframe(
+                df_csat_det.reindex(columns=cols_csat_deseadas).fillna("Sin categorizar"),
+                column_config={
+                    "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
+                    "fecha_calificacion_fmt": "Fecha/Hora Calificación",
+                    "Calificacion": "Puntaje",
+                    "feedback": "Comentario / Feedback",
+                    "motivo_normalizado": "Motivo Normalizado",
+                    "nombre_contacto": "Contacto",
+                    "tenant": "Tenant",
+                    "company": "Company",
+                    "agente_evaluado": "Agente Evaluado"
+                },
+                hide_index=True,
+                use_container_width=True
+            )
     st.markdown("---")
 
     # ==========================================
