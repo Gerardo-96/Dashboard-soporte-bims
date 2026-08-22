@@ -1461,7 +1461,7 @@ with tab_operativo:
             df_csat_det = df_filtered_csat.copy()
             df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
             df_negativos = df_csat_det[df_csat_det["rating_num"] <= 3].copy()
-            
+        
             if es_super_usuario and not df_negativos.empty:
                 st.markdown("#### ⚠️ Categorización y Ticket de Calificaciones Negativas (1, 2 y 3 ★)")
                 
@@ -1470,35 +1470,53 @@ with tab_operativo:
                 col_sel1, col_sel2, col_sel3, col_sel4 = st.columns([2, 2, 2, 1], vertical_alignment="bottom")
             
                 chat_ids = df_negativos["id_str"].tolist()
-                chat_sel = col_sel1.selectbox("Seleccionar Chat:", options=chat_ids, key="sb_chat_csat")
+                chat_sel = col_sel1.selectbox("Seleccionar Chat:", options=chat_ids, key="sb_chat_csat_sel")
             
+                # Obtener datos actuales del chat seleccionado
                 row_sel = df_negativos[df_negativos["id_str"] == chat_sel].iloc[0]
-            
-                # Recuperar motivo y ticket actual
                 motivo_actual = str(row_sel.get("motivo_normalizado", "Sin categorizar"))
                 ticket_actual = str(row_sel.get("ticket_relacionado", ""))
+            
                 if ticket_actual in ["None", "nan", "null"]:
                     ticket_actual = ""
             
                 idx_pref = OPCIONES_MOTIVOS.index(motivo_actual) if motivo_actual in OPCIONES_MOTIVOS else 0
             
-                nuevo_motivo = col_sel2.selectbox("Motivo Normalizado:", options=OPCIONES_MOTIVOS, index=idx_pref, key="sb_motivo_csat")
-                nuevo_ticket = col_sel3.text_input("Ticket / Tarea (ej: BIMS-1234):", value=ticket_actual, key="txt_ticket_csat")
+                # Inputs con claves asociadas al ID del chat para evitar desincronización
+                nuevo_motivo = col_sel2.selectbox(
+                    "Motivo Normalizado:", 
+                    options=OPCIONES_MOTIVOS, 
+                    index=idx_pref, 
+                    key=f"sb_motivo_{chat_sel}"
+                )
             
-                if col_sel4.button("Guardar", use_container_width=True, key="btn_save_csat"):
+                nuevo_ticket = col_sel3.text_input(
+                    "Ticket / Tarea (ej: BIMS-1234):", 
+                    value=ticket_actual, 
+                    key=f"txt_ticket_{chat_sel}"
+                )
+            
+                if col_sel4.button("Guardar", use_container_width=True, key=f"btn_save_{chat_sel}"):
                     try:
+                        # 1. Update directo en Supabase usando ID entero o string
+                        id_chat_val = int(chat_sel) if str(chat_sel).isdigit() else chat_sel
+                    
                         supabase.table("conversaciones")\
                             .update({
                                 "motivo_normalizado": nuevo_motivo,
                                 "ticket_relacionado": nuevo_ticket.strip()
                             })\
-                            .eq("id", chat_sel)\
+                            .eq("id", id_chat_val)\
                             .execute()
-                        st.success(f"Guardado para el chat {chat_sel}.")
+                    
+                        # 2. Limpieza estricta de caché antes de recargar
                         st.cache_data.clear()
+                        st.success(f"✅ Motivo y Ticket guardados para el chat {chat_sel}.")
+                        time_lib.sleep(0.5)
                         st.rerun()
                     except Exception as ex:
-                        st.error(f"Error al guardar: {ex}")
+                        st.error(f"❌ Error al guardar en Supabase: {ex}")
+                    
                 st.markdown("---")
 
             # TABLA DE CONSULTA
@@ -1523,8 +1541,8 @@ with tab_operativo:
                 },
                 hide_index=True,
                 use_container_width=True
-            )
-    st.markdown("---")
+            )    
+        st.markdown("---")
 
     # ==========================================
     # MÉTRICAS POR AGENTE EN DASHBOARD
