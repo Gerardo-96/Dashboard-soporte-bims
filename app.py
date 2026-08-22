@@ -21,7 +21,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Oculta exclusivamente el aviso flotante 'Running...'
+# Oculta aviso flotante 'Running...'
 st.markdown("""
 <style>
     [data-testid="stStatusWidget"] {
@@ -30,7 +30,6 @@ st.markdown("""
         width: 0 !important;
         height: 0 !important;
     }
-
     [data-testid="stStatusWidget"] * {
         visibility: hidden !important;
     }
@@ -46,9 +45,6 @@ except ImportError:
 INTERCOM_APP_ID = "co9kozj6"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
-# ==========================
-# CONFIGURACIÓN DE SUPABASE
-# ==========================
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
@@ -58,9 +54,6 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-# ==========================================
-# AUTENTICACIÓN PERSISTENTE ROBUSTA
-# ==========================================
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
@@ -280,6 +273,47 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
 
     return round(total_minutos_habiles, 1)
 
+# =========================================================================
+# FUNCIÓN TEMPORAL DE CÁLCULO DE MINUTOS PARA EXCEL ENERO-MARZO (SOLO DIURNO)
+# =========================================================================
+def calcular_minutos_diurnos_enero_marzo(dt_inicio, dt_fin):
+    if pd.isna(dt_inicio) or pd.isna(dt_fin) or dt_fin <= dt_inicio:
+        return np.nan
+
+    tz = "America/Asuncion"
+    total_minutos = 0.0
+
+    dia_actual = dt_inicio.date()
+    dia_fin = dt_fin.date()
+
+    while dia_actual <= dia_fin:
+        fecha_str = dia_actual.strftime("%Y-%m-%d")
+        dia_semana = dia_actual.weekday()
+
+        if fecha_str in FERIADOS:
+            dia_actual += timedelta(days=1)
+            continue
+
+        intervalos = []
+        if dia_semana in [0, 1, 2, 3, 4]:  # L-V 08:00 a 17:30
+            intervalos.append((time(8, 0), time(17, 30)))
+        elif dia_semana == 5:  # Sáb 09:00 a 11:45
+            intervalos.append((time(9, 0), time(11, 45)))
+
+        for h_inicio, h_fin in intervalos:
+            inicio_franja = pd.Timestamp.combine(dia_actual, h_inicio).tz_localize(tz)
+            fin_franja = pd.Timestamp.combine(dia_actual, h_fin).tz_localize(tz)
+
+            start_overlap = max(dt_inicio, inicio_franja)
+            end_overlap = min(dt_fin, fin_franja)
+
+            if start_overlap < end_overlap:
+                total_minutos += (end_overlap - start_overlap).total_seconds() / 60.0
+
+        dia_actual += timedelta(days=1)
+
+    return round(total_minutos, 1)
+
 def procesar_fechas_df(df):
     if df.empty or "created_at" not in df.columns:
         return df
@@ -342,9 +376,6 @@ COLUMNAS_DASHBOARD = (
     "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel"
 )
 
-# ==========================================
-# CACHÉ DE DATOS EN SUPABASE
-# ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
 def obtener_datos_historicos_q():
     todos_los_datos = []
@@ -478,7 +509,6 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
         return "excluido por agente"
         
     en_horario = False
-    # Horario Normal Diurno Enero-Marzo
     if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
         en_horario = True
     elif dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(11, 45, 0):
@@ -494,10 +524,9 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
     return "cumple" if min_1ra <= threshold_1ra else "no cumple"
 
 def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
-    # AJUSTE TEMPORAL: De enero a marzo no existía el horario extendido nocturno.
     return "excluido por filtro"
 
-def evaluar_sla_gestion_excel(row, threshold_gest):
+def evaluar_sla_gestion_excel(row, threshold_gest, min_gest_diurno):
     agente = str(row.get("agente_asignado", "")).strip().lower()
     por_agente = str(row.get("por_agente", "")).strip().lower()
     
@@ -515,7 +544,6 @@ def evaluar_sla_gestion_excel(row, threshold_gest):
     dia_semana = dt_obj.weekday()
     hora_actual = dt_obj.time()
 
-    # AJUSTE TEMPORAL: Exclusión por Horario Antiguo (Enero - Marzo)
     en_horario_normal = False
     if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
         en_horario_normal = True
@@ -535,11 +563,10 @@ def evaluar_sla_gestion_excel(row, threshold_gest):
     if not es_cerrado:
         return "sin cerrar"
 
-    min_gest = row.get("tiempo_resolucion_minutos")
-    if pd.isna(min_gest):
+    if pd.isna(min_gest_diurno):
         return "no cumple"
 
-    return "cumple" if min_gest <= threshold_gest else "no cumple"
+    return "cumple" if min_gest_diurno <= threshold_gest else "no cumple"
 
 def calificacion_a_estrellas(x):
     if pd.isna(x) or str(x).strip() in ["", "None", "nan", "null"]:
@@ -653,7 +680,7 @@ st.session_state["f_desde_key"] = fecha_desde
 st.session_state["f_hasta_key"] = fecha_hasta
 
 # ==========================================
-# GENERADOR DE REPORTE EXCEL (AJUSTADO)
+# GENERADOR DE REPORTE EXCEL (AJUSTADO DIURNO)
 # ==========================================
 def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
     output = io.BytesIO()
@@ -674,13 +701,12 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
     df_reporte["Por Agente"] = df_exp.get("por_agente", "")
 
-    # Evaluaciones de SLA
+    # Evaluaciones de SLA de 1ra respuesta
     sla_norm_series = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
     
     df_reporte["SLA Normal"] = sla_norm_series
     df_reporte["SLA Extendido"] = "excluido por filtro"
 
-    # Filtrar Primera Respuesta (min) excluyendo turno nocturno
     if not df_exp.empty:
         prim_resp_raw = df_exp.get("primera_respuesta_min", pd.Series(dtype=float))
         es_valido_1ra = sla_norm_series.isin(["cumple", "no cumple"])
@@ -702,16 +728,30 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
     df_reporte["Cliente"] = df_exp.get("cliente", "")
     df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
     df_reporte["Nivel"] = df_exp.get("nivel", "")
-    
-    sla_gest_series = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+
+    # =========================================================================
+    # RE-CÁLCULO VECTORIZADO DIURNO ESTRICTO DE TIEMPO DE GESTIÓN PARA EL EXCEL
+    # =========================================================================
+    if not df_exp.empty and "created_at_dt" in df_exp.columns and "fecha_cierre_dt" in df_exp.columns:
+        minutos_diurnos_series = df_exp.apply(
+            lambda r: calcular_minutos_diurnos_enero_marzo(r["created_at_dt"], r["fecha_cierre_dt"]),
+            axis=1
+        )
+    else:
+        minutos_diurnos_series = pd.Series(dtype=float)
+
+    # Evaluación de SLA de Gestión sobre los minutos estrictamente diurnos
+    sla_gest_series = df_exp.apply(
+        lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold, minutos_diurnos_series.loc[r.name]),
+        axis=1
+    ) if not df_exp.empty else pd.Series(dtype=str)
+
     df_reporte["SLA Tiempo Gestion"] = sla_gest_series
 
     if not df_exp.empty:
-        minutos_raw = df_exp.get("tiempo_resolucion_minutos", pd.Series(dtype=float))
         es_valido_gestion = sla_gest_series.isin(["cumple", "no cumple"])
-        
-        df_reporte["Tiempo resolucion (min)"] = np.where(es_valido_gestion, minutos_raw, np.nan)
-        df_reporte["Tiempo resolucion (horas)"] = np.where(es_valido_gestion, (minutos_raw / 60.0).round(2), np.nan)
+        df_reporte["Tiempo resolucion (min)"] = np.where(es_valido_gestion, minutos_diurnos_series, np.nan)
+        df_reporte["Tiempo resolucion (horas)"] = np.where(es_valido_gestion, (minutos_diurnos_series / 60.0).round(2), np.nan)
     else:
         df_reporte["Tiempo resolucion (min)"] = None
         df_reporte["Tiempo resolucion (horas)"] = None
