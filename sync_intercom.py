@@ -75,23 +75,6 @@ def obtener_canal(conv):
     else:
         return "Chat (conversation)"
 
-def extraer_motivo_normalizado(modulo, tipo_contacto, etiquetas, cx_explanation):
-    if modulo and modulo.strip():
-        m_clean = modulo.replace("mod-", "").replace("_", " ").strip().title()
-        if tipo_contacto and tipo_contacto.strip():
-            t_clean = tipo_contacto.replace("tipo-", "").replace("_", " ").strip().title()
-            return f"{m_clean} - {t_clean}"
-        return f"Módulo {m_clean}"
-    if tipo_contacto and tipo_contacto.strip():
-        return tipo_contacto.replace("tipo-", "").replace("_", " ").strip().title()
-    if cx_explanation and cx_explanation.strip():
-        return cx_explanation.strip()
-    if etiquetas:
-        tags_list = [t.strip() for t in etiquetas.split(",") if t.strip() and not t.strip().startswith(("cli-", "Niv-"))]
-        if tags_list:
-            return tags_list[0].replace("_", " ").title()
-    return "Consulta General"
-
 def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None):
     """
     Sincroniza conversaciones de Intercom hacia Supabase.
@@ -296,8 +279,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             tipo_contacto = next((t for t in tags if t.startswith("tipo-")), "")
             nivel = next((t for t in tags if t.startswith("Niv-")), "")
             etiquetas_str = ", ".join(tags)
-            
-            motivo = extraer_motivo_normalizado(modulo, tipo_contacto, etiquetas_str, cx_explanation)
 
             contacts = conv.get("contacts", {}).get("contacts", [])
             tenant, company, nombre_contacto = "Sin datos", "Sin datos", "Sin nombre"
@@ -341,7 +322,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 "cliente": cliente,
                 "tipo_contacto": tipo_contacto,
                 "nivel": nivel,
-                "motivo_normalizado": motivo,
+                "motivo_normalizado": "",
                 "estado": estado,
                 "updated_at": fecha_actualizacion_iso
             }
