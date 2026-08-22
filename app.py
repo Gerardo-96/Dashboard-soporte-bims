@@ -477,6 +477,23 @@ COLUMNAS_DASHBOARD = (
     "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado"
 )
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_lista_motivos_csat():
+    """Recupera la lista de motivos activos guardados en Supabase."""
+    try:
+        res = supabase.table("motivos_csat")\
+            .select("nombre")\
+            .eq("activo", True)\
+            .order("nombre")\
+            .execute()
+        motivos = [r["nombre"] for r in (res.data or [])]
+        if "Sin categorizar" in motivos:
+            motivos.remove("Sin categorizar")
+            motivos.insert(0, "Sin categorizar")
+        return motivos if motivos else ["Sin categorizar", "Otro"]
+    except Exception:
+        return ["Sin categorizar", "Lentitud en Respuesta", "Falta de Solución", "Otro"]
+
 def obtener_inicio_trimestre_anterior():
     """Calcula el primer día del trimestre anterior a la fecha actual."""
     hoy = obtener_fecha_local_hoy()
@@ -1446,17 +1463,10 @@ if not df_filtered_csat.empty:
         
         # 🔒 EL FORMULARIO SOLO SE MUESTRA SI ERES TÚ O TIENES SESIÓN ADMIN
         if es_super_usuario and not df_negativos.empty:
-            st.markdown("#### ⚠️ Categorización de Calificaciones Negativas (1, 2 y 3 ★)")
+            st.markdown("#### Categorización de Calificaciones Negativas (1, 2 y 3 ★)")
             
-            OPCIONES_MOTIVOS = [
-                "Sin categorizar",
-                "Lentitud en Respuesta",
-                "Falta de Solución / Error de Software",
-                "Mala Atención / Trato del Agente",
-                "Falta de Seguimiento",
-                "Duda Comercial / Facturación",
-                "Otro"
-            ]
+            # Carga dinámica de la lista desde Supabase
+            OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
 
             col_sel1, col_sel2, col_sel3 = st.columns([2, 2, 1], vertical_alignment="bottom")
             
@@ -2175,6 +2185,56 @@ with tab_admin:
                     st.info("No hay usuarios registrados aún en la base de datos.")
             except Exception as e:
                 st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
+
+        # GESTIÓN DINÁMICA DE MOTIVOS CSAT
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">4. Gestión de Motivos Normalizados (CSAT)</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Crea y administra los motivos que estarán disponibles para categorizar los chats con calificaciones negativas.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Formulario para agregar nuevo motivo
+            with st.form("form_nuevo_motivo_csat"):
+                col_m1, col_m2 = st.columns([3, 1], vertical_alignment="bottom")
+                nuevo_motivo_input = col_m1.text_input("Nuevo Motivo:")
+                btn_guardar_motivo = col_m2.form_submit_button("Agregar Motivo", use_container_width=True)
+
+                if btn_guardar_motivo:
+                    txt_motivo = nuevo_motivo_input.strip()
+                    if txt_motivo:
+                        try:
+                            supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
+                            st.success(f"Motivo '{txt_motivo}' guardado con éxito.")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error o motivo duplicado: {ex}")
+                    else:
+                        st.warning("Por favor escribe el nombre del motivo.")
+
+            # Listado de motivos existentes con opción de activar/desactivar
+            try:
+                res_mot = supabase.table("motivos_csat").select("*").order("id", desc=False).execute()
+                df_motivos = pd.DataFrame(res_mot.data or [])
+                if not df_motivos.empty:
+                    st.markdown("<b>Motivos Configurados Actualmente:</b>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df_motivos[["id", "nombre", "activo"]],
+                        column_config={
+                            "id": "ID",
+                            "nombre": "Nombre del Motivo",
+                            "activo": st.column_config.CheckboxColumn("Estado Activo")
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+            except Exception as e:
+                st.error(f"No se pudieron cargar los motivos: {e}")
 
 with tab_faq:
     st.markdown("### Preguntas Frecuentes & Criterios Operativos")
