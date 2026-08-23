@@ -1946,11 +1946,12 @@ with tab_resumen:
             fig_bar.update_layout(paper_bgcolor="#1e293b", plot_bgcolor="#1e293b", font=dict(color="#cbd5e1", size=12), height=380, margin=dict(t=20, b=20, l=20, r=20))
             st.plotly_chart(fig_bar, use_container_width=True)
 
-            # Tabla resumen por día y agente
-            st.markdown("#### Tabla General de Chats por Día y Agente")
-            df_pivot = df_res.pivot_table(index="Dia", columns="agente_asignado", values="id", aggfunc="count", fill_value=0)
-            df_pivot["TOTAL CHATS"] = df_pivot.sum(axis=1)
-            st.dataframe(df_pivot, use_container_width=True)
+        # Tabla resumen por día y agente
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### Tabla General de Chats por Día y Agente")
+        df_pivot = df_res.pivot_table(index="Dia", columns="agente_asignado", values="id", aggfunc="count", fill_value=0)
+        df_pivot["TOTAL CHATS"] = df_pivot.sum(axis=1)
+        st.dataframe(df_pivot, use_container_width=True)
 
         st.markdown("---")
 
