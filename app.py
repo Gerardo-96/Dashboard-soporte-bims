@@ -2019,6 +2019,40 @@ with tab_resumen:
                     margin=dict(t=20, b=20, l=20, r=20)
                 )
                 st.plotly_chart(fig_nivel, use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # FILA INFERIOR: Ticket Relacionado (Ancho Completo)
+            st.markdown("#### Evaluaciones Negativas por Ticket Relacionado")
+            
+            tickets_series = df_negativos_res.get("ticket_relacionado", pd.Series(dtype=str)).fillna("").astype(str).str.strip()
+            tickets_validos = tickets_series[~tickets_series.isin(["", "None", "nan", "null"])]
+
+            if not tickets_validos.empty:
+                df_tickets_cnt = tickets_validos.value_counts().reset_index()
+                df_tickets_cnt.columns = ["Ticket / Tarea", "Cantidad"]
+
+                fig_ticket = px.bar(
+                    df_tickets_cnt, 
+                    x="Cantidad", 
+                    y="Ticket / Tarea", 
+                    orientation="h",
+                    color="Cantidad",
+                    color_continuous_scale="Oranges",
+                    text="Cantidad"
+                )
+                fig_ticket.update_traces(textposition="outside", marker_line_color="#1e293b", marker_line_width=1)
+                fig_ticket.update_layout(
+                    paper_bgcolor="#1e293b", 
+                    plot_bgcolor="#1e293b", 
+                    font=dict(color="#cbd5e1", size=11), 
+                    height=320, 
+                    yaxis=dict(autorange="reversed"),
+                    coloraxis_showscale=False,
+                    margin=dict(t=20, b=20, l=20, r=20)
+                )
+                st.plotly_chart(fig_ticket, use_container_width=True)
+            else:
+                st.info("No hay tickets/tareas vinculadas a las calificaciones negativas del período.")
         else:
             st.info("🟢 No se registraron evaluaciones negativas (1, 2 o 3 ★) para el período seleccionado.")
 
