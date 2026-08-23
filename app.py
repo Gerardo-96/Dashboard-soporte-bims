@@ -1473,7 +1473,7 @@ with tab_operativo:
                 df_csat_det["nivel"] = (
                     df_csat_det.get("nivel", pd.Series(dtype=str))
                     .fillna("Nivel 1")
-                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Nivel 1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
                 )
 
                 cols_csat_deseadas = [
@@ -1994,8 +1994,8 @@ with tab_resumen:
                 # Asignar 'Nivel 1' por defecto
                 niveles_series = (
                     df_negativos_res.get("nivel", pd.Series(dtype=str))
-                    .fillna("Nivel 1")
-                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Nivel 1")
+                    .fillna("Niv-L1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
                 )
     
                 df_nivel_cnt = niveles_series.value_counts().reset_index()
