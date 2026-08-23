@@ -1455,7 +1455,7 @@ with tab_operativo:
         or st.session_state.get("admin_authenticated", False)
     )
 
-    # DETALLE Y CATEGORIZACIÓN CSAT (Sin Parpadeo con st.form)
+    # DETALLE Y CATEGORIZACIÓN CSAT DIRECTO EN TABLA (st.data_editor)
     if not df_filtered.empty and "rating" in df_filtered.columns:
         df_csat_det = df_filtered.dropna(subset=["rating"]).copy()
         df_csat_det["rating_num"] = pd.to_numeric(df_csat_det["rating"], errors="coerce")
@@ -1464,88 +1464,85 @@ with tab_operativo:
         if not df_csat_det.empty:
             with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas)", expanded=False):
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-                df_negativos = df_csat_det[df_csat_det["rating_num"] <= 3].copy()
-            
-                # Formulario de Categorización Aislado (Sin recargas intermedias)
-                if es_super_usuario and not df_negativos.empty:
-                    st.markdown("#### ⚠️ Categorización y Ticket de Calificaciones Negativas (1, 2 y 3 ★)")
-                    
-                    OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
-                    chat_ids = df_negativos["id_str"].tolist()
-
-                    # 1. Selector de chat fuera del form para actualizar los campos base
-                    chat_sel = st.selectbox("Seleccionar Chat a Categorizar:", options=chat_ids, key="sb_chat_csat_sel")
-                    
-                    row_sel = df_negativos[df_negativos["id_str"] == chat_sel].iloc[0]
-                    motivo_actual = str(row_sel.get("motivo_normalizado", "Sin categorizar"))
-                    ticket_actual = str(row_sel.get("ticket_relacionado", ""))
                 
-                    if ticket_actual in ["None", "nan", "null"]:
-                        ticket_actual = ""
-                
-                    idx_pref = OPCIONES_MOTIVOS.index(motivo_actual) if motivo_actual in OPCIONES_MOTIVOS else 0
+                # Cargar lista de motivos dinámicos
+                OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
 
-                    # 2. Contenedor st.form para evitar parpadeos al cambiar valores o escribir
-                    with st.form(key=f"form_categorizar_{chat_sel}", clear_on_submit=False):
-                        col_f1, col_f2 = st.columns(2)
-                    
-                        nuevo_motivo = col_f1.selectbox(
-                            "Motivo Normalizado:", 
-                            options=OPCIONES_MOTIVOS, 
-                            index=idx_pref
-                        )
-                    
-                        nuevo_ticket = col_f2.text_input(
-                            "Ticket / Tarea (ej: BIMS-1234):", 
-                            value=ticket_actual
-                        )
-                    
-                        btn_guardar_csat = st.form_submit_button("💾 Guardar Categorización", use_container_width=True)
+                # Normalizar valores nulos para evitar errores en la tabla editable
+                df_csat_det["motivo_normalizado"] = df_csat_det.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar")
+                df_csat_det["ticket_relacionado"] = df_csat_det.get("ticket_relacionado", pd.Series(dtype=str)).fillna("")
 
-                        if btn_guardar_csat:
-                            try:
-                                id_chat_val = int(chat_sel) if str(chat_sel).isdigit() else chat_sel
-                            
-                                supabase.table("conversaciones")\
-                                    .update({
-                                        "motivo_normalizado": nuevo_motivo,
-                                        "ticket_relacionado": nuevo_ticket.strip()
-                                    })\
-                                    .eq("id", id_chat_val)\
-                                    .execute()
-                                
-                                st.cache_data.clear()
-                                st.success(f"✅ Guardado con éxito para el chat {chat_sel}.")
-                                time_lib.sleep(0.4)
-                                st.rerun()
-                            except Exception as ex:
-                                st.error(f"❌ Error al guardar en Supabase: {ex}")
-                        
-                    st.markdown("---")
-
-                # TABLA GENERAL COMPLETA
+                # Columnas a mostrar
                 cols_csat_deseadas = [
-                    "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
+                    "id_str", "intercom_url", "fecha_calificacion_fmt", "Calificacion", "feedback", 
                     "motivo_normalizado", "ticket_relacionado", "nombre_contacto", "tenant", "company", "agente_evaluado"
                 ]
 
-                st.dataframe(
-                    df_csat_det.reindex(columns=cols_csat_deseadas).fillna(""),
-                    column_config={
-                        "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                        "fecha_calificacion_fmt": "Fecha/Hora Calificación",
-                        "Calificacion": "Puntaje",
-                        "feedback": "Comentario / Feedback",
-                        "motivo_normalizado": "Motivo Normalizado",
-                        "ticket_relacionado": "Ticket Relacionado",
-                        "nombre_contacto": "Contacto",
-                        "tenant": "Tenant",
-                        "company": "Company",
-                        "agente_evaluado": "Agente Evaluado"
-                    },
+                df_editor = df_csat_det.reindex(columns=cols_csat_deseadas).copy()
+
+                # Configuración de edición de la tabla
+                config_columnas = {
+                    "id_str": None,  # Ocultamos la columna ID técnica pero la mantenemos en el DF
+                    "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
+                    "fecha_calificacion_fmt": st.column_config.TextColumn("Fecha/Hora Calificación", disabled=True),
+                    "Calificacion": st.column_config.TextColumn("Puntaje", disabled=True),
+                    "feedback": st.column_config.TextColumn("Comentario / Feedback", disabled=True),
+                    "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
+                    "tenant": st.column_config.TextColumn("Tenant", disabled=True),
+                    "company": st.column_config.TextColumn("Company", disabled=True),
+                    "agente_evaluado": st.column_config.TextColumn("Agente Evaluado", disabled=True),
+                }
+
+                # Si es superusuario, permitimos edición en Motivo y Ticket
+                if es_super_usuario:
+                    config_columnas["motivo_normalizado"] = st.column_config.SelectboxColumn(
+                        "Motivo Normalizado",
+                        options=OPCIONES_MOTIVOS,
+                        required=True
+                    )
+                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn(
+                        "Ticket Relacionado",
+                        help="Escribe el código de ticket (ej: BIMS-1234)"
+                    )
+                else:
+                    config_columnas["motivo_normalizado"] = st.column_config.TextColumn("Motivo Normalizado", disabled=True)
+                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado", disabled=True)
+
+                # RENDERIZADO DE TABLA EDITABLE
+                edited_df = st.data_editor(
+                    df_editor,
+                    column_config=config_columnas,
                     hide_index=True,
-                    use_container_width=True
+                    use_container_width=True,
+                    key="editor_csat_tabla"
                 )
+
+                # DETECCIÓN Y GUARDADO AUTOMÁTICO EN SUPABASE
+                if es_super_usuario and st.session_state.get("editor_csat_tabla"):
+                    cambios = st.session_state["editor_csat_tabla"].get("edited_rows", {})
+                    
+                    if cambios:
+                        for fila_idx, datos_editados in cambios.items():
+                            chat_id = df_editor.iloc[fila_idx]["id_str"]
+                            id_chat_val = int(chat_id) if str(chat_id).isdigit() else chat_id
+                        
+                            payload_update = {}
+                            if "motivo_normalizado" in datos_editados:
+                                payload_update["motivo_normalizado"] = datos_editados["motivo_normalizado"]
+                            if "ticket_relacionado" in datos_editados:
+                                payload_update["ticket_relacionado"] = str(datos_editados["ticket_relacionado"]).strip()
+    
+                            if payload_update:
+                                try:
+                                    supabase.table("conversaciones")\
+                                        .update(payload_update)\
+                                        .eq("id", id_chat_val)\
+                                        .execute()
+                                    
+                                    st.toast(f"✅ Chat {chat_id} actualizado en Supabase", icon="💾")
+                                    st.cache_data.clear()
+                                except Exception as ex:
+                                    st.error(f"❌ Error al guardar edición: {ex}")
         st.markdown("---")
 
     # ==========================================
