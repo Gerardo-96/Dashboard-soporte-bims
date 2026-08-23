@@ -1469,10 +1469,22 @@ with tab_operativo:
 
                 df_csat_det["motivo_normalizado"] = df_csat_det.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar")
                 df_csat_det["ticket_relacionado"] = df_csat_det.get("ticket_relacionado", pd.Series(dtype=str)).fillna("")
+                df_csat_det["nivel"] = df_csat_det.get("nivel", pd.Series(dtype=str)).fillna("Niv-L1")
 
                 cols_csat_deseadas = [
-                    "id_str", "intercom_url", "fecha_calificacion_fmt", "rating_num", "Calificacion", "feedback", 
-                    "motivo_normalizado", "ticket_relacionado", "nombre_contacto", "tenant", "company", "agente_evaluado"
+                    "id_str", 
+                    "intercom_url", 
+                    "fecha_calificacion_fmt", 
+                    "agente_evaluado",
+                    "nivel",
+                    "rating_num", 
+                    "Calificacion", 
+                    "feedback", 
+                    "motivo_normalizado", 
+                    "ticket_relacionado", 
+                    "nombre_contacto", 
+                    "tenant", 
+                    "company"
                 ]
 
                 # ORDEN ASCENDENTE POR CALIFICACIÓN
@@ -1486,12 +1498,13 @@ with tab_operativo:
                     "rating_num": None,
                     "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
                     "fecha_calificacion_fmt": st.column_config.TextColumn("Fecha/Hora Calificación", disabled=True),
+                    "agente_evaluado": st.column_config.TextColumn("Agente Evaluado", disabled=True),
+                    "nivel": st.column_config.TextColumn("Nivel", disabled=True),
                     "Calificacion": st.column_config.TextColumn("Puntaje", disabled=True),
                     "feedback": st.column_config.TextColumn("Comentario / Feedback", disabled=True),
                     "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
                     "tenant": st.column_config.TextColumn("Tenant", disabled=True),
                     "company": st.column_config.TextColumn("Company", disabled=True),
-                    "agente_evaluado": st.column_config.TextColumn("Agente Evaluado", disabled=True),
                 }
 
                 if es_super_usuario:
@@ -1878,23 +1891,18 @@ with tab_operativo:
 
 with tab_resumen:
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
-    
     if not df_all.empty and "fecha_solo" in df_all.columns:
         df_filtered_r = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy()
-        
         if usar_filtro_hora and not df_filtered_r.empty:
             df_filtered_r = df_filtered_r[(df_filtered_r["hora_solo"] >= hora_inicio) & (df_filtered_r["hora_solo"] <= hora_fin)]
     else:
         df_filtered_r = pd.DataFrame()
 
-    st.markdown(f"### Análisis de Chats por Agente (`{f_desde_v}` al `{f_hasta_v}`)")
+    st.markdown(f"### Análisis Operativo & Métricas (`{f_desde_v}` al `{f_hasta_v}`)")
     
     if not df_filtered_r.empty:
-        df_res = df_filtered_r.copy()
-        df_res = df_res.sort_values(by="created_at_dt", ascending=True)
-
+        df_res = df_filtered_r.copy().sort_values(by="created_at_dt", ascending=True)
         df_res["Dia"] = df_res["created_at_dt"].dt.strftime("%Y-%m-%d").fillna("Sin fecha")
-
         df_agentes_total = df_res["agente_asignado"].value_counts().reset_index()
         df_agentes_total.columns = ["Agente", "Cantidad de Chats"]
 
@@ -1912,92 +1920,104 @@ with tab_resumen:
         r4.markdown(f'<div class="metric-card"><div class="metric-card-title">Participación Top Agente</div><div class="metric-card-value">{pct_top}%</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-
         palette_mate = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#2dd4bf", "#94a3b8"]
-
+        
+        # ==========================================
+        # 1. BLOQUE GENERAL DE AGENTES Y EVOLUCIÓN
+        # ==========================================
         g_pie, g_bar = st.columns([1, 1])
 
         with g_pie:
             st.markdown("#### Distribución de Chats por Agente")
-            fig_pie = px.pie(
-                df_agentes_total, 
-                values="Cantidad de Chats", 
-                names="Agente",
-                hole=0.55,
-                color_discrete_sequence=palette_mate
-            )
-            fig_pie.update_traces(
-                textposition='inside', 
-                textinfo='percent',
-                hovertemplate="<b>%{label}</b><br>Chats: %{value}<br>Porcentaje: %{percent}<extra></extra>",
-                marker=dict(line=dict(color='#1e293b', width=2))
-            )
-            fig_pie.update_layout(
-                showlegend=True, 
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#1e293b",
-                font=dict(color="#cbd5e1", family="sans-serif", size=12),
-                height=420,
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.15,
-                    xanchor="center",
-                    x=0.5,
-                    font=dict(size=11, color="#94a3b8")
-                ),
-                margin=dict(t=20, b=80, l=20, r=20)
-            )
+            fig_pie = px.pie(df_agentes_total, values="Cantidad de Chats", names="Agente", hole=0.55, color_discrete_sequence=palette_mate)
+            fig_pie.update_traces(textposition='inside', textinfo='percent', hovertemplate="<b>%{label}</b><br>Chats: %{value}<br>Porcentaje: %{percent}<extra></extra>", marker=dict(line=dict(color='#1e293b', width=2)))
+            fig_pie.update_layout(showlegend=True, paper_bgcolor="#1e293b", plot_bgcolor="#1e293b", font=dict(color="#cbd5e1", size=12), height=380, margin=dict(t=20, b=20, l=20, r=20))
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with g_bar:
             st.markdown("#### Evolución Diaria por Agente")
             df_dia_agente = df_res.groupby(["Dia", "agente_asignado"]).size().reset_index(name="Cantidad")
-            fig_bar = px.bar(
-                df_dia_agente,
-                x="Dia",
-                y="Cantidad",
-                color="agente_asignado",
-                barmode="stack",
-                title="",
-                color_discrete_sequence=palette_mate
-            )
-            fig_bar.update_traces(
-                marker=dict(line=dict(color='#1e293b', width=1))
-            )
-            fig_bar.update_layout(
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#1e293b",
-                font=dict(color="#cbd5e1", family="sans-serif", size=12),
-                height=420,
-                xaxis=dict(gridcolor="#334155", title="Fecha"),
-                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats"),
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.20,
-                    xanchor="center",
-                    x=0.5,
-                    font=dict(size=11, color="#94a3b8")
-                ),
-                margin=dict(t=20, b=80, l=20, r=20)
-            )
+            fig_bar = px.bar(df_dia_agente, x="Dia", y="Cantidad", color="agente_asignado", barmode="stack", color_discrete_sequence=palette_mate)
+            fig_bar.update_layout(paper_bgcolor="#1e293b", plot_bgcolor="#1e293b", font=dict(color="#cbd5e1", size=12), height=380, margin=dict(t=20, b=20, l=20, r=20))
             st.plotly_chart(fig_bar, use_container_width=True)
 
         st.markdown("---")
 
-        st.markdown("#### Tabla Desglosada por Día y Agente")
-        df_pivot = df_res.pivot_table(
-            index="Dia", 
-            columns="agente_asignado", 
-            values="id", 
-            aggfunc="count", 
-            fill_value=0
-        )
+        # ==========================================
+        # 2. BLOQUE DE ANÁLISIS DE CSAT NEGATIVO (<=3 ★)
+        # ==========================================
+        st.markdown("### 📊 Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
+        
+        # Filtro de calificaciones negativas
+        df_res["rating_num"] = pd.to_numeric(df_res.get("rating"), errors="coerce")
+        df_negativos_res = df_res[df_res["rating_num"] <= 3].copy()
+
+        if not df_negativos_res.empty:
+            g_motivo, g_nivel = st.columns([1, 1])
+
+            # A. Gráfico por Motivo Normalizado
+            with g_motivo:
+                st.markdown("#### Evaluaciones Negativas por Motivo")
+                df_motivos_cnt = df_negativos_res.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar").value_counts().reset_index()
+                df_motivos_cnt.columns = ["Motivo Normalizado", "Cantidad"]
+
+                fig_motivos = px.bar(
+                    df_motivos_cnt, 
+                    x="Cantidad", 
+                    y="Motivo Normalizado", 
+                    orientation="h",
+                    color="Cantidad",
+                    color_continuous_scale="Reds",
+                    text="Cantidad"
+                )
+                fig_motivos.update_traces(textposition="outside", marker_line_color="#1e293b", marker_line_width=1)
+                fig_motivos.update_layout(
+                    paper_bgcolor="#1e293b", 
+                    plot_bgcolor="#1e293b", 
+                    font=dict(color="#cbd5e1", size=11), 
+                    height=380, 
+                    yaxis=dict(autorange="reversed"),
+                    coloraxis_showscale=False,
+                    margin=dict(t=20, b=20, l=20, r=20)
+                )
+                st.plotly_chart(fig_motivos, use_container_width=True)
+
+            # B. Gráfico por Nivel de Soporte
+            with g_nivel:
+                st.markdown("#### Evaluaciones Negativas por Nivel")
+                df_nivel_cnt = df_negativos_res.get("nivel", pd.Series(dtype=str)).fillna("Sin Nivel").value_counts().reset_index()
+                df_nivel_cnt.columns = ["Nivel", "Cantidad"]
+
+                fig_nivel = px.bar(
+                    df_nivel_cnt, 
+                    x="Nivel", 
+                    y="Cantidad", 
+                    color="Nivel",
+                    color_discrete_sequence=["#f87171", "#fbbf24", "#818cf8", "#38bdf8"],
+                    text="Cantidad"
+                )
+                fig_nivel.update_traces(textposition="outside")
+                fig_nivel.update_layout(
+                    paper_bgcolor="#1e293b", 
+                    plot_bgcolor="#1e293b", 
+                    font=dict(color="#cbd5e1", size=12), 
+                    height=380, 
+                    showlegend=False,
+                    margin=dict(t=20, b=20, l=20, r=20)
+                )
+                st.plotly_chart(fig_nivel, use_container_width=True)
+        else:
+            st.info("🟢 No se registraron evaluaciones negativas (1, 2 o 3 ★) para el período seleccionado.")
+
+        st.markdown("---")
+        
+        # Tabla resumen por día y agente
+        st.markdown("#### Tabla General de Chats por Día y Agente")
+        df_pivot = df_res.pivot_table(index="Dia", columns="agente_asignado", values="id", aggfunc="count", fill_value=0)
         df_pivot["TOTAL CHATS"] = df_pivot.sum(axis=1)
         st.dataframe(df_pivot, use_container_width=True)
     else:
-        st.info("No hay chats registrados para el rango de fechas seleccionado en la barra lateral.")
+        st.info("No hay chats registrados para el rango de fechas seleccionado.")
 
 with tab_admin:
     st.markdown("### Panel de Administración y Configuración")
