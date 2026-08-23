@@ -1455,7 +1455,7 @@ with tab_operativo:
         or st.session_state.get("admin_authenticated", False)
     )
 
-    # DETALLE Y CATEGORIZACIÓN CSAT DIRECTO EN TABLA (Orden Ascendente por Calificación)
+    # DETALLE Y CATEGORIZACIÓN CSAT DIRECTO EN TABLA (Con Form para Guardado Seguro)
     if not df_filtered.empty and "rating" in df_filtered.columns:
         df_csat_det = df_filtered.dropna(subset=["rating"]).copy()
         df_csat_det["rating_num"] = pd.to_numeric(df_csat_det["rating"], errors="coerce")
@@ -1464,7 +1464,7 @@ with tab_operativo:
         if not df_csat_det.empty:
             with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas)", expanded=False):
                 df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-                
+            
                 OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
 
                 df_csat_det["motivo_normalizado"] = df_csat_det.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar")
@@ -1475,14 +1475,15 @@ with tab_operativo:
                     "motivo_normalizado", "ticket_relacionado", "nombre_contacto", "tenant", "company", "agente_evaluado"
                 ]
 
-                # ORDEN ASCENDENTE POR CALIFICACIÓN (rating_num 1, 2, 3...)
+                # ORDEN ASCENDENTE POR CALIFICACIÓN
                 df_editor = df_csat_det.reindex(columns=cols_csat_deseadas)\
                     .sort_values(by=["rating_num", "fecha_calificacion_fmt"], ascending=[True, False])\
+                    .reset_index(drop=True)\
                     .copy()
 
                 config_columnas = {
                     "id_str": None,
-                    "rating_num": None, # Ocultamos la columna numérica auxiliar usada para el ordenamiento
+                    "rating_num": None,
                     "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
                     "fecha_calificacion_fmt": st.column_config.TextColumn("Fecha/Hora Calificación", disabled=True),
                     "Calificacion": st.column_config.TextColumn("Puntaje", disabled=True),
@@ -1499,30 +1500,37 @@ with tab_operativo:
                         options=OPCIONES_MOTIVOS,
                         required=True
                     )
-                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn(
-                        "Ticket Relacionado"
-                    )
+                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado")
                 else:
                     config_columnas["motivo_normalizado"] = st.column_config.TextColumn("Motivo Normalizado", disabled=True)
                     config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado", disabled=True)
+    
+                # ENVOLVEMOS LA TABLA EN UN FORMULARIO PARA EVITAR SOBREESCRITURAS DE ESTADO
+                with st.form("form_tabla_csat_edicion", clear_on_submit=False):
+                    edited_df = st.data_editor(
+                        df_editor,
+                        column_config=config_columnas,
+                        hide_index=True,
+                        use_container_width=True,
+                        key="editor_csat_tabla"
+                    )
 
-                edited_df = st.data_editor(
-                    df_editor,
-                    column_config=config_columnas,
-                    hide_index=True,
-                    use_container_width=True,
-                    key="editor_csat_tabla"
-                )
+                    if es_super_usuario:
+                        btn_guardar_cambios = st.form_submit_button("💾 Guardar Cambios en Supabase", use_container_width=True)
+                    else:
+                        btn_guardar_cambios = False
 
-                # GUARDADO EN SEGUNDO PLANO SIN REINICIAR PÁGINA
-                if es_super_usuario and st.session_state.get("editor_csat_tabla"):
-                    cambios = st.session_state["editor_csat_tabla"].get("edited_rows", {})
+                # PROCESAMIENTO SEGURO AL HACER CLIC EN GUARDAR
+                if btn_guardar_cambios and es_super_usuario:
+                    cambios = st.session_state.get("editor_csat_tabla", {}).get("edited_rows", {})
                 
                     if cambios:
+                        errores = 0
+                        guardados = 0
                         for fila_idx, datos_editados in cambios.items():
-                            chat_id = df_editor.iloc[fila_idx]["id_str"]
+                            chat_id = df_editor.iloc[int(fila_idx)]["id_str"]
                             id_chat_val = int(chat_id) if str(chat_id).isdigit() else chat_id
-                        
+                            
                             payload_update = {}
                             if "motivo_normalizado" in datos_editados:
                                 payload_update["motivo_normalizado"] = datos_editados["motivo_normalizado"]
@@ -1535,10 +1543,18 @@ with tab_operativo:
                                         .update(payload_update)\
                                         .eq("id", id_chat_val)\
                                         .execute()
-                                
-                                    st.toast(f"💾 Guardado en BD (Chat {chat_id})", icon="✅")
+                                    guardados += 1
                                 except Exception as ex:
-                                    st.error(f"❌ Error al guardar en Supabase: {ex}")
+                                    errores += 1
+                                    st.error(f"Error al actualizar chat {chat_id}: {ex}")
+    
+                        if guardados > 0:
+                            st.success(f"✅ Se actualizaron {guardados} registros.")
+                            st.cache_data.clear()
+                            time_lib.sleep(0.5)
+                            st.rerun()
+                    else:
+                        st.info("No se detectaron cambios pendientes para guardar.")
         st.markdown("---")
 
     # ==========================================
