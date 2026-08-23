@@ -1469,7 +1469,12 @@ with tab_operativo:
 
                 df_csat_det["motivo_normalizado"] = df_csat_det.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar")
                 df_csat_det["ticket_relacionado"] = df_csat_det.get("ticket_relacionado", pd.Series(dtype=str)).fillna("")
-                df_csat_det["nivel"] = df_csat_det.get("nivel", pd.Series(dtype=str)).fillna("Niv-L1")
+                # Asignar 'Nivel 1' por defecto si viene nulo, vacío o como 'Sin Nivel'
+                df_csat_det["nivel"] = (
+                    df_csat_det.get("nivel", pd.Series(dtype=str))
+                    .fillna("Nivel 1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Nivel 1")
+                )
 
                 cols_csat_deseadas = [
                     "id_str", 
@@ -1985,7 +1990,15 @@ with tab_resumen:
             # B. Gráfico por Nivel de Soporte
             with g_nivel:
                 st.markdown("#### Evaluaciones Negativas por Nivel")
-                df_nivel_cnt = df_negativos_res.get("nivel", pd.Series(dtype=str)).fillna("Sin Nivel").value_counts().reset_index()
+    
+                # Asignar 'Nivel 1' por defecto
+                niveles_series = (
+                    df_negativos_res.get("nivel", pd.Series(dtype=str))
+                    .fillna("Nivel 1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Nivel 1")
+                )
+    
+                df_nivel_cnt = niveles_series.value_counts().reset_index()
                 df_nivel_cnt.columns = ["Nivel", "Cantidad"]
 
                 fig_nivel = px.bar(
