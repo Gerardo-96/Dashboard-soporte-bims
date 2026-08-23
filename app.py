@@ -1516,7 +1516,7 @@ with tab_operativo:
                     )
 
                     if es_super_usuario:
-                        btn_guardar_cambios = st.form_submit_button("💾 Guardar Cambios en Supabase", use_container_width=True)
+                        btn_guardar_cambios = st.form_submit_button("Guardar Cambios", use_container_width=True)
                     else:
                         btn_guardar_cambios = False
 
