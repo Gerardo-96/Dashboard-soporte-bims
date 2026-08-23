@@ -1539,7 +1539,7 @@ with tab_operativo:
                                         .eq("id", id_chat_val)\
                                         .execute()
                                     
-                                    st.toast(f"✅ Chat {chat_id} actualizado en Supabase", icon="💾")
+                                    st.toast(f"✅ Chat {chat_id} actualizado con éxito", icon="💾")
                                     st.cache_data.clear()
                                 except Exception as ex:
                                     st.error(f"❌ Error al guardar edición: {ex}")
