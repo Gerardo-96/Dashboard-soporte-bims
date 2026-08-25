@@ -271,7 +271,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             agente_evaluado = agentes_dict.get(admin_eval_id, agente)
 
             # =========================================================================
-            # 5. ETIQUETAS Y MOTIVO NORMALIZADO
+            # 5. ETIQUETAS
             # =========================================================================
             tags = [tag.get("name") for tag in conv.get("tags", {}).get("tags", [])]
             modulo = next((t for t in tags if t.startswith("mod-")), "")
@@ -322,7 +322,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 "cliente": cliente,
                 "tipo_contacto": tipo_contacto,
                 "nivel": nivel,
-                "motivo_normalizado": "",
                 "estado": estado,
                 "updated_at": fecha_actualizacion_iso
             }
