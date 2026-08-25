@@ -551,6 +551,10 @@ def obtener_datos_historicos_q():
     return todos_los_datos
 
 
+@st.cache_data(ttl=900)
+def obtener_timestamp_sync():
+    return datetime.now(timezone(timedelta(hours=-3)))
+
 @st.cache_data(ttl=900, show_spinner=False)
 def obtener_datos_hoy():
     """Descarga conversaciones recientes (últimas 36 horas) evitando desfases de zona horaria UTC vs PY."""
@@ -887,10 +891,15 @@ if not df_all.empty and "updated_at_local" in df_all.columns:
     # Tomamos la fecha máxima real parseada
     max_updated_dt = df_all["updated_at_local"].dropna().max()
     tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
+
+    # Obtiene el timestamp global del servidor (compartido por todos los clientes)
+    ultima_sync_dt = obtener_timestamp_sync()
+    sync_hace_str = obtener_tiempo_transcurrido(ultima_sync_dt)
     
     st.sidebar.markdown(f"""
     <div class="db-info-box">
-        • <b>Ultima sync:</b> {tiempo_hace_str}<br>
+        • <b>Última actividad:</b> {tiempo_hace_str}<br>
+        • <b>Última sync:</b> {sync_hace_str}<br>
     </div>
     """, unsafe_allow_html=True)
 else:
