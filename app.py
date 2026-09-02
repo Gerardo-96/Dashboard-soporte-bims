@@ -1201,7 +1201,7 @@ def renderizar_alertas_en_vivo():
             sin_respuesta = df_activos["1ra_resp_num"].isna()
             tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
             
-            df_criticos_sla = df_activos[sin_respuesta & tiempo_superado]
+            df_criticos_sla = df_activos[sin_respuesta & tiempo_superado].copy()
 
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
@@ -1220,56 +1220,56 @@ def renderizar_alertas_en_vivo():
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
                 
                 if not df_criticos_sla.empty:
-                    # Despliegue individual por cada chat con su botón de acción
-                    for _, row in df_criticos_sla.iterrows():
-                        chat_id = row["id"]
-                        id_str = row["id_str"]
-                        url_chat = row["intercom_url"]
-                        contacto = row.get("nombre_contacto", "Sin nombre")
-                        tenant = row.get("tenant", "Sin tenant")
-                        min_trans = row.get("min_transcurridos", 0.0)
-                        
-                        col_info, col_btn = st.columns([4, 1], vertical_alignment="center")
-                        
-                        with col_info:
-                            st.markdown(
-                                f"💬 **Chat [`{id_str}`]({url_chat})** | **Contacto:** {contacto} | **Tenant:** {tenant} | ⏳ **Espere:** {min_trans} min"
-                            )
-                            
-                        with col_btn:
-                            if st.button("✔ Marcar Atendido", key=f"btn_atendido_{id_str}", use_container_width=True):
+                    # Agregamos la columna interactiva para la casilla de verificación
+                    df_criticos_sla["atendido"] = False
+
+                    cols_check = ["atendido", "intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "estado"]
+                    if "canal" in df_criticos_sla.columns:
+                        cols_check.append("canal")
+
+                    df_criticos_editor = df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1).copy()
+
+                    # Despliegue de la tabla utilizando data_editor
+                    edited_data = st.data_editor(
+                        df_criticos_editor,
+                        column_config={
+                            "atendido": st.column_config.CheckboxColumn("Atendido", default=False),
+                            "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                            "created_at_fmt": st.column_config.TextColumn("Fecha Creación", disabled=True),
+                            "min_transcurridos": st.column_config.NumberColumn("Min. Transcurridos", disabled=True),
+                            "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
+                            "tenant": st.column_config.TextColumn("Tenant", disabled=True),
+                            "estado": st.column_config.TextColumn("Estado", disabled=True),
+                            "canal": st.column_config.TextColumn("Canal", disabled=True),
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        key="editor_alertas_tabla"
+                    )
+
+                    # Detección de filas marcadas
+                    cambios = st.session_state.get("editor_alertas_tabla", {}).get("edited_rows", {})
+                    if cambios:
+                        actualizados = 0
+                        for fila_idx, datos_editados in cambios.items():
+                            if datos_editados.get("atendido") is True:
+                                row_data = df_criticos_sla.iloc[int(fila_idx)]
+                                chat_id = row_data["id"]
+                                id_str = row_data["id_str"]
+
                                 try:
                                     supabase.table("conversaciones")\
                                         .update({"primera_respuesta_min": 0.0})\
                                         .eq("id", chat_id)\
                                         .execute()
-                                    st.success(f"Chat {id_str} actualizado.")
-                                    st.cache_data.clear()
-                                    st.rerun()
+                                    actualizados += 1
                                 except Exception as ex_update:
                                     st.error(f"Error al actualizar chat {id_str}: {ex_update}")
-                    
-                    st.markdown("---")
-                    
-                    # Vista tabular secundaria
-                    cols_check = ["intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "estado"]
-                    if "canal" in df_criticos_sla.columns:
-                        cols_check.append("canal")
-                    
-                    st.dataframe(
-                        df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1), 
-                        column_config={
-                            "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
-                            "created_at_fmt": "Fecha Creación",
-                            "min_transcurridos": "Min. Transcurridos",
-                            "nombre_contacto": "Contacto",
-                            "tenant": "Tenant",
-                            "estado": "Estado",
-                            "canal": "Canal"
-                        },
-                        hide_index=True, 
-                        use_container_width=True
-                    )
+
+                        if actualizados > 0:
+                            st.cache_data.clear()
+                            st.rerun()
+
                 else:
                     st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
         else:
@@ -1278,7 +1278,7 @@ def renderizar_alertas_en_vivo():
     else:
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
             st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
-
+            
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
 # ==========================================
