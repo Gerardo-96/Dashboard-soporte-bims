@@ -1153,7 +1153,6 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        # Solicitamos tenant y nombre_contacto desde Supabase
         COLUMNAS_ALERTAS = "id, created_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto"
 
         res = supabase.table("conversaciones")\
@@ -1179,7 +1178,6 @@ def renderizar_alertas_en_vivo():
         
         df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
-        # Generación de URL hacia Intercom
         df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
         df_activos["intercom_url"] = df_activos["id_str"].apply(
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
@@ -1218,11 +1216,42 @@ def renderizar_alertas_en_vivo():
                     html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
                     st.components.v1.html(html_con_ts, height=0)
 
-            with st.expander("Panel de Verificación de Alertas en Vivo", expanded=False):
+            with st.expander("Panel de Verificación de Alertas en Vivo", expanded=True if not df_criticos_sla.empty else False):
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
                 
                 if not df_criticos_sla.empty:
-                    # Incluimos intercom_url, tenant y nombre_contacto
+                    # Despliegue individual por cada chat con su botón de acción
+                    for _, row in df_criticos_sla.iterrows():
+                        chat_id = row["id"]
+                        id_str = row["id_str"]
+                        url_chat = row["intercom_url"]
+                        contacto = row.get("nombre_contacto", "Sin nombre")
+                        tenant = row.get("tenant", "Sin tenant")
+                        min_trans = row.get("min_transcurridos", 0.0)
+                        
+                        col_info, col_btn = st.columns([4, 1], vertical_alignment="center")
+                        
+                        with col_info:
+                            st.markdown(
+                                f"💬 **Chat [`{id_str}`]({url_chat})** | **Contacto:** {contacto} | **Tenant:** {tenant} | ⏳ **Espere:** {min_trans} min"
+                            )
+                            
+                        with col_btn:
+                            if st.button("✔ Marcar Atendido", key=f"btn_atendido_{id_str}", use_container_width=True):
+                                try:
+                                    supabase.table("conversaciones")\
+                                        .update({"primera_respuesta_min": 0.0})\
+                                        .eq("id", chat_id)\
+                                        .execute()
+                                    st.success(f"Chat {id_str} actualizado.")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as ex_update:
+                                    st.error(f"Error al actualizar chat {id_str}: {ex_update}")
+                    
+                    st.markdown("---")
+                    
+                    # Vista tabular secundaria
                     cols_check = ["intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "estado"]
                     if "canal" in df_criticos_sla.columns:
                         cols_check.append("canal")
