@@ -740,7 +740,7 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
         return "excluido por feriado"
     
     agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan", "Monica"]:
+    if not agente or agente in ["Sin asignar", "None", "nan", "Monica", "Soporte", "soporte", "SOPORTE"]:
         return "excluido por agente"
         
     en_horario = False
@@ -760,6 +760,11 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
 
 
 def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
+    # =================================================================
+    # INTERRUPTOR TEMPORAL: Desactiva el cálculo de SLA Extendido
+    return "excluido por horario" 
+    # =================================================================
+    
     dt_obj = row.get("created_at_dt")
     if pd.isna(dt_obj):
         return "excluido"
@@ -772,7 +777,7 @@ def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
         return "excluido por feriado"
     
     agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan", "Monica"]:
+    if not agente or agente in ["Sin asignar", "None", "nan", "Monica", "Soporte", "soporte", "SOPORTE"]:
         return "excluido por agente"
         
     en_horario = False
@@ -797,7 +802,7 @@ def evaluar_sla_gestion_excel(row, threshold_gest):
     agente = str(row.get("agente_asignado", "")).strip().lower()
     por_agente = str(row.get("por_agente", "")).strip().lower()
     
-    if por_agente == "excluido" or not agente or agente in ["sin asignar", "none", "nan", "monica", "monica (bot)"]:
+    if por_agente == "excluido" or not agente or agente in ["sin asignar", "none", "nan", "monica", "monica (bot)", "Soporte", "soporte", "SOPORTE"]:
         return "excluido por filtro"
 
     # 2. Exclusión por Horario (Usa exactamente la misma franja que el Dashboard: Normal + Extendido)
@@ -1299,7 +1304,7 @@ with tab_operativo:
 
         # Identificamos si el agente asignado es sin asignar o Mónica
         agente_clean = df_all.get("agente_asignado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
-        es_monica_o_sin_asignar = agente_clean.isin(["sin asignar", "none", "nan", "monica", "monica (bot)"])
+        es_monica_o_sin_asignar = agente_clean.isin(["sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"])
         
         # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
         cond_1ra = [
@@ -1633,7 +1638,7 @@ with tab_operativo:
         # Importante: aquí NO exigimos cierre ni excluimos la etiqueta "Sin Respuesta".
         es_agente_valido_1ra = (
             (por_agente_f == "no excluido") &
-            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"])
         )
         dt_1ra = df_f["created_at_dt"]
         dia_1ra = dt_1ra.dt.dayofweek
@@ -1646,13 +1651,17 @@ with tab_operativo:
             (dia_1ra == 5) &
             (hora_1ra >= time(9,0)) & (hora_1ra <= time(11,45))
         )
-        extendido_1ra = (
-            (dia_1ra.isin([0,1,2])) &
-            ((hora_1ra >= time(19,0)) | (hora_1ra <= time(1,45)))
-        ) | (
-            (dia_1ra.isin([3,4,5,6])) &
-            ((hora_1ra >= time(18,0)) | (hora_1ra <= time(2,45)))
-        )
+        # extendido_1ra original guardado
+        # extendido_1ra = (
+        #     (dia_1ra.isin([0,1,2])) &
+        #     ((hora_1ra >= time(19,0)) | (hora_1ra <= time(1,45)))
+        # ) | (
+        #     (dia_1ra.isin([3,4,5,6])) &
+        #     ((hora_1ra >= time(18,0)) | (hora_1ra <= time(2,45)))
+        # )
+        
+        # INTERRUPTOR TEMPORAL: Forzamos a False para ignorar horario extendido
+        extendido_1ra = False
         no_feriado_1ra = ~fecha_1ra.isin(FERIADOS)
         es_horario_1ra = (normal_1ra | extendido_1ra) & no_feriado_1ra
         v_1ra = df_f[es_agente_valido_1ra & es_horario_1ra].copy()
