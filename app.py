@@ -474,7 +474,7 @@ COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
     "feedback, agente_evaluado, tenant, company, nombre_contacto, "
-    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado, ticket_relacionado"
+    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado, ticket_relacionado, ai_title"
 )
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -1037,6 +1037,8 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
         df_reporte["Tiempo resolucion (min)"] = None
         df_reporte["Tiempo resolucion (horas)"] = None
 
+    df_reporte["AI Title"] = df_exp.get("ai_title", "No Generado")
+
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_meta = pd.DataFrame([
             ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
@@ -1327,9 +1329,17 @@ with tab_operativo:
         val_gest = ["excluido", "sin cerrar", "sin cerrar", "cumple"]
         df_all["sla_gest_eval"] = np.select(cond_gest, val_gest, default="no cumple")
 
-        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado"]:
+        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "ai_title"]:
             if col not in df_all.columns:
-                df_all[col] = "Sin datos" if col not in ["motivo_normalizado"] else ("Consulta General" if col == "motivo_normalizado" else "Pendiente de procesamiento")
+                if col == "motivo_normalizado":
+                    df_all[col] = "Consulta General"
+                elif col == "ai_title":
+                    df_all[col] = "No Generado"
+                else:
+                    df_all[col] = "Sin datos"
+            else:
+                if col == "ai_title":
+                    df_all[col] = df_all[col].fillna("No Generado").replace(["", "None", "nan", "null"], "No Generado")
 
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
     
@@ -1834,7 +1844,7 @@ with tab_operativo:
         if "created_at_dt" in df_abiertos_filtrados.columns:
             df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
 
-        cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+        cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", "ai_title",
                              "nombre_contacto", "tenant", "company"]
 
         st.dataframe(
@@ -1844,6 +1854,7 @@ with tab_operativo:
                 "created_at_fmt": "Fecha Creacion", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
+                "ai_title": "AI Title",
                 "nombre_contacto": "Contacto",
                 "tenant": "Tenant",
                 "company": "Company",
