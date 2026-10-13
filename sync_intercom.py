@@ -280,6 +280,11 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             nivel = next((t for t in tags if t.startswith("Niv-")), "")
             etiquetas_str = ", ".join(tags)
 
+            # Extracción de AI Title desde custom_attributes
+            custom_attrs = conv.get("custom_attributes", {}) or {}
+            ai_title_raw = custom_attrs.get("AI Title")
+            ai_title = str(ai_title_raw).strip() if (ai_title_raw and str(ai_title_raw).strip() != "") else "No Generado"
+
             contacts = conv.get("contacts", {}).get("contacts", [])
             tenant, company, nombre_contacto = "Sin datos", "Sin datos", "Sin nombre"
             if contacts:
@@ -323,7 +328,8 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 "tipo_contacto": tipo_contacto,
                 "nivel": nivel,
                 "estado": estado,
-                "updated_at": fecha_actualizacion_iso
+                "updated_at": fecha_actualizacion_iso,
+                "ai_title": ai_title
             }
             lote_registros.append(registro)
 
