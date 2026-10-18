@@ -1875,11 +1875,22 @@ with tab_operativo:
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
 
-        # Re-sincronizamos el agente asignado con df_all para asegurar el valor más reciente de la BD
-        if "id" in df_rank.columns and "agente_asignado" in df_all.columns:
-            df_rank = df_rank.drop(columns=["agente_asignado"], errors="ignore").merge(
-                df_all[["id", "agente_asignado"]], on="id", how="left"
-            )
+        # RECONSULTA EN VIVO A SUPABASE:
+        # Obtenemos los agentes asignados actualizados de los chats abiertos desde la BD
+        ids_abiertos = df_rank["id"].tolist()
+        if ids_abiertos:
+            try:
+                res_agentes_frescos = supabase.table("conversaciones")\
+                    .select("id, agente_asignado")\
+                    .in_("id", ids_abiertos)\
+                    .execute()
+                
+                datos_frescos = res_agentes_frescos.data or []
+                if datos_frescos:
+                    mapa_agentes_frescos = {str(r["id"]).strip(): r["agente_asignado"] for r in datos_frescos}
+                    df_rank["agente_asignado"] = df_rank["id_str"].map(mapa_agentes_frescos).fillna(df_rank["agente_asignado"])
+            except Exception as ex_m:
+                st.caption(f"No se pudo refrescar agentes en vivo: {ex_m}")
 
         # Filtro múltiple por Agente Asignado en la parte superior del ranking
         agentes_abiertos_unicos = sorted([
@@ -1908,13 +1919,14 @@ with tab_operativo:
         if "created_at_dt" in df_rank.columns:
             df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
 
-        cols_deseadas = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+        cols_deseadas = ["intercom_url", "ai_title", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
                          "nombre_contacto", "tenant", "company"]
 
         st.dataframe(
             df_rank.reindex(columns=cols_deseadas).dropna(how="all", axis=1),
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                "ai_title": "AI Title",
                 "created_at_fmt": "Fecha Creación", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
