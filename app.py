@@ -557,33 +557,34 @@ def obtener_timestamp_sync():
 
 @st.cache_data(ttl=900, show_spinner=False)
 def obtener_datos_hoy():
-    """Descarga conversaciones recientes (últimas 36 horas) evitando desfases de zona horaria UTC vs PY."""
+    """Descarga conversaciones recientes (últimas 36h) Y todos los chats actualmente abiertos."""
     tz_py = timezone(timedelta(hours=-3))
     ahora_py = datetime.now(tz_py)
-    
-    # Consultamos 36 horas hacia atrás en ISO UTC limpia para no perder ningún chat de la madrugada
     hace_36h_utc = (ahora_py - timedelta(hours=36)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
+    estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+
     try:
-        # 1. Intentamos por updated_at (actividad reciente)
-        response = supabase.table("conversaciones")\
+        # 1. Traer chats con actividad en las últimas 36 horas
+        res_36h = supabase.table("conversaciones")\
             .select(COLUMNAS_DASHBOARD)\
             .gte("updated_at", hace_36h_utc)\
             .execute()
-            
-        datos = response.data or []
+        datos = res_36h.data or []
         
-        # 2. Fallback por created_at si no devolvió por updated_at
-        if not datos:
-            response_created = supabase.table("conversaciones")\
-                .select(COLUMNAS_DASHBOARD)\
-                .gte("created_at", hace_36h_utc)\
-                .execute()
-            datos = response_created.data or []
-            
-        return datos
+        # 2. Traer TODOS los chats que sigan abiertos en Supabase (para asegurar agentes reasignados)
+        res_abiertos = supabase.table("conversaciones")\
+            .select(COLUMNAS_DASHBOARD)\
+            .not_.in_("estado", estados_cerrados)\
+            .execute()
+        datos_abiertos = res_abiertos.data or []
+
+        # Combinar ambos conjuntos sin duplicados
+        todos_recientes = {r["id"]: r for r in (datos + datos_abiertos)}
+        return list(todos_recientes.values())
+
     except Exception as e:
-        st.error(f"Error consultando datos de Hoy en Supabase: {e}")
+        st.error(f"Error consultando datos frescos en Supabase: {e}")
         return []
 
 def obtener_datos():
@@ -1875,24 +1876,6 @@ with tab_operativo:
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
 
-        # RECONSULTA EN VIVO A SUPABASE:
-        # Obtenemos los agentes asignados actualizados de los chats abiertos desde la BD
-        ids_abiertos = df_rank["id"].tolist()
-        if ids_abiertos:
-            try:
-                res_agentes_frescos = supabase.table("conversaciones")\
-                    .select("id, agente_asignado")\
-                    .in_("id", ids_abiertos)\
-                    .execute()
-                
-                datos_frescos = res_agentes_frescos.data or []
-                if datos_frescos:
-                    mapa_agentes_frescos = {str(r["id"]).strip(): r["agente_asignado"] for r in datos_frescos}
-                    df_rank["agente_asignado"] = df_rank["id_str"].map(mapa_agentes_frescos).fillna(df_rank["agente_asignado"])
-            except Exception as ex_m:
-                st.caption(f"No se pudo refrescar agentes en vivo: {ex_m}")
-
-        # Filtro múltiple por Agente Asignado en la parte superior del ranking
         agentes_abiertos_unicos = sorted([
             str(a).strip() for a in df_rank["agente_asignado"].dropna().unique() if str(a).strip() != ""
         ])
