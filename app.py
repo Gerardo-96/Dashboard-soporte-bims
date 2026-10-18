@@ -2042,7 +2042,7 @@ with tab_resumen:
         # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES HISTÓRICOS POR AGENTE
         # ==========================================
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### Antigüedad de Chats Pendientes por Agente")
+        st.markdown("#### Antigüedad de Chats Pendientes por Día")
 
         # Evaluamos sobre df_all (todos los registros) filtrando únicamente los chats abiertos
         df_abiertos_historicos = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
@@ -2111,7 +2111,7 @@ with tab_resumen:
         # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES POR FRANJA HORARIA (4 COLORES)
         # ==========================================
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### Antigüedad de Chats Pendientes por Franja Horaria (Horas)")
+        st.markdown("#### Antigüedad de Chats Pendientes por Hora")
 
         # Evaluamos sobre todos los chats abiertos históricos
         df_abiertos_horas = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
