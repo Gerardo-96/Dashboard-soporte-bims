@@ -2108,6 +2108,80 @@ with tab_resumen:
         st.markdown("---")
 
         # ==========================================
+        # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES POR FRANJA HORARIA (0-6+ Horas)
+        # ==========================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### Antigüedad de Chats Pendientes por Franja Horaria (Horas)")
+
+        # Evaluamos sobre todos los chats abiertos históricos
+        df_abiertos_horas = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
+
+        if not df_abiertos_horas.empty:
+            # Exclusión explícita de Mónica, Soporte y Sin Asignar
+            agentes_excluidos_hs = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
+            df_abiertos_hs_filtro = df_abiertos_horas[
+                ~df_abiertos_horas["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_excluidos_hs)
+            ].copy()
+
+            if not df_abiertos_hs_filtro.empty:
+                now_py_horas = pd.Timestamp.now(tz="America/Asuncion")
+                
+                # Cálculo exacto del tiempo abierto en horas
+                df_abiertos_hs_filtro["horas_abierto_num"] = (
+                    (now_py_horas - df_abiertos_hs_filtro["created_at_dt"]).dt.total_seconds() / 3600.0
+                ).apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
+
+                # Clasificación en 3 franjas horarias estrictas
+                def clasificar_franja_horas(horas):
+                    if horas <= 2.0:
+                        return "0 a 2 horas (Óptimo)"
+                    elif horas <= 6.0:
+                        return ">2 a 6 horas (Atención)"
+                    else:
+                        return ">6 horas (Crítico)"
+
+                df_abiertos_hs_filtro["Franja_Horaria"] = df_abiertos_hs_filtro["horas_abierto_num"].apply(clasificar_franja_horas)
+
+                # Agrupación por Agente Asignado y Franja Horaria
+                df_horas_grp = df_abiertos_hs_filtro.groupby(["agente_asignado", "Franja_Horaria"]).size().reset_index(name="Cantidad")
+
+                # Ordenamiento de las franjas y asignación del esquema semáforo
+                orden_franjas = ["0 a 2 horas (Óptimo)", ">2 a 6 horas (Atención)", ">6 horas (Crítico)"]
+                color_map_horas = {
+                    "0 a 2 horas (Óptimo)": "#34d399",     # Verde
+                    ">2 a 6 horas (Atención)": "#fbbf24",   # Amarillo
+                    ">6 horas (Crítico)": "#f43f5e"         # Rojo
+                }
+
+                fig_horas = px.bar(
+                    df_horas_grp,
+                    x="agente_asignado",
+                    y="Cantidad",
+                    color="Franja_Horaria",
+                    category_orders={"Franja_Horaria": orden_franjas},
+                    color_discrete_map=color_map_horas,
+                    barmode="stack",
+                    text="Cantidad"
+                )
+
+                fig_horas.update_traces(textposition="inside")
+                fig_horas.update_layout(
+                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1", size=12),
+                    xaxis_title="Agente Asignado", yaxis_title="Cantidad de Chats Abiertos",
+                    legend_title_text="Franja Horaria", height=400,
+                    margin=dict(t=20, b=20, l=20, r=20)
+                )
+
+                st.plotly_chart(fig_horas, use_container_width=True)
+            else:
+                st.info("🟢 No existen chats abiertos asignados a agentes humanos actualmente.")
+        else:
+            st.info("🟢 No existen chats abiertos pendientes en el sistema.")
+
+        st.markdown("---")
+
+        # ==========================================
         # 2. BLOQUE DE ANÁLISIS DE CSAT NEGATIVO (<=3 ★)
         # ==========================================
         st.markdown("### 📊 Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
