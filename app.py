@@ -2042,7 +2042,7 @@ with tab_resumen:
         # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES HISTÓRICOS POR AGENTE
         # ==========================================
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### Antigüedad de Todos los Chats Pendientes por Agente (Histórico)")
+        st.markdown("#### Antigüedad de Chats Pendientes por Agente")
 
         # Evaluamos sobre df_all (todos los registros) filtrando únicamente los chats abiertos
         df_abiertos_historicos = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
