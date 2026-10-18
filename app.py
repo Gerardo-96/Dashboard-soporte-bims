@@ -1866,12 +1866,37 @@ with tab_operativo:
 
     st.markdown("---")
 
-    # RANKING DE CHATS ABIERTOS GENERAL HISTÓRICO
+    # ==========================================
+    # RANKING DE CHATS ABIERTOS GENERAL HISTÓRICO CON FILTRO MULTI-AGENTE
+    # ==========================================
     cant_abiertos_gen = len(df_abiertos_all) if not df_abiertos_all.empty else 0
-    st.markdown(f"### Ranking General de Chats Abiertos (Historico Pendiente) — {cant_abiertos_gen} chats")
+    st.markdown(f"### Ranking General de Chats Abiertos (Histórico Pendiente) — {cant_abiertos_gen} chats")
     
     if not df_abiertos_all.empty:
         df_rank = df_abiertos_all.copy()
+
+        # Re-sincronizamos el agente asignado con df_all para asegurar el valor más reciente de la BD
+        if "id" in df_rank.columns and "agente_asignado" in df_all.columns:
+            df_rank = df_rank.drop(columns=["agente_asignado"], errors="ignore").merge(
+                df_all[["id", "agente_asignado"]], on="id", how="left"
+            )
+
+        # Filtro múltiple por Agente Asignado en la parte superior del ranking
+        agentes_abiertos_unicos = sorted([
+            str(a).strip() for a in df_rank["agente_asignado"].dropna().unique() if str(a).strip() != ""
+        ])
+        
+        agentes_rank_sel = st.multiselect(
+            "Filtrar Ranking por Agente(s) Asignado(s):",
+            options=agentes_abiertos_unicos,
+            default=[],
+            placeholder="Todos los agentes (Por defecto)",
+            key="multiselect_agentes_ranking_gen"
+        )
+
+        if agentes_rank_sel:
+            df_rank = df_rank[df_rank["agente_asignado"].isin(agentes_rank_sel)]
+
         if "min_transcurridos" not in df_rank.columns and "created_at_dt" in df_rank.columns:
             df_rank["min_transcurridos"] = ((now_dt - df_rank["created_at_dt"]).dt.total_seconds() / 60).round(1)
             
@@ -1889,8 +1914,8 @@ with tab_operativo:
         st.dataframe(
             df_rank.reindex(columns=cols_deseadas).dropna(how="all", axis=1),
             column_config={
-                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
-                "created_at_fmt": "Fecha Creacion", 
+                "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                "created_at_fmt": "Fecha Creación", 
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
                 "nombre_contacto": "Contacto",
@@ -1901,6 +1926,79 @@ with tab_operativo:
         )
     else:
         st.info("No hay chats abiertos pendientes en este momento.")
+
+    # ==========================================
+        # NUEVO: GRÁFICO DE ANTIGÜEDAD DE CHATS POR AGENTE (DÍAS)
+        # ==========================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### Antigüedad de Chats Pendientes por Agente (Días)")
+
+        df_abiertos_resumen = df_filtered_r[~df_filtered_r["es_cerrado"]].copy() if "es_cerrado" in df_filtered_r.columns else pd.DataFrame()
+
+        if not df_abiertos_resumen.empty:
+            now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
+            
+            # Cálculo de la antigüedad exacta en días calendarios/horas
+            df_abiertos_resumen["dias_antiguedad_num"] = (
+                (now_py_resumen - df_abiertos_resumen["created_at_dt"]).dt.total_seconds() / 86400.0
+            ).apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
+
+            # Clasificación en rangos de días (0, 1, 2, 3 y >3)
+            def clasificar_antiguedad(dias):
+                if dias < 1.0:
+                    return "0 días (Hoy)"
+                elif dias < 2.0:
+                    return "1 día"
+                elif dias < 3.0:
+                    return "2 días"
+                elif dias <= 4.0:
+                    return "3 días"
+                else:
+                    return ">3 días"
+
+            df_abiertos_resumen["Rango_Antiguedad"] = df_abiertos_resumen["dias_antiguedad_num"].apply(clasificar_antiguedad)
+
+            # Agrupación por Agente y Rango
+            df_antiguedad_grp = df_abiertos_resumen.groupby(
+                ["agente_asignado", "Rango_Antiguedad"]
+            ).size().reset_index(name="Cantidad")
+
+            # Definición del orden de los rangos para la leyenda/barras
+            orden_rangos = ["0 días (Hoy)", "1 día", "2 días", "3 días", ">3 días"]
+            color_map_antiguedad = {
+                "0 días (Hoy)": "#34d399",  # Verde
+                "1 día": "#38bdf8",         # Azul
+                "2 días": "#fbbf24",        # Amarillo
+                "3 días": "#f97316",        # Naranja
+                ">3 días": "#f43f5e"        # Rojo Crítico
+            }
+
+            fig_antiguedad = px.bar(
+                df_antiguedad_grp,
+                x="agente_asignado",
+                y="Cantidad",
+                color="Rango_Antiguedad",
+                category_orders={"Rango_Antiguedad": orden_rangos},
+                color_discrete_map=color_map_antiguedad,
+                barmode="stack",
+                text="Cantidad"
+            )
+
+            fig_antiguedad.update_traces(textposition="inside")
+            fig_antiguedad.update_layout(
+                paper_bgcolor="#1e293b",
+                plot_bgcolor="#1e293b",
+                font=dict(color="#cbd5e1", size=12),
+                xaxis_title="Agente Asignado",
+                yaxis_title="Cantidad de Chats Abiertos",
+                legend_title_text="Antigüedad",
+                height=400,
+                margin=dict(t=20, b=20, l=20, r=20)
+            )
+
+            st.plotly_chart(fig_antiguedad, use_container_width=True)
+        else:
+            st.info("🟢 No existen chats abiertos pendientes en el período seleccionado para calcular antigüedad.")
 
     st.markdown("---")
 
