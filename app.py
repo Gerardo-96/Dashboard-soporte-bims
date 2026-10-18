@@ -2039,77 +2039,71 @@ with tab_resumen:
         st.markdown("---")
 
         # ==========================================
-        # NUEVO: GRÁFICO DE ANTIGÜEDAD DE CHATS POR AGENTE (DÍAS)
+        # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES HISTÓRICOS POR AGENTE
         # ==========================================
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### Antigüedad de Chats Pendientes por Agente (Días)")
+        st.markdown("#### Antigüedad de Todos los Chats Pendientes por Agente (Histórico)")
 
-        df_abiertos_resumen = df_filtered_r[~df_filtered_r["es_cerrado"]].copy() if "es_cerrado" in df_filtered_r.columns else pd.DataFrame()
+        # Evaluamos sobre df_all (todos los registros) filtrando únicamente los chats abiertos
+        df_abiertos_historicos = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
-        if not df_abiertos_resumen.empty:
-            now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
-            
-            # Cálculo de la antigüedad exacta en días calendarios/horas
-            df_abiertos_resumen["dias_antiguedad_num"] = (
-                (now_py_resumen - df_abiertos_resumen["created_at_dt"]).dt.total_seconds() / 86400.0
-            ).apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
+        if not df_abiertos_historicos.empty:
+            # Excluimos explícitamente a Mónica, Soporte y sin asignar
+            agentes_excluidos = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
+            df_abiertos_filtro = df_abiertos_historicos[
+                ~df_abiertos_historicos["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_excluidos)
+            ].copy()
 
-            # Clasificación en rangos de días (0, 1, 2, 3 y >3)
-            def clasificar_antiguedad(dias):
-                if dias < 1.0:
-                    return "0 días (Hoy)"
-                elif dias < 2.0:
-                    return "1 día"
-                elif dias < 3.0:
-                    return "2 días"
-                elif dias <= 4.0:
-                    return "3 días"
-                else:
-                    return ">3 días"
+            if not df_abiertos_filtro.empty:
+                now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
+                df_abiertos_filtro["dias_antiguedad_num"] = (
+                    (now_py_resumen - df_abiertos_filtro["created_at_dt"]).dt.total_seconds() / 86400.0
+                ).apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
 
-            df_abiertos_resumen["Rango_Antiguedad"] = df_abiertos_resumen["dias_antiguedad_num"].apply(clasificar_antiguedad)
+                def clasificar_antiguedad(dias):
+                    if dias < 1.0: return "0 días (Hoy)"
+                    elif dias < 2.0: return "1 día"
+                    elif dias < 3.0: return "2 días"
+                    elif dias <= 4.0: return "3 días"
+                    else: return ">3 días"
 
-            # Agrupación por Agente y Rango
-            df_antiguedad_grp = df_abiertos_resumen.groupby(
-                ["agente_asignado", "Rango_Antiguedad"]
-            ).size().reset_index(name="Cantidad")
+                df_abiertos_filtro["Rango_Antiguedad"] = df_abiertos_filtro["dias_antiguedad_num"].apply(clasificar_antiguedad)
+                df_antiguedad_grp = df_abiertos_filtro.groupby(["agente_asignado", "Rango_Antiguedad"]).size().reset_index(name="Cantidad")
 
-            # Definición del orden de los rangos para la leyenda/barras
-            orden_rangos = ["0 días (Hoy)", "1 día", "2 días", "3 días", ">3 días"]
-            color_map_antiguedad = {
-                "0 días (Hoy)": "#34d399",  # Verde
-                "1 día": "#38bdf8",         # Azul
-                "2 días": "#fbbf24",        # Amarillo
-                "3 días": "#f97316",        # Naranja
-                ">3 días": "#f43f5e"        # Rojo Crítico
-            }
+                orden_rangos = ["0 días (Hoy)", "1 día", "2 días", "3 días", ">3 días"]
+                color_map_antiguedad = {
+                    "0 días (Hoy)": "#34d399",
+                    "1 día": "#38bdf8",
+                    "2 días": "#fbbf24",
+                    "3 días": "#f97316",
+                    ">3 días": "#f43f5e"
+                }
 
-            fig_antiguedad = px.bar(
-                df_antiguedad_grp,
-                x="agente_asignado",
-                y="Cantidad",
-                color="Rango_Antiguedad",
-                category_orders={"Rango_Antiguedad": orden_rangos},
-                color_discrete_map=color_map_antiguedad,
-                barmode="stack",
-                text="Cantidad"
-            )
+                fig_antiguedad = px.bar(
+                    df_antiguedad_grp,
+                    x="agente_asignado",
+                    y="Cantidad",
+                    color="Rango_Antiguedad",
+                    category_orders={"Rango_Antiguedad": orden_rangos},
+                    color_discrete_map=color_map_antiguedad,
+                    barmode="stack",
+                    text="Cantidad"
+                )
 
-            fig_antiguedad.update_traces(textposition="inside")
-            fig_antiguedad.update_layout(
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#1e293b",
-                font=dict(color="#cbd5e1", size=12),
-                xaxis_title="Agente Asignado",
-                yaxis_title="Cantidad de Chats Abiertos",
-                legend_title_text="Antigüedad",
-                height=400,
-                margin=dict(t=20, b=20, l=20, r=20)
-            )
+                fig_antiguedad.update_traces(textposition="inside")
+                fig_antiguedad.update_layout(
+                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1", size=12),
+                    xaxis_title="Agente Asignado", yaxis_title="Cantidad de Chats Abiertos",
+                    legend_title_text="Antigüedad", height=400,
+                    margin=dict(t=20, b=20, l=20, r=20)
+                )
 
-            st.plotly_chart(fig_antiguedad, use_container_width=True)
+                st.plotly_chart(fig_antiguedad, use_container_width=True)
+            else:
+                st.info("🟢 No existen chats abiertos asignados a agentes humanos actualmente.")
         else:
-            st.info("🟢 No existen chats abiertos pendientes en el período seleccionado para calcular antigüedad.")
+            st.info("🟢 No existen chats abiertos pendientes en el sistema.")
 
         st.markdown("---")
 
