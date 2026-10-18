@@ -246,55 +246,55 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             """
 
             # =========================================================================
-# 4. AGENTE Y CSAT (DETECCIÓN DE ASIGNACIÓN EN TIEMPO REAL / TRANSFERENCIAS)
-# =========================================================================
-agente = "Sin asignar"
+            # 4. AGENTE Y CSAT (DETECCIÓN DE ASIGNACIÓN EN TIEMPO REAL / TRANSFERENCIAS)
+            # =========================================================================
+            agente = "Sin asignar"
 
-# 1. Prioridad Principal: Revisa el admin_assignee_id directo del objeto principal (siempre actualizado en reasignaciones)
-admin_id_directo = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
-if admin_id_directo and str(admin_id_directo).strip() not in ["", "None", "0", "null"]:
-    agente = agentes_dict.get(str(admin_id_directo).strip(), f"Agente ({admin_id_directo})")
+            # 1. Prioridad Principal: Revisa el admin_assignee_id directo del objeto principal (siempre actualizado en reasignaciones)
+            admin_id_directo = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
+            if admin_id_directo and str(admin_id_directo).strip() not in ["", "None", "0", "null"]:
+                agente = agentes_dict.get(str(admin_id_directo).strip(), f"Agente ({admin_id_directo})")
 
-# 2. Segunda opción: Objeto assigned_to si es un admin explícito
-if agente == "Sin asignar":
-    assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
-    if isinstance(assigned_to, dict) and assigned_to.get("type") == "admin":
-        admin_id = str(assigned_to.get("id", "")).strip()
-        agente = assigned_to.get("name") or agentes_dict.get(admin_id, f"Agente ({admin_id})")
+            # 2. Segunda opción: Objeto assigned_to si es un admin explícito
+            if agente == "Sin asignar":
+                assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
+                if isinstance(assigned_to, dict) and assigned_to.get("type") == "admin":
+                    admin_id = str(assigned_to.get("id", "")).strip()
+                    agente = assigned_to.get("name") or agentes_dict.get(admin_id, f"Agente ({admin_id})")
 
-# 3. Tercera opción: Inspeccionar el historial (conversation_parts) buscando la ÚLTIMA asignación (assignment)
-parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
-if agente == "Sin asignar" and parts:
-    # Buscar partes de tipo 'assignment' asignadas a un admin
-    assignments_admin = [
-        p.get("assigned_to") for p in parts 
-        if p.get("part_type") == "assignment" and isinstance(p.get("assigned_to"), dict) and p.get("assigned_to", {}).get("type") == "admin"
-    ]
-    if assignments_admin:
-        last_assign = assignments_admin[-1]
-        a_id = str(last_assign.get("id", "")).strip()
-        agente = last_assign.get("name") or agentes_dict.get(a_id, f"Agente ({a_id})")
+            # 3. Tercera opción: Inspeccionar el historial (conversation_parts) buscando la ÚLTIMA asignación (assignment)
+            parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
+            if agente == "Sin asignar" and parts:
+                # Buscar partes de tipo 'assignment' asignadas a un admin
+                assignments_admin = [
+                p.get("assigned_to") for p in parts 
+                    if p.get("part_type") == "assignment" and isinstance(p.get("assigned_to"), dict) and p.get("assigned_to", {}).get("type") == "admin"
+                ]
+                if assignments_admin:
+                    last_assign = assignments_admin[-1]
+                    a_id = str(last_assign.get("id", "")).strip()
+                    agente = last_assign.get("name") or agentes_dict.get(a_id, f"Agente ({a_id})")
 
-# 4. Cuarta opción: Si sigue sin asignar pero hay respuestas de agentes humanos
-if agente == "Sin asignar" and parts:
-    admin_parts = [
-        p.get("author") for p in parts 
-        if p.get("author", {}).get("type") in ["admin", "user_admin"] and 
-           p.get("author", {}).get("name") and 
-           p.get("author", {}).get("name", "").strip().lower() not in ["fin", "monica (bot)", "mónica (bot)"] and
-           not p.get("author", {}).get("from_ai_agent", False)
-    ]
-    if admin_parts:
-        agente = admin_parts[-1].get("name")
+            # 4. Cuarta opción: Si sigue sin asignar pero hay respuestas de agentes humanos
+            if agente == "Sin asignar" and parts:
+                admin_parts = [
+                    p.get("author") for p in parts 
+                    if p.get("author", {}).get("type") in ["admin", "user_admin"] and 
+                       p.get("author", {}).get("name") and 
+                       p.get("author", {}).get("name", "").strip().lower() not in ["fin", "monica (bot)", "mónica (bot)"] and
+                       not p.get("author", {}).get("from_ai_agent", False)
+                ]
+                if admin_parts:
+                    agente = admin_parts[-1].get("name")
 
-# 5. Quinta opción: Asignado a un Equipo
-if agente == "Sin asignar":
-    assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
-    if isinstance(assigned_to, dict) and assigned_to.get("type") == "team":
-        agente = assigned_to.get("name", "Sin asignar")
+            # 5. Quinta opción: Asignado a un Equipo
+            if agente == "Sin asignar":
+                assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
+                if isinstance(assigned_to, dict) and assigned_to.get("type") == "team":
+                    agente = assigned_to.get("name", "Sin asignar")
 
-# Regla de exclusión
-por_agente = "excluido" if agente in ["Sin asignar", "", "Monica", "Mónica"] or "Bot" in agente else "no excluido"
+            # Regla de exclusión
+            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica", "Mónica"] or "Bot" in agente else "no excluido"
 
             # Extracción de CSAT / Rating (Filtrado estricto: Solo evaluaciones a Agentes Humanos)
             rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
