@@ -2108,7 +2108,7 @@ with tab_resumen:
         st.markdown("---")
 
         # ==========================================
-        # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES POR FRANJA HORARIA (0-6+ Horas)
+        # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES POR FRANJA HORARIA (4 COLORES)
         # ==========================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("#### Antigüedad de Chats Pendientes por Franja Horaria (Horas)")
@@ -2131,26 +2131,29 @@ with tab_resumen:
                     (now_py_horas - df_abiertos_hs_filtro["created_at_dt"]).dt.total_seconds() / 3600.0
                 ).apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
 
-                # Clasificación en 3 franjas horarias estrictas
+                # Clasificación en 4 franjas horarias
                 def clasificar_franja_horas(horas):
-                    if horas <= 2.0:
-                        return "0 a 2 horas (Óptimo)"
-                    elif horas <= 6.0:
-                        return ">2 a 6 horas (Atención)"
+                    if horas <= 1.0:
+                        return "0 a 1 hora"
+                    elif horas <= 3.0:
+                        return ">1 a 3 horas"
+                    elif horas <= 5.0:
+                        return ">3 a 5 horas"
                     else:
-                        return ">6 horas (Crítico)"
+                        return ">5 horas"
 
                 df_abiertos_hs_filtro["Franja_Horaria"] = df_abiertos_hs_filtro["horas_abierto_num"].apply(clasificar_franja_horas)
 
                 # Agrupación por Agente Asignado y Franja Horaria
                 df_horas_grp = df_abiertos_hs_filtro.groupby(["agente_asignado", "Franja_Horaria"]).size().reset_index(name="Cantidad")
 
-                # Ordenamiento de las franjas y asignación del esquema semáforo
-                orden_franjas = ["0 a 2 horas (Óptimo)", ">2 a 6 horas (Atención)", ">6 horas (Crítico)"]
+                # Ordenamiento de las 4 franjas y paleta de colores
+                orden_franjas = ["0 a 1 hora", ">1 a 3 horas", ">3 a 5 horas", ">5 horas"]
                 color_map_horas = {
-                    "0 a 2 horas (Óptimo)": "#34d399",     # Verde
-                    ">2 a 6 horas (Atención)": "#fbbf24",   # Amarillo
-                    ">6 horas (Crítico)": "#f43f5e"         # Rojo
+                    "0 a 1 hora": "#34d399",     # Verde
+                    ">1 a 3 horas": "#fbbf24",   # Amarillo
+                    ">3 a 5 horas": "#f97316",   # Naranja
+                    ">5 horas": "#f43f5e"        # Rojo
                 }
 
                 fig_horas = px.bar(
