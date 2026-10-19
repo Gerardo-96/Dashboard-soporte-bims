@@ -96,19 +96,32 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
     return round(total_minutos_habiles, 1)
 
 def enviar_whatsapp(numero_destino, texto, menciones=[]):
-    url = f"{EVOLUTION_API_URL}/message/sendText/{INSTANCE_NAME}"
+    """Envía un mensaje de WhatsApp asegurando formato correcto y URL limpia."""
+    base_url = EVOLUTION_API_URL.rstrip('/')
+    url = f"{base_url}/message/sendText/{INSTANCE_NAME}"
+    
     headers = {
         "apikey": EVOLUTION_API_KEY, 
         "Content-Type": "application/json"
     }
+    
+    # Formato seguro compatible con Evolution API v2
     payload = {
-        "number": numero_destino,
-        "text": texto
+        "number": str(numero_destino),
+        "text": str(texto),
+        "textMessage": {
+            "text": str(texto)
+        }
     }
     
     if menciones:
-        payload["mentionsEveryOne"] = False
-        payload["mentioned"] = menciones
+        payload["options"] = {
+            "presence": "composing",
+            "mentions": {
+                "everyone": False,
+                "mentioned": menciones
+            }
+        }
 
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=10)
@@ -138,7 +151,9 @@ def procesar_alertas_y_reportes():
         for u in (usrs_res.data or []) if u.get("telefono_whatsapp")
     }
 
-    # A. ALERTA INDIVIDUAL
+    # -------------------------------------------------------------
+    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min)
+    # -------------------------------------------------------------
     min_indiv_th = float(cfg.get("minutos_alerta_individual", 5.0))
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
@@ -168,18 +183,22 @@ def procesar_alertas_y_reportes():
                 )
                 enviar_whatsapp(tel_destino_indiv, msg)
 
-    # B. ALERTA GRUPAL
+    # -------------------------------------------------------------
+    # B. ALERTA GRUPAL (Chats pendientes >= X hs HÁBILES - 1 SOLA VEZ)
+    # -------------------------------------------------------------
     hs_grupo_th = float(cfg.get("horas_alerta_grupo", 5.0))
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
     if jid_grupo:
+        # Filtra únicamente chats que NO hayan sido notificados anteriormente al grupo
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto")\
+            .select("id, created_at, tenant, agente_asignado, nombre_contacto, notificado_grupo")\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+            .or_("notificado_grupo.is.null,notificado_grupo.eq.false")\
             .execute()
 
-        mensajes_criticos, menciones_list = [], []
+        mensajes_criticos, menciones_list, ids_notificados = [], [], []
 
         for c in (res_abiertos.data or []):
             agente = str(c.get("agente_asignado", "")).strip()
@@ -202,12 +221,22 @@ def procesar_alertas_y_reportes():
                 mensajes_criticos.append(
                     f"• Chat [{c['id']}]({url_chat}) | {tag_agente} | Tenant: {c.get('tenant', 'Sin datos')} | ⏳ {round(minutos_habiles / 60.0, 1)} hs hábiles"
                 )
+                ids_notificados.append(c['id'])
 
         if mensajes_criticos:
             texto_grupo = f"🚨 *ALERTA DE SLA: Chats Pendientes (> {hs_grupo_th} hs hábiles)*\n\n" + "\n".join(mensajes_criticos)
             enviar_whatsapp(jid_grupo, texto_grupo, menciones=menciones_list)
 
+            # Marcar los chats en Supabase para no volver a notificarlos
+            for chat_id in ids_notificados:
+                supabase.table("conversaciones")\
+                    .update({"notificado_grupo": True})\
+                    .eq("id", chat_id)\
+                    .execute()
+
+    # -------------------------------------------------------------
     # C. RESUMEN DIARIO EMAIL
+    # -------------------------------------------------------------
     hora_cfg_str = cfg.get("hora_reporte_diario", "18:00:00")
     try:
         hora_objetivo = datetime.strptime(hora_cfg_str, "%H:%M:%S").time()
@@ -272,12 +301,10 @@ def procesar_alertas_y_reportes():
 
 @app.get("/")
 def home():
-    """Ruta raíz para verificar que el servidor de notificaciones está vivo."""
     return {"status": "ok", "service": "Notificador BIMS activo."}
 
 @app.get("/ejecutar-notificaciones")
 def trigger_notificaciones(authorization: str = Header(None)):
-    """Endpoint principal llamado por cron-job.org."""
     if authorization != f"Bearer {CRON_SECRET_TOKEN}":
         raise HTTPException(status_code=401, detail="No autorizado")
     
@@ -287,5 +314,4 @@ def trigger_notificaciones(authorization: str = Header(None)):
     except Exception as e:
         print(f"Error procesando notificaciones: {e}")
 
-    # Retorno ultra liviano obligatorio para evitar errores de buffer en cron-job.org
     return {"status": "ok"}
