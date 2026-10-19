@@ -157,10 +157,18 @@ def procesar_alertas_y_reportes():
     return {"status": "success", "processed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S")}
 
 # Endpoint HTTP que responderá a cron-job.org
+# Endpoint HTTP que responderá a cron-job.org
 @app.get("/ejecutar-notificaciones")
 def trigger_notificaciones(authorization: str = Header(None)):
     if authorization != f"Bearer {CRON_SECRET_TOKEN}":
         raise HTTPException(status_code=401, detail="No autorizado")
     
-    resultado = procesar_alertas_y_reportes()
-    return resultado
+    try:
+        # Ejecutamos la lógica en segundo plano
+        resultado = procesar_alertas_y_reportes()
+        print(f"Resultado ejecución: {resultado}")
+    except Exception as e:
+        print(f"Error procesando notificaciones: {e}")
+
+    # Retornamos una respuesta ultra pequeña para cron-job.org (< 50 bytes)
+    return {"status": "ok"}
