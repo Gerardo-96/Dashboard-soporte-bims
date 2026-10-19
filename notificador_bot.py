@@ -156,7 +156,11 @@ def procesar_alertas_y_reportes():
 
     return {"status": "success", "processed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S")}
 
-# Endpoint HTTP que responderá a cron-job.org
+# Ruta de prueba de estado en la raíz del servidor
+@app.get("/")
+def home():
+    return {"message": "Notificador BIMS activo y escuchando."}
+
 # Endpoint HTTP que responderá a cron-job.org
 @app.get("/ejecutar-notificaciones")
 def trigger_notificaciones(authorization: str = Header(None)):
