@@ -182,28 +182,22 @@ def procesar_alertas_y_reportes():
                 enviar_whatsapp(tel_destino_indiv, msg)
 
     # -------------------------------------------------------------
-    # B. ALERTA GRUPAL (Chats pendientes >= X hs HÁBILES - 1 MENSAJE POR CHAT)
+    # B. ALERTA GRUPAL (1 Mensaje Individual por Chat Pendiente >= X hs HÁBILES)
     # -------------------------------------------------------------
     hs_grupo_th = float(cfg.get("horas_alerta_grupo", 5.0))
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
     if jid_grupo:
+        # Filtramos en Supabase solo chats ABIERTOS y NO NOTIFICADOS
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo")\
+            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo, title_ai")\
+            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"])\
+            .or_("notificado_grupo.is.null,notificado_grupo.eq.false")\
             .execute()
 
         for c in (res_abiertos.data or []):
-            # 1. Ignorar chats cerrados
-            estado_actual = str(c.get("estado", "")).strip().lower()
-            if estado_actual in ESTADOS_CERRADOS:
-                continue
-
-            # 2. Ignorar si ya fue notificado previamente al grupo
-            if c.get("notificado_grupo") is True:
-                continue
-
-            # 3. Ignorar agentes del sistema o sin asignar
+            # A. Validar agente asignado
             agente = str(c.get("agente_asignado", "")).strip()
             if agente.lower() in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]:
                 continue
@@ -213,27 +207,32 @@ def procesar_alertas_y_reportes():
                 continue
 
             minutos_habiles = calcular_minutos_habiles_rapido(created_dt, now_dt)
+            hs_habiles = round(minutos_habiles / 60.0, 1)
+
+            # Log para auditar en los registros de Render
+            print(f"🔍 [EVALUANDO] Chat: {c['id']} | Agente: '{agente}' | Hs Hábiles: {hs_habiles}")
 
             if minutos_habiles >= minutos_grupo_th:
                 tel_agente = mapa_tels.get(agente.lower())
                 tag_agente = f"@{tel_agente}" if tel_agente else f"*{agente}*"
-                
-                menciones_individual = [tel_agente] if tel_agente else []
+                menciones_list = [tel_agente] if tel_agente else []
 
-                # Estructura del mensaje individual por chat
+                title_ai = c.get("title_ai") or "Sin título"
+
+                # Mensaje limpio: Un solo emoji en el título principal
                 msg_chat = (
-                    f"🚨 *ALERTA DE SLA (> {hs_grupo_th} hs hábiles)*\n\n"
-                    f" *ID:* {c['id']}\n"
-                    f" *Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
-                    f" *Tenant:* {c.get('tenant', 'Sin datos')}\n"
-                    f" *Agente:* {tag_agente}\n"
-                    f" *Espera:* {round(minutos_habiles / 60.0, 1)} hs hábiles"
+                    f"🚨 *ALERTA DE SLA: Chat Pendiente*\n\n"
+                    f"*ID:* {c['id']}\n"
+                    f"*Título IA:* {title_ai}\n"
+                    f"*Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
+                    f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
+                    f"*Agente:* {tag_agente}\n"
+                    f"*Espera:* {hs_habiles} hs hábiles"
                 )
 
-                # Enviar un mensaje individual al grupo por este chat
-                enviar_whatsapp(jid_grupo, msg_chat, menciones=menciones_individual)
+                enviar_whatsapp(jid_grupo, msg_chat, menciones=menciones_list)
 
-                # Marcar en Supabase inmediatamente para que no se vuelva a enviar
+                # Marcar como notificado en Supabase
                 supabase.table("conversaciones")\
                     .update({"notificado_grupo": True})\
                     .eq("id", c['id'])\
