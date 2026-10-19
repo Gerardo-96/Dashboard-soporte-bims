@@ -174,11 +174,10 @@ def procesar_alertas_y_reportes():
                 url_chat = f"https://app.intercom.io/a/apps/co9kozj6/inbox/inbox/all/conversations/{c['id']}"
                 msg = (
                     f"⚠️ *ALERTA BIMS: Chat Sin Respuesta (> {int(min_indiv_th)} min)*\n\n"
-                    f"💬 *ID:* {c['id']}\n"
-                    f"👤 *Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
-                    f"🏢 *Tenant:* {c.get('tenant', 'Sin datos')}\n"
-                    f"⏳ *Espera:* {round(min_trans, 1)} min\n"
-                    f"🔗 {url_chat}"
+                    f" *ID:* {c['id']}\n"
+                    f" *Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
+                    f" *Tenant:* {c.get('tenant', 'Sin datos')}\n"
+                    f" *Espera:* {round(min_trans, 1)} min\n"
                 )
                 enviar_whatsapp(tel_destino_indiv, msg)
 
@@ -224,11 +223,11 @@ def procesar_alertas_y_reportes():
                 # Estructura del mensaje individual por chat
                 msg_chat = (
                     f"🚨 *ALERTA DE SLA (> {hs_grupo_th} hs hábiles)*\n\n"
-                    f"💬 *ID:* {c['id']}\n"
-                    f"👤 *Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
-                    f"🏢 *Tenant:* {c.get('tenant', 'Sin datos')}\n"
-                    f"👤 *Agente:* {tag_agente}\n"
-                    f"⏳ *Espera:* {round(minutos_habiles / 60.0, 1)} hs hábiles"
+                    f" *ID:* {c['id']}\n"
+                    f" *Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
+                    f" *Tenant:* {c.get('tenant', 'Sin datos')}\n"
+                    f" *Agente:* {tag_agente}\n"
+                    f" *Espera:* {round(minutos_habiles / 60.0, 1)} hs hábiles"
                 )
 
                 # Enviar un mensaje individual al grupo por este chat
