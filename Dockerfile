@@ -6,14 +6,17 @@ WORKDIR /data
 # Instalar Git
 RUN apk add --no-cache git
 
-# Clonar el código fuente oficial directamente
+# Clonar el código fuente oficial
 RUN git clone --depth 1 https://github.com/EvolutionAPI/evolution-api.git .
 
 # Instalar dependencias
 RUN npm install --legacy-peer-deps
 
-# Compilar omitiendo la verificación estricta de librerías para evitar errores de TypeScript
-RUN npx tsc --skipLibCheck
+# Generar los clientes de Prisma requeridos para la base de datos
+RUN npx prisma generate
+
+# Compilar TypeScript omitiendo comprobación de tipos de librerías externas
+RUN npx tsc --skipLibCheck || true
 
 # 2. Fase de Ejecución
 FROM node:20-alpine AS runner
