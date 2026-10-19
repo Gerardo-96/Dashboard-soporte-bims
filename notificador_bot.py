@@ -34,6 +34,8 @@ FERIADOS = [
     "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
 ]
 
+ESTADOS_CERRADOS = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+
 # ==========================================
 # FUNCIONES AUXILIARES
 # ==========================================
@@ -105,13 +107,11 @@ def enviar_whatsapp(numero_destino, texto, menciones=[]):
         "Content-Type": "application/json"
     }
     
-    # Payload limpio y estandarizado para Evolution API v2
     payload = {
         "number": str(numero_destino),
         "text": str(texto)
     }
     
-    # Menciones directas para grupos de WhatsApp
     if menciones:
         payload["mentionsEveryOne"] = False
         payload["mentioned"] = menciones
@@ -145,19 +145,24 @@ def procesar_alertas_y_reportes():
     }
 
     # -------------------------------------------------------------
-    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min)
+    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min - INSISTENTE)
     # -------------------------------------------------------------
     min_indiv_th = float(cfg.get("minutos_alerta_individual", 5.0))
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
     if tel_destino_indiv:
+        # Busca chats que NO tengan primera respuesta registrada
         res_activos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, nombre_contacto, primera_respuesta_min")\
-            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+            .select("id, created_at, tenant, nombre_contacto, primera_respuesta_min, estado")\
             .is_("primera_respuesta_min", "null")\
             .execute()
 
         for c in (res_activos.data or []):
+            # Ignorar si el chat fue cerrado o pausado en Intercom/Supabase
+            estado_actual = str(c.get("estado", "")).strip().lower()
+            if estado_actual in ESTADOS_CERRADOS:
+                continue
+
             created_dt = parsear_fecha_utc(c.get("created_at"))
             if not created_dt:
                 continue
@@ -184,16 +189,23 @@ def procesar_alertas_y_reportes():
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
     if jid_grupo:
-        # Filtra únicamente chats que NO hayan sido notificados anteriormente al grupo
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto, notificado_grupo")\
-            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-            .or_("notificado_grupo.is.null,notificado_grupo.eq.false")\
+            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo")\
             .execute()
 
-        mensajes_criticos, menciones_list, ids_notificados = [], [], []
+        mensajes_criticos, menciones_list, ids_notificados_grupo = [], [], []
 
         for c in (res_abiertos.data or []):
+            # 1. Ignorar chats cerrados
+            estado_actual = str(c.get("estado", "")).strip().lower()
+            if estado_actual in ESTADOS_CERRADOS:
+                continue
+
+            # 2. Ignorar si ya fue notificado previamente al grupo de WhatsApp
+            if c.get("notificado_grupo") is True:
+                continue
+
+            # 3. Ignorar agentes del sistema o sin asignar
             agente = str(c.get("agente_asignado", "")).strip()
             if agente.lower() in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]:
                 continue
@@ -214,14 +226,14 @@ def procesar_alertas_y_reportes():
                 mensajes_criticos.append(
                     f"• Chat [{c['id']}]({url_chat}) | {tag_agente} | Tenant: {c.get('tenant', 'Sin datos')} | ⏳ {round(minutos_habiles / 60.0, 1)} hs hábiles"
                 )
-                ids_notificados.append(c['id'])
+                ids_notificados_grupo.append(c['id'])
 
         if mensajes_criticos:
             texto_grupo = f"🚨 *ALERTA DE SLA: Chats Pendientes (> {hs_grupo_th} hs hábiles)*\n\n" + "\n".join(mensajes_criticos)
             enviar_whatsapp(jid_grupo, texto_grupo, menciones=menciones_list)
 
-            # Marcar los chats en Supabase para no volver a notificarlos
-            for chat_id in ids_notificados:
+            # Marcar en Supabase para no volver a notificarlos al grupo
+            for chat_id in ids_notificados_grupo:
                 supabase.table("conversaciones")\
                     .update({"notificado_grupo": True})\
                     .eq("id", chat_id)\
