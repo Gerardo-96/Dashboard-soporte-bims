@@ -1,5 +1,4 @@
-# Usamos la imagen oficial desde Docker Hub
-FROM evolutionapi/evolution-api:v1.8.4
+FROM evolutionapi/evolution-api:v1.8.2
 
 EXPOSE 8080
 
