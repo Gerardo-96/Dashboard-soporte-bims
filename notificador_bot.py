@@ -173,7 +173,7 @@ def procesar_alertas_y_reportes():
             if min_trans >= min_indiv_th:
                 url_chat = f"https://app.intercom.io/a/apps/co9kozj6/inbox/inbox/all/conversations/{c['id']}"
                 msg = (
-                    f"⚠️ *ALERTA BIMS: Chat Sin Respuesta (> {int(min_indiv_th)} min)*\n\n"
+                    f"⚠️ *Chat Sin Respuesta (> {int(min_indiv_th)} min)*\n\n"
                     f" *ID:* {c['id']}\n"
                     f" *Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f" *Tenant:* {c.get('tenant', 'Sin datos')}\n"
