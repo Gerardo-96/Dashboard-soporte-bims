@@ -6,8 +6,8 @@ WORKDIR /data
 # Instalar Git para clonar el proyecto oficial
 RUN apk add --no-cache git
 
-# Clonar el código fuente oficial de Evolution API (rama v1.8.2)
-RUN git clone -b v1.8.2 --single-branch https://github.com/EvolutionAPI/evolution-api.git .
+# Clonar la versión estable v1 de Evolution API
+RUN git clone -b 1.8.2 --single-branch https://github.com/EvolutionAPI/evolution-api.git .
 
 # Instalar dependencias y compilar el proyecto TypeScript
 RUN npm install --legacy-peer-deps
