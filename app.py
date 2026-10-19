@@ -2594,6 +2594,104 @@ with tab_admin:
             except Exception as e:
                 st.error(f"No se pudieron cargar los motivos: {e}")
 
+# ==========================================
+# GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES (TAB ADMIN)
+# ==========================================
+with st.container():
+    st.markdown("""
+    <div class="admin-card">
+        <h4 style="margin-top:0; color:#38bdf8;">5. Configuración de Notificaciones & Alertas (WhatsApp / Email)</h4>
+        <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+            Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Cargar configuración actual desde Supabase
+    try:
+        res_cfg = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
+        cfg_data = res_cfg.data[0] if res_cfg.data else {}
+    except Exception as ex:
+        cfg_data = {}
+
+    with st.form("form_config_notificaciones"):
+        st.markdown("##### 📧 Reporte Diario por Correo")
+        col_e1, col_e2 = st.columns(2)
+        v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=datetime.strptime(cfg_data.get("hora_reporte_diario", "18:00:00"), "%H:%M:%S").time())
+        v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
+
+        st.markdown("---")
+        st.markdown("##### 📲 Alerta Individual de Chat Sin Responder")
+        col_w1, col_w2 = st.columns(2)
+        v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
+        v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
+
+        st.markdown("---")
+        st.markdown("##### 👥 Alerta Grupal por Antigüedad de Chats")
+        col_g1, col_g2 = st.columns(2)
+        v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
+        v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
+
+        btn_guardar_notif = st.form_submit_button("Guardar Parámetros de Notificación", use_container_width=True)
+
+        if btn_guardar_notif:
+            try:
+                supabase.table("config_notificaciones").upsert({
+                    "id": 1,
+                    "hora_reporte_diario": v_hora_rep.strftime("%H:%M:%S"),
+                    "email_destino_reporte": v_email_dest.strip(),
+                    "minutos_alerta_individual": v_min_indiv,
+                    "telefono_alerta_individual": v_tel_indiv.strip(),
+                    "horas_alerta_grupo": v_hs_grupo,
+                    "jid_grupo_whatsapp": v_jid_grupo.strip(),
+                    "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
+                }).execute()
+                st.success("✅ Configuración de notificaciones guardada en Supabase.")
+                st.rerun()
+            except Exception as ex_g:
+                st.error(f"Error al guardar configuración: {ex_g}")
+
+# ==========================================
+# ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
+# ==========================================
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("##### 📱 Mapeo de Agentes y Teléfonos de WhatsApp")
+
+try:
+    res_usrs = supabase.table("usuarios_autorizados").select("id, nombre, email, telefono_whatsapp").order("nombre").execute()
+    df_usrs = pd.DataFrame(res_usrs.data or [])
+
+    if not df_usrs.empty:
+        with st.form("form_telefonos_agentes"):
+            edited_usrs = st.data_editor(
+                df_usrs,
+                column_config={
+                    "id": None,
+                    "nombre": st.column_config.TextColumn("Agente / Usuario", disabled=True),
+                    "email": st.column_config.TextColumn("Correo", disabled=True),
+                    "telefono_whatsapp": st.column_config.TextColumn("Teléfono WhatsApp (ej: 595981xxxxxx)", required=True)
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editor_telefonos_agentes"
+            )
+            btn_save_tels = st.form_submit_button("Guardar Teléfonos de Agentes", use_container_width=True)
+
+            if btn_save_tels:
+                cambios = st.session_state.get("editor_telefonos_agentes", {}).get("edited_rows", {})
+                if cambios:
+                    for fila_idx, datos_ed in cambios.items():
+                        if "telefono_whatsapp" in datos_ed:
+                            u_id = df_usrs.iloc[int(fila_idx)]["id"]
+                            supabase.table("usuarios_autorizados")\
+                                .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
+                                .eq("id", u_id)\
+                                .execute()
+                    st.success("✅ Teléfonos de agentes actualizados.")
+                    st.rerun()
+except Exception as ex_u:
+    st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
+
 with tab_faq:
     st.markdown("### Preguntas Frecuentes & Criterios Operativos")
     st.caption("Guía detallada sobre las reglas de negocio, horarios de atención, medición de SLA y evaluación del CSAT.")
