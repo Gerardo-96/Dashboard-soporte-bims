@@ -35,12 +35,12 @@ FERIADOS = [
 ]
 
 # ==========================================
-# FUNCIONES AUXILIARES Y REGLAS DE NEGOCIO
+# FUNCIONES AUXILIARES
 # ==========================================
 
 def es_horario_laboral(now_dt):
     """Verifica si es de Lunes a Viernes entre las 08:00 y las 18:00 hs (Paraguay)."""
-    dia_semana = now_dt.weekday()  # 0: Lunes, ..., 4: Viernes
+    dia_semana = now_dt.weekday()
     hora_actual = now_dt.time()
     
     es_dia_habil = dia_semana in [0, 1, 2, 3, 4]
@@ -59,7 +59,6 @@ def parsear_fecha_utc(fecha_raw):
         return None
 
 def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
-    """Calcula minutos de gestión dentro de las franjas operativas reales (L-V 08:00 a 17:30, Sáb 09:00 a 11:45)."""
     if pd.isna(dt_inicio) or pd.isna(dt_fin) or dt_fin <= dt_inicio:
         return 0.0
 
@@ -97,7 +96,6 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
     return round(total_minutos_habiles, 1)
 
 def enviar_whatsapp(numero_destino, texto, menciones=[]):
-    """Envía un mensaje de WhatsApp a un número o grupo utilizando la Evolution API v2."""
     url = f"{EVOLUTION_API_URL}/message/sendText/{INSTANCE_NAME}"
     headers = {
         "apikey": EVOLUTION_API_KEY, 
@@ -119,34 +117,28 @@ def enviar_whatsapp(numero_destino, texto, menciones=[]):
         print(f"Error enviando WhatsApp: {e}")
 
 # ==========================================
-# PROCESAMIENTO DE ALERTAS Y REPORTES
+# PROCESAMIENTO PRINCIPAL
 # ==========================================
 
 def procesar_alertas_y_reportes():
     now_dt = datetime.now(tz_py)
 
-    # 1. Validación de Horario Laboral
     if not es_horario_laboral(now_dt):
-        print(f"⏰ [{now_dt.strftime('%Y-%m-%d %H:%M:%S')}] Fuera de horario laboral (L-V 08:00 a 18:00 hs). Omitido.")
+        print(f"⏰ [{now_dt.strftime('%Y-%m-%d %H:%M:%S')}] Fuera de horario laboral. Omitido.")
         return {"status": "skipped", "reason": "Fuera de horario laboral"}
 
-    # 2. Cargar parámetros globales desde Supabase
     cfg_res = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
     if not cfg_res.data:
-        print("❌ No se encontró la fila de configuración en Supabase.")
         return {"status": "error", "reason": "Configuración no encontrada"}
     cfg = cfg_res.data[0]
 
-    # Cargar mapeo de teléfonos de agentes
     usrs_res = supabase.table("usuarios_autorizados").select("nombre, telefono_whatsapp").execute()
     mapa_tels = {
         u["nombre"].strip().lower(): u["telefono_whatsapp"].strip() 
         for u in (usrs_res.data or []) if u.get("telefono_whatsapp")
     }
 
-    # -------------------------------------------------------------
-    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min)
-    # -------------------------------------------------------------
+    # A. ALERTA INDIVIDUAL
     min_indiv_th = float(cfg.get("minutos_alerta_individual", 5.0))
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
@@ -176,9 +168,7 @@ def procesar_alertas_y_reportes():
                 )
                 enviar_whatsapp(tel_destino_indiv, msg)
 
-    # -------------------------------------------------------------
-    # B. ALERTA GRUPAL (Chats pendientes >= X horas HÁBILES)
-    # -------------------------------------------------------------
+    # B. ALERTA GRUPAL
     hs_grupo_th = float(cfg.get("horas_alerta_grupo", 5.0))
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
@@ -217,9 +207,7 @@ def procesar_alertas_y_reportes():
             texto_grupo = f"🚨 *ALERTA DE SLA: Chats Pendientes (> {hs_grupo_th} hs hábiles)*\n\n" + "\n".join(mensajes_criticos)
             enviar_whatsapp(jid_grupo, texto_grupo, menciones=menciones_list)
 
-    # -------------------------------------------------------------
     # C. RESUMEN DIARIO EMAIL
-    # -------------------------------------------------------------
     hora_cfg_str = cfg.get("hora_reporte_diario", "18:00:00")
     try:
         hora_objetivo = datetime.strptime(hora_cfg_str, "%H:%M:%S").time()
@@ -241,3 +229,63 @@ def procesar_alertas_y_reportes():
                     total=("id", "count"), 
                     prom_resp=("primera_respuesta_min", "mean")
                 ).reset_index()
+
+                filas_table = "".join([
+                    f"<tr><td style='padding:8px;border:1px solid #ddd;'>{r['agente_asignado']}</td>"
+                    f"<td style='padding:8px;border:1px solid #ddd;'>{r['total']}</td>"
+                    f"<td style='padding:8px;border:1px solid #ddd;'>{round(r['prom_resp'], 1) if pd.notna(r['prom_resp']) else 0} min</td></tr>"
+                    for _, r in grp.iterrows()
+                ])
+
+                html_body = f"""
+                <h2>📊 Resumen Diario Soporte BIMS - {hoy_str}</h2>
+                <table style='border-collapse:collapse;width:100%;'>
+                    <tr style='background:#0284c7;color:white;'>
+                        <th style='padding:8px;border:1px solid #ddd;'>Agente</th>
+                        <th style='padding:8px;border:1px solid #ddd;'>Chats Total</th>
+                        <th style='padding:8px;border:1px solid #ddd;'>Prom. Respuesta</th>
+                    </tr>
+                    {filas_table}
+                </table>
+                """
+                
+                msg_mail = MIMEMultipart()
+                msg_mail['From'] = EMAIL_EMISOR
+                msg_mail['To'] = email_dest
+                msg_mail['Subject'] = f"📈 Reporte Diario Soporte BIMS - {hoy_str}"
+                msg_mail.attach(MIMEText(html_body, 'html'))
+
+                try:
+                    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+                        server.starttls()
+                        server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
+                        server.send_message(msg_mail)
+                    print(f"✅ Reporte diario enviado a {email_dest}")
+                except Exception as ex_mail:
+                    print(f"Error enviando correo: {ex_mail}")
+
+    return {"status": "success", "processed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S")}
+
+# ==========================================
+# RUTAS DEL SERVIDOR FASTAPI
+# ==========================================
+
+@app.get("/")
+def home():
+    """Ruta raíz para verificar que el servidor de notificaciones está vivo."""
+    return {"status": "ok", "service": "Notificador BIMS activo."}
+
+@app.get("/ejecutar-notificaciones")
+def trigger_notificaciones(authorization: str = Header(None)):
+    """Endpoint principal llamado por cron-job.org."""
+    if authorization != f"Bearer {CRON_SECRET_TOKEN}":
+        raise HTTPException(status_code=401, detail="No autorizado")
+    
+    try:
+        resultado = procesar_alertas_y_reportes()
+        print(f"Resultado ejecucion: {resultado}")
+    except Exception as e:
+        print(f"Error procesando notificaciones: {e}")
+
+    # Retorno ultra liviano obligatorio para evitar errores de buffer en cron-job.org
+    return {"status": "ok"}
