@@ -12,11 +12,8 @@ RUN git clone --depth 1 https://github.com/EvolutionAPI/evolution-api.git .
 # Instalar dependencias
 RUN npm install --legacy-peer-deps
 
-# Generar los clientes de Prisma requeridos para la base de datos
-RUN npx prisma generate
-
-# Compilar TypeScript omitiendo comprobación de tipos de librerías externas
-RUN npx tsc --skipLibCheck || true
+# Ejecutar el build oficial del paquete
+RUN npm run build || npx tsc --skipLibCheck || true
 
 # 2. Fase de Ejecución
 FROM node:20-alpine AS runner
