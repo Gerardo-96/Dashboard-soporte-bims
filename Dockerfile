@@ -6,14 +6,17 @@ WORKDIR /data
 # Instalar Git
 RUN apk add --no-cache git
 
-# Clonar el código fuente oficial
-RUN git clone --depth 1 https://github.com/EvolutionAPI/evolution-api.git .
+# Clonar la versión estable v2.1.1 de Evolution API
+RUN git clone -b v2.1.1 --single-branch https://github.com/EvolutionAPI/evolution-api.git .
 
-# Instalar dependencias
-RUN npm install --legacy-peer-deps
+# Instalar dependencias exactas
+RUN npm ci
 
-# Ejecutar el build oficial del paquete
-RUN npm run build || npx tsc --skipLibCheck || true
+# Generar el cliente de Prisma desde su ubicación real en el proyecto
+RUN npx prisma generate --schema=./src/database/prisma/schema.prisma
+
+# Compilar NestJS usando su script de build oficial
+RUN npm run build
 
 # 2. Fase de Ejecución
 FROM node:20-alpine AS runner
