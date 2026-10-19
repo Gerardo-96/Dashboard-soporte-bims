@@ -96,7 +96,7 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
     return round(total_minutos_habiles, 1)
 
 def enviar_whatsapp(numero_destino, texto, menciones=[]):
-    """Envía un mensaje de WhatsApp asegurando formato correcto y URL limpia."""
+    """Envía un mensaje de WhatsApp con formato estándar para Evolution API v2."""
     base_url = EVOLUTION_API_URL.rstrip('/')
     url = f"{base_url}/message/sendText/{INSTANCE_NAME}"
     
@@ -105,23 +105,16 @@ def enviar_whatsapp(numero_destino, texto, menciones=[]):
         "Content-Type": "application/json"
     }
     
-    # Formato seguro compatible con Evolution API v2
+    # Payload limpio y estandarizado para Evolution API v2
     payload = {
         "number": str(numero_destino),
-        "text": str(texto),
-        "textMessage": {
-            "text": str(texto)
-        }
+        "text": str(texto)
     }
     
+    # Menciones directas para grupos de WhatsApp
     if menciones:
-        payload["options"] = {
-            "presence": "composing",
-            "mentions": {
-                "everyone": False,
-                "mentioned": menciones
-            }
-        }
+        payload["mentionsEveryOne"] = False
+        payload["mentioned"] = menciones
 
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=10)
