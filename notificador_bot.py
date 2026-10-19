@@ -145,20 +145,20 @@ def procesar_alertas_y_reportes():
     }
 
     # -------------------------------------------------------------
-    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min - INSISTENTE)
+    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min - Regla del Dashboard)
     # -------------------------------------------------------------
     min_indiv_th = float(cfg.get("minutos_alerta_individual", 5.0))
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
     if tel_destino_indiv:
-        # Busca chats que NO tengan primera respuesta registrada
+        # Filtra únicamente chats que NO tengan primera respuesta (primera_respuesta_min IS NULL)
         res_activos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, nombre_contacto, primera_respuesta_min, estado")\
             .is_("primera_respuesta_min", "null")\
             .execute()
 
         for c in (res_activos.data or []):
-            # Ignorar si el chat fue cerrado o pausado en Intercom/Supabase
+            # 1. Ignorar chats que ya estén cerrados o pausados en Intercom
             estado_actual = str(c.get("estado", "")).strip().lower()
             if estado_actual in ESTADOS_CERRADOS:
                 continue
@@ -169,6 +169,7 @@ def procesar_alertas_y_reportes():
 
             min_trans = (now_dt - created_dt).total_seconds() / 60.0
 
+            # 2. Si supera el umbral de 5 min y sigue sin primera respuesta, notificar
             if min_trans >= min_indiv_th:
                 url_chat = f"https://app.intercom.io/a/apps/co9kozj6/inbox/inbox/all/conversations/{c['id']}"
                 msg = (
@@ -182,7 +183,7 @@ def procesar_alertas_y_reportes():
                 enviar_whatsapp(tel_destino_indiv, msg)
 
     # -------------------------------------------------------------
-    # B. ALERTA GRUPAL (Chats pendientes >= X hs HÁBILES - 1 SOLA VEZ)
+    # B. ALERTA GRUPAL (Chats pendientes >= X hs HÁBILES - 1 MENSAJE POR CHAT)
     # -------------------------------------------------------------
     hs_grupo_th = float(cfg.get("horas_alerta_grupo", 5.0))
     minutos_grupo_th = hs_grupo_th * 60.0
@@ -193,15 +194,13 @@ def procesar_alertas_y_reportes():
             .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo")\
             .execute()
 
-        mensajes_criticos, menciones_list, ids_notificados_grupo = [], [], []
-
         for c in (res_abiertos.data or []):
             # 1. Ignorar chats cerrados
             estado_actual = str(c.get("estado", "")).strip().lower()
             if estado_actual in ESTADOS_CERRADOS:
                 continue
 
-            # 2. Ignorar si ya fue notificado previamente al grupo de WhatsApp
+            # 2. Ignorar si ya fue notificado previamente al grupo
             if c.get("notificado_grupo") is True:
                 continue
 
@@ -219,24 +218,26 @@ def procesar_alertas_y_reportes():
             if minutos_habiles >= minutos_grupo_th:
                 tel_agente = mapa_tels.get(agente.lower())
                 tag_agente = f"@{tel_agente}" if tel_agente else f"*{agente}*"
-                if tel_agente:
-                    menciones_list.append(tel_agente)
+                
+                menciones_individual = [tel_agente] if tel_agente else []
 
-                url_chat = f"https://app.intercom.io/a/apps/co9kozj6/inbox/inbox/all/conversations/{c['id']}"
-                mensajes_criticos.append(
-                    f"• Chat [{c['id']}]({url_chat}) | {tag_agente} | Tenant: {c.get('tenant', 'Sin datos')} | ⏳ {round(minutos_habiles / 60.0, 1)} hs hábiles"
+                # Estructura del mensaje individual por chat
+                msg_chat = (
+                    f"🚨 *ALERTA DE SLA (> {hs_grupo_th} hs hábiles)*\n\n"
+                    f"💬 *ID:* {c['id']}\n"
+                    f"👤 *Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
+                    f"🏢 *Tenant:* {c.get('tenant', 'Sin datos')}\n"
+                    f"👤 *Agente:* {tag_agente}\n"
+                    f"⏳ *Espera:* {round(minutos_habiles / 60.0, 1)} hs hábiles"
                 )
-                ids_notificados_grupo.append(c['id'])
 
-        if mensajes_criticos:
-            texto_grupo = f"🚨 *ALERTA DE SLA: Chats Pendientes (> {hs_grupo_th} hs hábiles)*\n\n" + "\n".join(mensajes_criticos)
-            enviar_whatsapp(jid_grupo, texto_grupo, menciones=menciones_list)
+                # Enviar un mensaje individual al grupo por este chat
+                enviar_whatsapp(jid_grupo, msg_chat, menciones=menciones_individual)
 
-            # Marcar en Supabase para no volver a notificarlos al grupo
-            for chat_id in ids_notificados_grupo:
+                # Marcar en Supabase inmediatamente para que no se vuelva a enviar
                 supabase.table("conversaciones")\
                     .update({"notificado_grupo": True})\
-                    .eq("id", chat_id)\
+                    .eq("id", c['id'])\
                     .execute()
 
     # -------------------------------------------------------------
