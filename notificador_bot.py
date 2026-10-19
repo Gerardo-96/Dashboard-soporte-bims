@@ -34,7 +34,7 @@ FERIADOS = [
     "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
 ]
 
-ESTADOS_CERRADOS = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+ESTADOS_CERRADOS = ["cerrado", "Cerrado", "closed", "resolved", "resuelto", "snoozed"]
 
 # ==========================================
 # FUNCIONES AUXILIARES
