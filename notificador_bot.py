@@ -18,6 +18,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 EVOLUTION_API_URL = os.environ.get("EVOLUTION_API_URL", "")
 EVOLUTION_API_KEY = os.environ.get("EVOLUTION_API_KEY", "")
 INSTANCE_NAME = os.environ.get("INSTANCE_NAME", "bims_instance")
+RENDER_DEPLOY_HOOK_URL = os.environ.get("RENDER_DEPLOY_HOOK_URL", "")
 
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
@@ -34,10 +35,10 @@ FERIADOS = [
     "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
 ]
 
-ESTADOS_CERRADOS = ["cerrado", "Cerrado", "closed", "resolved", "resuelto", "snoozed"]
+ESTADOS_CERRADOS = ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"]
 
 # ==========================================
-# FUNCIONES AUXILIARES
+# FUNCIONES AUXILIARES Y AUTO-HEALING
 # ==========================================
 
 def es_horario_laboral(now_dt):
@@ -46,7 +47,7 @@ def es_horario_laboral(now_dt):
     hora_actual = now_dt.time()
     
     es_dia_habil = dia_semana in [0, 1, 2, 3, 4]
-    es_hora_habil = time(8, 0, 0) <= hora_actual <= time(23, 0, 0)
+    es_hora_habil = time(8, 0, 0) <= hora_actual <= time(23, 59, 0)
     
     return es_dia_habil and es_hora_habil
 
@@ -194,30 +195,25 @@ def procesar_alertas_y_reportes():
         res_activos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, nombre_contacto, primera_respuesta_min, estado")\
             .is_("primera_respuesta_min", "null")\
-            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"])\
+            .not_.in_("estado", ESTADOS_CERRADOS)\
             .execute()
 
         for c in (res_activos.data or []):
-            # 1. Ignorar chats que ya estén cerrados o pausados en Intercom
-            estado_actual = str(c.get("estado", "")).strip().lower()
-            if estado_actual in ESTADOS_CERRADOS:
-                continue
-
             created_dt = parsear_fecha_utc(c.get("created_at"))
             if not created_dt:
                 continue
 
             min_trans = (now_dt - created_dt).total_seconds() / 60.0
 
-            # 2. Si supera el umbral de 5 min y sigue sin primera respuesta, notificar
             if min_trans >= min_indiv_th:
                 url_chat = f"https://app.intercom.io/a/apps/co9kozj6/inbox/inbox/all/conversations/{c['id']}"
                 msg = (
                     f"⚠️ *Chat Sin Respuesta (> {int(min_indiv_th)} min)*\n\n"
-                    f" *ID:* {c['id']}\n"
-                    f" *Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
-                    f" *Tenant:* {c.get('tenant', 'Sin datos')}\n"
-                    f" *Espera:* {round(min_trans, 1)} min\n"
+                    f"*ID:* {c['id']}\n"
+                    f"*Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
+                    f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
+                    f"*Espera:* {round(min_trans, 1)} min\n"
+                    f"🔗 {url_chat}"
                 )
                 enviar_whatsapp(tel_destino_indiv, msg)
 
@@ -229,15 +225,14 @@ def procesar_alertas_y_reportes():
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
     if jid_grupo:
-        # Filtramos en Supabase solo chats ABIERTOS y NO NOTIFICADOS
+        # Filtramos en Supabase solo chats ABIERTOS y NO NOTIFICADOS (solicitando ai_title)
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo")\
-            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"])\
+            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo, ai_title")\
+            .not_.in_("estado", ESTADOS_CERRADOS)\
             .or_("notificado_grupo.is.null,notificado_grupo.eq.false")\
             .execute()
 
         for c in (res_abiertos.data or []):
-            # A. Validar agente asignado
             agente = str(c.get("agente_asignado", "")).strip()
             if agente.lower() in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]:
                 continue
@@ -249,20 +244,19 @@ def procesar_alertas_y_reportes():
             minutos_habiles = calcular_minutos_habiles_rapido(created_dt, now_dt)
             hs_habiles = round(minutos_habiles / 60.0, 1)
 
-            # Log para auditar en los registros de Render
-            print(f"🔍 [EVALUANDO] Chat: {c['id']} | Agente: '{agente}' | Hs Hábiles: {hs_habiles}")
+            print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente}' | Hs Hábiles: {hs_habiles}")
 
             if minutos_habiles >= minutos_grupo_th:
                 tel_agente = mapa_tels.get(agente.lower())
                 tag_agente = f"@{tel_agente}" if tel_agente else f"*{agente}*"
                 menciones_list = [tel_agente] if tel_agente else []
 
-                title_ai = c.get("title_ai") or "Sin título"
+                ai_title = c.get("ai_title") or "Sin título"
 
-                # Mensaje limpio: Un solo emoji en el título principal
                 msg_chat = (
                     f"🚨 *ALERTA DE SLA: Chat Pendiente*\n\n"
                     f"*ID:* {c['id']}\n"
+                    f"*Título IA:* {ai_title}\n"
                     f"*Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
                     f"*Agente:* {tag_agente}\n"
@@ -377,16 +371,12 @@ def health_status():
     except Exception as e:
         print(f"Error consultando estado de WhatsApp: {e}")
 
-    # Retorna el estado consolidado para el Dashboard
     return {
         "webhook_online": True,
         "evolution_online": evolution_online,
-        "whatsapp_state": estado_whatsapp,  # 'open', 'close', 'connecting', 'disconnected'
+        "whatsapp_state": estado_whatsapp,
         "status_general": "OK" if (evolution_online and estado_whatsapp == "open") else "CRITICAL"
     }
-
-# Variable de entorno nueva en Render: RENDER_DEPLOY_HOOK_URL
-RENDER_DEPLOY_HOOK_URL = os.environ.get("RENDER_DEPLOY_HOOK_URL", "")
 
 @app.post("/reiniciar-servicio")
 def reiniciar_servicio(authorization: str = Header(None)):
