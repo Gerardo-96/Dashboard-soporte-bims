@@ -137,7 +137,7 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
 
     return round(total_minutos_habiles, 1)
 
-def enviar_whatsapp(numero_destino, texto, menciones=[]):
+def enviar_whatsapp(numero_destino, texto, menciones=[], mencionar_todos=False):
     """Envía un mensaje de WhatsApp con formato estándar para Evolution API v2."""
     base_url = EVOLUTION_API_URL.rstrip('/')
     url = f"{base_url}/message/sendText/{INSTANCE_NAME}"
@@ -152,7 +152,10 @@ def enviar_whatsapp(numero_destino, texto, menciones=[]):
         "text": str(texto)
     }
     
-    if menciones:
+    # Mención a todos en el grupo
+    if mencionar_todos:
+        payload["mentionsEveryOne"] = True
+    elif menciones:
         payload["mentionsEveryOne"] = False
         payload["mentioned"] = menciones
 
@@ -212,16 +215,18 @@ def procesar_alertas_y_reportes():
             min_trans = (now_dt - created_dt).total_seconds() / 60.0
 
             if min_trans >= min_indiv_th:
-                url_chat = f"https://app.intercom.io/a/apps/co9kozj6/inbox/inbox/all/conversations/{c['id']}"
+                                
+                # Agregamos la mención visible en el texto
                 msg = (
-                    f"⚠️ *Chat Sin Respuesta (> {int(min_indiv_th)} min)*\n\n"
+                    f"⚠️ *@everyone chat sin 1ra Respuesta (> {int(min_indiv_th)} min)*\n\n"
                     f"*ID:* {c['id']}\n"
                     f"*Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
                     f"*Espera:* {round(min_trans, 1)} min\n"
-                    f"🔗 {url_chat}"
                 )
-                enviar_whatsapp(tel_destino_indiv, msg)
+                
+                # Enviamos con el flag activar mención global
+                enviar_whatsapp(tel_destino_indiv, msg, mencionar_todos=True)
 
     # -------------------------------------------------------------
     # B. ALERTA GRUPAL RECURRENTE (Múltiplos de X hs HÁBILES: 5h, 10h, 15h...)
