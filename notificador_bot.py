@@ -224,18 +224,17 @@ def procesar_alertas_y_reportes():
                 enviar_whatsapp(tel_destino_indiv, msg)
 
     # -------------------------------------------------------------
-    # B. ALERTA GRUPAL (1 Mensaje Individual por Chat Pendiente >= X hs HÁBILES)
+    # B. ALERTA GRUPAL RECURRENTE (Múltiplos de X hs HÁBILES: 5h, 10h, 15h...)
     # -------------------------------------------------------------
     hs_grupo_th = float(cfg.get("horas_alerta_grupo", 5.0))
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
-    if jid_grupo:
-        # Filtramos en Supabase solo chats ABIERTOS y NO NOTIFICADOS (solicitando ai_title)
+    if jid_grupo and hs_grupo_th > 0:
+        # Seleccionamos chats abiertos solicitando ultimo_multiplo_notificado
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo, ai_title")\
+            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
-            .or_("notificado_grupo.is.null,notificado_grupo.eq.false")\
             .execute()
 
         for c in (res_abiertos.data or []):
@@ -250,30 +249,41 @@ def procesar_alertas_y_reportes():
             minutos_habiles = calcular_minutos_habiles_rapido(created_dt, now_dt)
             hs_habiles = round(minutos_habiles / 60.0, 1)
 
-            print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente}' | Hs Hábiles: {hs_habiles}")
+            # Múltiplo actual según las horas transcurridas
+            multiplo_actual = int(minutos_habiles // minutos_grupo_th)
+            ultimo_multiplo = int(c.get("ultimo_multiplo_notificado") or 0)
 
-            if minutos_habiles >= minutos_grupo_th:
+            print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente}' | Hs Hábiles: {hs_habiles} | Múltiplo actual: {multiplo_actual} | Último notificado: {ultimo_multiplo}")
+
+            # Si alcanzó un nuevo múltiplo (1x, 2x, 3x...), dispara el aviso correspondiente
+            if multiplo_actual >= 1 and multiplo_actual > ultimo_multiplo:
                 tel_agente = mapa_tels.get(agente.lower())
                 tag_agente = f"@{tel_agente}" if tel_agente else f"*{agente}*"
                 menciones_list = [tel_agente] if tel_agente else []
 
                 ai_title = c.get("ai_title") or "Sin título"
 
+                # Encabezado dinámico según el número de insistencia
+                if multiplo_actual == 1:
+                    header_alerta = "🚨 *ALERTA DE SLA: Chat Pendiente*"
+                else:
+                    header_alerta = f"🚨 *REITERACIÓN DE SLA #{multiplo_actual}: Chat Pendiente*"
+
                 msg_chat = (
-                    f"🚨 *ALERTA DE SLA: Chat Pendiente*\n\n"
+                    f"{header_alerta}\n\n"
                     f"*ID:* {c['id']}\n"
                     f"*Título IA:* {ai_title}\n"
                     f"*Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
                     f"*Agente:* {tag_agente}\n"
-                    f"*Espera:* {hs_habiles} hs hábiles"
+                    f"*Espera:* {hs_habiles} hs hábiles (Objetivo: {int(hs_grupo_th * multiplo_actual)} hs)"
                 )
 
                 enviar_whatsapp(jid_grupo, msg_chat, menciones=menciones_list)
 
-                # Marcar como notificado en Supabase
+                # Actualizar el registro en Supabase con el nuevo múltiplo notificado
                 supabase.table("conversaciones")\
-                    .update({"notificado_grupo": True})\
+                    .update({"ultimo_multiplo_notificado": multiplo_actual})\
                     .eq("id", c['id'])\
                     .execute()
 
