@@ -192,7 +192,7 @@ def procesar_alertas_y_reportes():
     if jid_grupo:
         # Filtramos en Supabase solo chats ABIERTOS y NO NOTIFICADOS
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo, title_ai")\
+            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo, ai_title")\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"])\
             .or_("notificado_grupo.is.null,notificado_grupo.eq.false")\
             .execute()
