@@ -276,7 +276,7 @@ def procesar_alertas_y_reportes():
                     f"*Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
                     f"*Agente:* {tag_agente}\n"
-                    f"*Espera:* {hs_habiles} hs hábiles (Objetivo: {int(hs_grupo_th * multiplo_actual)} hs)"
+                    f"*Espera:* {hs_habiles} hs hábiles"
                 )
 
                 enviar_whatsapp(jid_grupo, msg_chat, menciones=menciones_list)
