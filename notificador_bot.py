@@ -218,7 +218,7 @@ def procesar_alertas_y_reportes():
                                 
                 # Agregamos la mención visible en el texto
                 msg = (
-                    f"⚠️ *@everyone chat sin 1ra Respuesta (> {int(min_indiv_th)} min)*\n\n"
+                    f"⚠️ *@todos chat sin 1ra Respuesta (> {int(min_indiv_th)} min)*\n\n"
                     f"*ID:* {c['id']}\n"
                     f"*Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
