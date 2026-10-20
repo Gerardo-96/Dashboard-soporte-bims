@@ -46,6 +46,10 @@ except ImportError:
 INTERCOM_APP_ID = "co9kozj6"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
+# URL de tu webhook FastAPI de Python desplegado en Render
+NOTIFICADOR_API_URL = os.environ.get("NOTIFICADOR_API_URL", "https://dashboard-soporte-bims-ctcu.onrender.com")
+CRON_SECRET_TOKEN = os.environ.get("CRON_SECRET_TOKEN", "bims_secret_cron_123")
+
 # ==========================
 # CONFIGURACIÓN DE SUPABASE
 # ==========================
@@ -2313,6 +2317,77 @@ with tab_admin:
             st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
+
+        # ==========================================
+        # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
+        # ==========================================
+        USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital"
+        es_super_usuario = (
+            st.session_state.get("user_email", "").strip().lower() == USUARIO_ADMIN_EMAIL.lower()
+            or st.session_state.get("admin_authenticated", False)
+        )
+
+        if es_super_usuario:
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">🤖 Estado y Control de Evolución API (WhatsApp Bot)</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                        Monitoreo del servicio de notificaciones y reinicio forzado en Render.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                col_status1, col_status2 = st.columns([2, 1])
+
+                # Consulta de salud del servicio en FastAPI
+                estado_bot = "CRITICAL"
+                wa_state = "disconnected"
+                try:
+                    res_health = requests.get(f"{NOTIFICADOR_API_URL.rstrip('/')}/health-status", timeout=4)
+                    if res_health.status_code == 200:
+                        data_h = res_health.json()
+                        estado_bot = data_h.get("status_general", "CRITICAL")
+                        wa_state = data_h.get("whatsapp_state", "disconnected")
+                except Exception as e:
+                    estado_bot = "CRITICAL"
+                    wa_state = "offline"
+
+                with col_status1:
+                    if estado_bot == "OK":
+                        st.markdown(f"""
+                        <div class="metric-card" style="border-left: 4px solid #10b981;">
+                            <div class="metric-card-title">Estado del Bot WhatsApp</div>
+                            <div class="metric-card-value" style="color: #34d399;">🟢 Operativo ({wa_state})</div>
+                            <div class="metric-card-sub">Sesión activa y conectada</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class="metric-card" style="border-left: 4px solid #ef4444;">
+                            <div class="metric-card-title">Estado del Bot WhatsApp</div>
+                            <div class="metric-card-value" style="color: #f87171;">🔴 Desconectado ({wa_state})</div>
+                            <div class="metric-card-sub">El Auto-Healing intentará reconectar automáticamente</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                with col_status2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
+                        with st.spinner("Enviando orden de reinicio a Render..."):
+                            try:
+                                headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
+                                res_req = requests.post(f"{NOTIFICADOR_API_URL.rstrip('/')}/reiniciar-servicio", headers=headers, timeout=10)
+                                res_json = res_req.json()
+
+                                if res_json.get("status") == "success":
+                                    st.success("✅ Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
+                                else:
+                                    st.error(f"❌ Error: {res_json.get('message')}")
+                            except Exception as ex_r:
+                                st.error(f"❌ Error al comunicar con la API: {ex_r}")
+
+            st.markdown("<br>", unsafe_allow_html=True)
 
         with st.container():
             st.markdown("""
