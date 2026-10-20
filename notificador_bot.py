@@ -192,7 +192,7 @@ def procesar_alertas_y_reportes():
     if jid_grupo:
         # Filtramos en Supabase solo chats ABIERTOS y NO NOTIFICADOS
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo, ai_title")\
+            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, notificado_grupo")\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"])\
             .or_("notificado_grupo.is.null,notificado_grupo.eq.false")\
             .execute()
@@ -224,7 +224,6 @@ def procesar_alertas_y_reportes():
                 msg_chat = (
                     f"🚨 *ALERTA DE SLA: Chat Pendiente*\n\n"
                     f"*ID:* {c['id']}\n"
-                    f"*Título IA:* {title_ai}\n"
                     f"*Cliente:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
                     f"*Agente:* {tag_agente}\n"
