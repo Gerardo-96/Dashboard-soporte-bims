@@ -48,7 +48,7 @@ INTERCOM_APP_ID = "co9kozj6"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 # URL de tu webhook FastAPI de Python desplegado en Render
-NOTIFICADOR_API_URL = os.environ.get("NOTIFICADOR_API_URL", "https://dashboard-soporte-bims-ctcu.onrender.com/health-status")
+NOTIFICADOR_API_URL = os.environ.get("NOTIFICADOR_API_URL", "https://dashboard-soporte-bims-ctcu.onrender.com")
 CRON_SECRET_TOKEN = os.environ.get("CRON_SECRET_TOKEN", "bims_secret_cron_123")
 
 # ==========================
