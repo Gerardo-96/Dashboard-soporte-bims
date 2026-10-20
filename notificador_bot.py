@@ -155,6 +155,7 @@ def procesar_alertas_y_reportes():
         res_activos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, nombre_contacto, primera_respuesta_min, estado")\
             .is_("primera_respuesta_min", "null")\
+            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"])\
             .execute()
 
         for c in (res_activos.data or []):
