@@ -1139,7 +1139,69 @@ if st.sidebar.button("Cerrar Sesión", use_container_width=True):
     st.session_state["user_email"] = ""
     st.rerun()
 
-st.title("Dashboard Soporte BIMS")
+# ==========================================
+# INDICADOR DE ESTADO EN VIVO (CABECERA)
+# ==========================================
+def obtener_estado_bot_salud():
+    """Consulta rápida del estado de conexión con WhatsApp para el título principal."""
+    try:
+        url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
+        url_salud = f"{url_base}/health-status"
+        res = requests.get(url_salud, timeout=3)
+        if res.status_code == 200:
+            data = res.json()
+            online = data.get("status_general") == "OK"
+            state = data.get("whatsapp_state", "desconectado")
+            return online, state
+    except Exception:
+        pass
+    return False, "offline"
+
+bot_online, bot_state = obtener_estado_bot_salud()
+
+# Renderizado del Título con Badge / Círculo indicador
+if bot_online:
+    badge_html = f"""
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 1rem;">
+        <h1 style="margin: 0; padding: 0;">Dashboard Soporte BIMS</h1>
+        <span style="
+            background-color: #065f46; 
+            color: #34d399; 
+            border: 1px solid #059669; 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 0.85rem; 
+            font-weight: 600; 
+            display: flex; 
+            align-items: center; 
+            gap: 6px;" 
+            title="Conexión de WhatsApp Activa ({bot_state})">
+            🟢 Bot Operativo ({bot_state})
+        </span>
+    </div>
+    """
+else:
+    badge_html = f"""
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 1rem;">
+        <h1 style="margin: 0; padding: 0;">Dashboard Soporte BIMS</h1>
+        <span style="
+            background-color: #7f1d1d; 
+            color: #f87171; 
+            border: 1px solid #dc2626; 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 0.85rem; 
+            font-weight: 600; 
+            display: flex; 
+            align-items: center; 
+            gap: 6px;" 
+            title="Conexión de WhatsApp Caída ({bot_state})">
+            🔴 Bot Desconectado ({bot_state})
+        </span>
+    </div>
+    """
+
+st.markdown(badge_html, unsafe_allow_html=True)
 
 tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
     "Control Operativo & SLA", 
