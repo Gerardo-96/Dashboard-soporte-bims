@@ -42,7 +42,13 @@ ESTADOS_CERRADOS = ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cer
 # ==========================================
 
 def es_horario_laboral(now_dt):
-    """Verifica si es de Lunes a Viernes entre las 08:00 y las 18:00 hs (Paraguay)."""
+    """Verifica si es de Lunes a Viernes entre las 08:00 y las 18:00 hs (Paraguay) y NO es feriado."""
+    fecha_str = now_dt.strftime("%Y-%m-%d")
+    
+    # 1. Si hoy es feriado, se inhabilita el envío de notificaciones
+    if fecha_str in FERIADOS:
+        return False
+
     dia_semana = now_dt.weekday()
     hora_actual = now_dt.time()
     
