@@ -60,6 +60,39 @@ def parsear_fecha_utc(fecha_raw):
     except Exception:
         return None
 
+def asegurar_conexion_whatsapp():
+    """Valida la conexión con WhatsApp y reconecta/reinicia si detecta caída."""
+    base_url = EVOLUTION_API_URL.rstrip('/')
+    url_state = f"{base_url}/instance/connectionState/{INSTANCE_NAME}"
+    
+    try:
+        res = requests.get(url_state, headers={"apikey": EVOLUTION_API_KEY}, timeout=8)
+        if res.status_code == 200:
+            estado = res.json().get("instance", {}).get("state")
+            if estado == "open":
+                return True # Conexión saludable
+    except Exception as e:
+        print(f"⚠️ Error verificando estado de WhatsApp: {e}")
+
+    print("🚨 [Auto-Healing] Conexión de WhatsApp caída o inestable. Intentando reconectar...")
+
+    # Intento 1: Llamar al endpoint de conexión
+    try:
+        url_connect = f"{base_url}/instance/connect/{INSTANCE_NAME}"
+        requests.get(url_connect, headers={"apikey": EVOLUTION_API_KEY}, timeout=10)
+    except Exception as e:
+        print(f"⚠️ Error al intentar re-conectar: {e}")
+
+    # Intento 2: Si hay Deploy Hook configurado, disparar reinicio automático de la instancia
+    if RENDER_DEPLOY_HOOK_URL:
+        print("🔄 [Auto-Healing] Disparando reinicio automático de Evolution API en Render...")
+        try:
+            requests.post(RENDER_DEPLOY_HOOK_URL, timeout=10)
+        except Exception as e:
+            print(f"❌ Error al disparar Deploy Hook: {e}")
+            
+    return False
+
 def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
     if pd.isna(dt_inicio) or pd.isna(dt_fin) or dt_fin <= dt_inicio:
         return 0.0
@@ -127,6 +160,12 @@ def enviar_whatsapp(numero_destino, texto, menciones=[]):
 # ==========================================
 
 def procesar_alertas_y_reportes():
+
+    # Verificar salud de la conexión antes de evaluar chats
+    if not asegurar_conexion_whatsapp():
+        print("❌ Se pausó la evaluación de alertas debido a un reinicio en curso de WhatsApp.")
+        return {"status": "reconnecting", "reason": "Restableciendo conexión con WhatsApp"}
+        
     now_dt = datetime.now(tz_py)
 
     if not es_horario_laboral(now_dt):
@@ -319,3 +358,51 @@ def trigger_notificaciones(authorization: str = Header(None)):
         print(f"Error procesando notificaciones: {e}")
 
     return {"status": "ok"}
+
+@app.get("/health-status")
+def health_status():
+    """Consulta el estado de salud del webhook y la conexión con WhatsApp."""
+    base_url = EVOLUTION_API_URL.rstrip('/')
+    url_state = f"{base_url}/instance/connectionState/{INSTANCE_NAME}"
+    
+    estado_whatsapp = "disconnected"
+    evolution_online = False
+
+    try:
+        res = requests.get(url_state, headers={"apikey": EVOLUTION_API_KEY}, timeout=5)
+        if res.status_code == 200:
+            evolution_online = True
+            datos = res.json()
+            estado_whatsapp = datos.get("instance", {}).get("state", "disconnected")
+    except Exception as e:
+        print(f"Error consultando estado de WhatsApp: {e}")
+
+    # Retorna el estado consolidado para el Dashboard
+    return {
+        "webhook_online": True,
+        "evolution_online": evolution_online,
+        "whatsapp_state": estado_whatsapp,  # 'open', 'close', 'connecting', 'disconnected'
+        "status_general": "OK" if (evolution_online and estado_whatsapp == "open") else "CRITICAL"
+    }
+
+# Variable de entorno nueva en Render: RENDER_DEPLOY_HOOK_URL
+RENDER_DEPLOY_HOOK_URL = os.environ.get("RENDER_DEPLOY_HOOK_URL", "")
+
+@app.post("/reiniciar-servicio")
+def reiniciar_servicio(authorization: str = Header(None)):
+    """Dispara un re-despliegue/reinicio del contenedor en Render."""
+    if authorization != f"Bearer {CRON_SECRET_TOKEN}":
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    if not RENDER_DEPLOY_HOOK_URL:
+        return {"status": "error", "message": "Deploy Hook URL no configurado"}
+
+    try:
+        res = requests.post(RENDER_DEPLOY_HOOK_URL, timeout=10)
+        return {
+            "status": "success",
+            "message": "Petición de reinicio enviada a Render exitosamente.",
+            "render_response_code": res.status_code
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
