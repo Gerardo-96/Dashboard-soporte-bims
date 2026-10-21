@@ -1229,13 +1229,11 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        # INCLUIMOS agente_asignado Y updated_at PARA FILTRAR A MÓNICA Y MEDIR DESDE LA DERIVACIÓN
         COLUMNAS_ALERTAS = "id, created_at, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
 
         res = supabase.table("conversaciones")\
             .select(COLUMNAS_ALERTAS)\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-            .not_.ilike("agente_asignado", "%monica%")\
             .order("created_at", desc=True)\
             .limit(100)\
             .execute()
@@ -1257,10 +1255,15 @@ def renderizar_alertas_en_vivo():
         # 1. Filtramos chats abiertos
         df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
-        # 2. Exclusión estricta de Mónica (IA)
-        agentes_ia = ["monica", "mónica", "monica (bot)"]
+        # 2. FILTRO EXCLUSIVO: Solo consideramos chats con agente "Sin Asignar" / vacíos / "soporte"
+        # (Se descartan Mónica y cualquier agente humano ya asignado)
+        agentes_permitidos_sin_asignar = ["sin asignar", "none", "nan", "", "soporte"]
         df_activos["agente_clean"] = df_activos["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
-        df_activos = df_activos[~df_activos["agente_clean"].isin(agentes_ia)].copy()
+        
+        df_activos = df_activos[
+            df_activos["agente_clean"].isin(agentes_permitidos_sin_asignar) | 
+            df_activos["agente_clean"].str.contains("sin asignar", na=False)
+        ].copy()
 
         if "canal" in df_activos.columns:
             df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
@@ -1272,7 +1275,7 @@ def renderizar_alertas_en_vivo():
                 lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
             )
 
-            # Tomamos fecha_ref desde updated_at (momento de derivación humana)
+            # Usamos updated_at para medir el tiempo desde la derivación efectiva
             fecha_ref = pd.to_datetime(df_activos["updated_at"].fillna(df_activos["created_at"]), errors="coerce", utc=True)
             df_activos["created_at_dt"] = fecha_ref.dt.tz_convert("America/Asuncion")
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
@@ -1293,16 +1296,17 @@ def renderizar_alertas_en_vivo():
                 st.markdown(f"""
                 <div class="alert-card-critical">
                     <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
-                    Hay <b>{cant} chat(s) en espera</b> sin respuesta superando el límite configurado ({alerta_nuevo_th} min).
+                    Hay <b>{cant} chat(s) en espera de asignación humana</b> superando el límite configurado ({alerta_nuevo_th} min).
                 </div>
                 """, unsafe_allow_html=True)
 
+                # RESTAURACIÓN EXACTA DEL DISPARO DE AUDIO FIEL AL BACKUP
                 if act_sonido:
                     html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
                     st.components.v1.html(html_con_ts, height=0)
 
             with st.expander("Panel de Verificación de Alertas en Vivo", expanded=True if not df_criticos_sla.empty else False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Sin Asignar en Alerta:** {len(df_criticos_sla)}")
                 
                 if not df_criticos_sla.empty:
                     df_criticos_sla["atendido"] = False
@@ -1319,13 +1323,13 @@ def renderizar_alertas_en_vivo():
                             "atendido": st.column_config.CheckboxColumn("Atendido", default=False),
                             "intercom_url": st.column_config.LinkColumn(
                                 "ID Conversación", 
-                                display_text=r".*/(\d+)"  # <--- Extrae y muestra solo el ID numérico
+                                display_text=r".*/(\d+)"
                             ),
-                            "created_at_fmt": st.column_config.TextColumn("Fecha Creación/Derivación", disabled=True),
+                            "created_at_fmt": st.column_config.TextColumn("Fecha Derivación", disabled=True),
                             "min_transcurridos": st.column_config.NumberColumn("Min. Transcurridos", disabled=True),
                             "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
                             "tenant": st.column_config.TextColumn("Tenant", disabled=True),
-                            "agente_asignado": st.column_config.TextColumn("Agente Asignado", disabled=True),
+                            "agente_asignado": st.column_config.TextColumn("Estado Asignación", disabled=True),
                             "estado": st.column_config.TextColumn("Estado", disabled=True),
                             "canal": st.column_config.TextColumn("Canal", disabled=True),
                         },
@@ -1357,10 +1361,10 @@ def renderizar_alertas_en_vivo():
                             st.rerun()
 
                 else:
-                    st.info("🟢 No hay ningún chat en alerta crítica actualmente.")
+                    st.info("🟢 No hay ningún chat sin asignar en alerta crítica actualmente.")
         else:
             with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats abiertos pendientes.")
+                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats sin asignar pendientes.")
     else:
         with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
             st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
