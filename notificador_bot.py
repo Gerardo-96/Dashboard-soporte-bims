@@ -235,17 +235,21 @@ def procesar_alertas_y_reportes():
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
-    if jid_grupo and hs_grupo_th > 0:
-        # Seleccionamos chats abiertos solicitando ultimo_multiplo_notificado
-        res_abiertos = supabase.table("conversaciones")\
+    res_abiertos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
+            .not_.ilike("agente_asignado", "%monica%")\
+            .not_.ilike("agente_asignado", "%soporte%")\
+            .not_.ilike("agente_asignado", "%sin asignar%")\
+            .not_.ilike("agente_asignado", "%Monica%")\
+            .not_.ilike("agente_asignado", "%Soporte%")\
+            .not_.ilike("agente_asignado", "%Sin asignar%")\
+            .not_.ilike("agente_asignado", "%none%")\
+            .not_.ilike("agente_asignado", "%nan%")\
             .execute()
 
         for c in (res_abiertos.data or []):
             agente = str(c.get("agente_asignado", "")).strip()
-            if agente.lower() in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]:
-                continue
 
             created_dt = parsear_fecha_utc(c.get("created_at"))
             if not created_dt:
