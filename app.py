@@ -1229,6 +1229,7 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
+        # INCLUIMOS agente_asignado Y updated_at PARA FILTRAR A MÓNICA Y MEDIR DESDE LA DERIVACIÓN
         COLUMNAS_ALERTAS = "id, created_at, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
 
         res = supabase.table("conversaciones")\
@@ -1256,13 +1257,22 @@ def renderizar_alertas_en_vivo():
         # 1. Filtramos chats abiertos
         df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
-        # 2. Exclusión estricta de la IA Mónica (Mantenemos 'Sin Asignar' para que alerte si nadie lo toma)
-        agentes_ia = ["Monica", "monica", "mónica", "monica (bot)"]
+        # 2. Exclusión estricta de Mónica (IA)
+        agentes_ia = ["monica", "mónica", "monica (bot)"]
         df_activos["agente_clean"] = df_activos["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
         df_activos = df_activos[~df_activos["agente_clean"].isin(agentes_ia)].copy()
 
+        if "canal" in df_activos.columns:
+            df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
+            df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
+
         if not df_activos.empty:
-            # Si el chat fue derivado recientemente, medimos el tiempo transcurrido desde updated_at
+            df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
+            df_activos["intercom_url"] = df_activos["id_str"].apply(
+                lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+            )
+
+            # Tomamos fecha_ref desde updated_at (momento de derivación humana)
             fecha_ref = pd.to_datetime(df_activos["updated_at"].fillna(df_activos["created_at"]), errors="coerce", utc=True)
             df_activos["created_at_dt"] = fecha_ref.dt.tz_convert("America/Asuncion")
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
@@ -1295,25 +1305,24 @@ def renderizar_alertas_en_vivo():
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Críticos en Alerta:** {len(df_criticos_sla)}")
                 
                 if not df_criticos_sla.empty:
-                    # Agregamos la columna interactiva para la casilla de verificación
                     df_criticos_sla["atendido"] = False
 
-                    cols_check = ["atendido", "intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "estado"]
+                    cols_check = ["atendido", "intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "agente_asignado", "estado"]
                     if "canal" in df_criticos_sla.columns:
                         cols_check.append("canal")
 
                     df_criticos_editor = df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1).copy()
 
-                    # Despliegue de la tabla utilizando data_editor
                     edited_data = st.data_editor(
                         df_criticos_editor,
                         column_config={
                             "atendido": st.column_config.CheckboxColumn("Atendido", default=False),
                             "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
-                            "created_at_fmt": st.column_config.TextColumn("Fecha Creación", disabled=True),
+                            "created_at_fmt": st.column_config.TextColumn("Fecha Creación/Derivación", disabled=True),
                             "min_transcurridos": st.column_config.NumberColumn("Min. Transcurridos", disabled=True),
                             "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
                             "tenant": st.column_config.TextColumn("Tenant", disabled=True),
+                            "agente_asignado": st.column_config.TextColumn("Agente Asignado", disabled=True),
                             "estado": st.column_config.TextColumn("Estado", disabled=True),
                             "canal": st.column_config.TextColumn("Canal", disabled=True),
                         },
@@ -1322,7 +1331,6 @@ def renderizar_alertas_en_vivo():
                         key="editor_alertas_tabla"
                     )
 
-                    # Detección de filas marcadas
                     cambios = st.session_state.get("editor_alertas_tabla", {}).get("edited_rows", {})
                     if cambios:
                         actualizados = 0
