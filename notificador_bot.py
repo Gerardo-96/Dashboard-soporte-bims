@@ -194,28 +194,29 @@ def procesar_alertas_y_reportes():
     }
 
     # -------------------------------------------------------------
-    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min)
+    # A. ALERTA INDIVIDUAL (Únicamente para chats SIN ASIGNAR >= X min)
     # -------------------------------------------------------------
     min_indiv_th = float(cfg.get("minutos_alerta_individual", 5.0))
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
     if tel_destino_indiv:
-        # 1. Filtro directo en Supabase excluyendo a Mónica
+        # Filtramos chats sin respuesta que estén ABIERTOS y asignados a "Sin Asignar" o vacíos
         res_activos = supabase.table("conversaciones")\
             .select("id, created_at, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
             .is_("primera_respuesta_min", "null")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
-            .not_.ilike("agente_asignado", "%monica%")\
             .execute()
 
         for c in (res_activos.data or []):
             agente = str(c.get("agente_asignado", "")).strip().lower()
             
-            # 2. Validación secundaria anti-IA en Python
-            if any(b in agente for b in ["monica", "mónica"]):
+            # FILTRO ESTRICTO: Solo se evalúa si el agente es "sin asignar", "none", "nan" o está vacío
+            # (Se excluye a Mónica y a cualquier agente que ya tenga asignación automática/manual)
+            es_sin_asignar = agente in ["sin asignar", "none", "nan", "", "soporte"] or "sin asignar" in agente
+            if not es_sin_asignar:
                 continue
 
-            # Inicia el conteo desde la derivación (updated_at) o creación
+            # El reloj de espera humana arranca en el momento de derivación (updated_at)
             fecha_ref = c.get("updated_at") or c.get("created_at")
             created_dt = parsear_fecha_utc(fecha_ref)
             if not created_dt:
