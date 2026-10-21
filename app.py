@@ -2128,9 +2128,25 @@ with tab_resumen:
 
             if not df_abiertos_filtro.empty:
                 now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
-                df_abiertos_filtro["dias_antiguedad_num"] = (
-                    (now_py_resumen - df_abiertos_filtro["created_at_dt"]).dt.total_seconds() / 86400.0
-                ).apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
+                # ✅ Código nuevo (Días HÁBILES basados en jornadas de ~8 hs hábiles):
+                df_abiertos_filtro["dias_antiguedad_num"] = df_abiertos_filtro.apply(
+                    lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_resumen) / 60.0 / 8.0),
+                    axis=1
+                ).fillna(0.0)
+
+                def clasificar_antiguedad(dias_habiles):
+                    if dias_habiles < 1.0: 
+                        return "0 días (Hoy)"
+                    elif dias_habiles < 2.0: 
+                        return "1 día hábil"
+                    elif dias_habiles < 3.0: 
+                        return "2 días hábiles"
+                    elif dias_habiles <= 4.0: 
+                        return "3 días hábiles"
+                    else: 
+                        return ">3 días hábiles"
+
+                df_abiertos_filtro["Rango_Antiguedad"] = df_abiertos_filtro["dias_antiguedad_num"].apply(clasificar_antiguedad)
 
                 def clasificar_antiguedad(dias):
                     if dias < 1.0: return "0 días (Hoy)"
@@ -2199,9 +2215,10 @@ with tab_resumen:
                 now_py_horas = pd.Timestamp.now(tz="America/Asuncion")
                 
                 # Cálculo exacto del tiempo abierto en horas
-                df_abiertos_hs_filtro["horas_abierto_num"] = (
-                    (now_py_horas - df_abiertos_hs_filtro["created_at_dt"]).dt.total_seconds() / 3600.0
-                ).apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
+                df_abiertos_hs_filtro["horas_abierto_num"] = df_abiertos_hs_filtro.apply(
+                    lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_horas) / 60.0),
+                    axis=1
+                ).fillna(0.0)
 
                 # Clasificación en 4 franjas horarias
                 def clasificar_franja_horas(horas):
