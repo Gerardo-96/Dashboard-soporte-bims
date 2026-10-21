@@ -593,17 +593,18 @@ def obtener_datos_hoy():
         return []
 
 def obtener_datos():
-    """Une los datos históricos de 24h con los datos frescos de hoy."""
+    """Une los datos históricos de 24h con los datos frescos de hoy garantizando la información del agente actual."""
     datos_historicos = obtener_datos_historicos_q()
     datos_hoy = obtener_datos_hoy()
     
-    todos_los_datos = datos_historicos + datos_hoy
+    # Se coloca datos_hoy primero para que drop_duplicates mantenga el agente reasignado
+    todos_los_datos = datos_hoy + datos_historicos
     
     if not todos_los_datos:
         return pd.DataFrame()
         
     df = pd.DataFrame(todos_los_datos)
-    df = df.drop_duplicates(subset=["id"]).copy()
+    df = df.drop_duplicates(subset=["id"], keep="first").copy()
     
     return procesar_fechas_df(df)
 
