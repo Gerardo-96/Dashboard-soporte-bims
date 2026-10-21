@@ -1938,11 +1938,20 @@ with tab_operativo:
     # ==========================================
     # RANKING DE CHATS ABIERTOS GENERAL HISTÓRICO CON FILTRO MULTI-AGENTE
     # ==========================================
-    cant_abiertos_gen = len(df_abiertos_all) if not df_abiertos_all.empty else 0
+    if not df_abiertos_all.empty:
+        # Exclusión explícita de Mónica, Soporte y sin asignar
+        agentes_omitidos = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
+        df_abiertos_rank_filtro = df_abiertos_all[
+            ~df_abiertos_all["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitidos)
+        ].copy()
+    else:
+        df_abiertos_rank_filtro = pd.DataFrame()
+
+    cant_abiertos_gen = len(df_abiertos_rank_filtro) if not df_abiertos_rank_filtro.empty else 0
     st.markdown(f"### Ranking General de Chats Abiertos (Histórico Pendiente) — {cant_abiertos_gen} chats")
     
-    if not df_abiertos_all.empty:
-        df_rank = df_abiertos_all.copy()
+    if not df_abiertos_rank_filtro.empty:
+        df_rank = df_abiertos_rank_filtro.copy()
 
         agentes_abiertos_unicos = sorted([
             str(a).strip() for a in df_rank["agente_asignado"].dropna().unique() if str(a).strip() != ""
