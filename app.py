@@ -1317,7 +1317,10 @@ def renderizar_alertas_en_vivo():
                         df_criticos_editor,
                         column_config={
                             "atendido": st.column_config.CheckboxColumn("Atendido", default=False),
-                            "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                            "intercom_url": st.column_config.LinkColumn(
+                                "ID Conversación", 
+                                display_text=r".*/(\d+)"  # <--- Extrae y muestra solo el ID numérico
+                            ),
                             "created_at_fmt": st.column_config.TextColumn("Fecha Creación/Derivación", disabled=True),
                             "min_transcurridos": st.column_config.NumberColumn("Min. Transcurridos", disabled=True),
                             "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
