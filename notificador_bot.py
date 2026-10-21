@@ -194,27 +194,32 @@ def procesar_alertas_y_reportes():
     }
 
     # -------------------------------------------------------------
-    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min - Regla del Dashboard)
+    # A. ALERTA INDIVIDUAL (Sin primera respuesta >= X min)
     # -------------------------------------------------------------
     min_indiv_th = float(cfg.get("minutos_alerta_individual", 5.0))
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
     if tel_destino_indiv:
-        # Filtra únicamente chats que NO tengan primera respuesta (primera_respuesta_min IS NULL)
+        # Filtramos chats sin respuesta pero EXCLUYENDO explícitamente a Mónica
         res_activos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, nombre_contacto, primera_respuesta_min, estado")\
+            .select("id, created_at, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
             .is_("primera_respuesta_min", "null")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
+            .not_.ilike("agente_asignado", "%monica%")\
             .execute()
 
         for c in (res_activos.data or []):
-            created_dt = parsear_fecha_utc(c.get("created_at"))
+            agente = str(c.get("agente_asignado", "")).strip().lower()
+            if any(b in agente for b in ["monica", "mónica"]):
+                continue
+
+            # Usamos updated_at si la derivación cambió el registro, o fallback a created_at
+            fecha_referencia = c.get("updated_at") if c.get("agente_asignado") and str(c.get("agente_asignado")).lower() != "monica" else c.get("created_at")
+            created_dt = parsear_fecha_utc(fecha_referencia)
             if not created_dt:
                 continue
 
             min_trans = (now_dt - created_dt).total_seconds() / 60.0
-
-            if min_trans >= min_indiv_th:
                                 
                 # Agregamos la mención visible en el texto
                 msg = (
@@ -250,6 +255,8 @@ def procesar_alertas_y_reportes():
 
         for c in (res_abiertos.data or []):
             agente = str(c.get("agente_asignado", "")).strip()
+            if any(b in agente.lower() for b in ["monica", "mónica", "soporte", "none", "nan"]):
+                continue
 
             created_dt = parsear_fecha_utc(c.get("created_at"))
             if not created_dt:
