@@ -200,7 +200,7 @@ def procesar_alertas_y_reportes():
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
     if tel_destino_indiv:
-        # Filtramos chats sin respuesta pero EXCLUYENDO explícitamente a Mónica
+        # 1. Filtro directo en Supabase excluyendo a Mónica
         res_activos = supabase.table("conversaciones")\
             .select("id, created_at, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
             .is_("primera_respuesta_min", "null")\
@@ -210,17 +210,20 @@ def procesar_alertas_y_reportes():
 
         for c in (res_activos.data or []):
             agente = str(c.get("agente_asignado", "")).strip().lower()
+            
+            # 2. Validación secundaria anti-IA en Python
             if any(b in agente for b in ["monica", "mónica"]):
                 continue
 
-            # Usamos updated_at si la derivación cambió el registro, o fallback a created_at
-            fecha_referencia = c.get("updated_at") if c.get("agente_asignado") and str(c.get("agente_asignado")).lower() != "monica" else c.get("created_at")
-            created_dt = parsear_fecha_utc(fecha_referencia)
+            # Inicia el conteo desde la derivación (updated_at) o creación
+            fecha_ref = c.get("updated_at") or c.get("created_at")
+            created_dt = parsear_fecha_utc(fecha_ref)
             if not created_dt:
                 continue
 
             min_trans = (now_dt - created_dt).total_seconds() / 60.0
-                                
+
+            if min_trans >= min_indiv_th:
                 # Agregamos la mención visible en el texto
                 msg = (
                     f"⚠️ *@todos chat sin 1ra Respuesta (> {int(min_indiv_th)} min)*\n\n"
