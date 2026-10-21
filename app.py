@@ -1229,11 +1229,12 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        COLUMNAS_ALERTAS = "id, created_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto"
+        COLUMNAS_ALERTAS = "id, created_at, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
 
         res = supabase.table("conversaciones")\
             .select(COLUMNAS_ALERTAS)\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+            .not_.ilike("agente_asignado", "%monica%")\
             .order("created_at", desc=True)\
             .limit(100)\
             .execute()
@@ -1252,20 +1253,18 @@ def renderizar_alertas_en_vivo():
         df_base["estado_clean"] = df_base["estado"].fillna("").astype(str).str.strip().str.lower()
         estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
         
+        # 1. Filtramos chats abiertos
         df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
         
-        df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
-        df_activos["intercom_url"] = df_activos["id_str"].apply(
-            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-        )
-        
-        if "canal" in df_activos.columns:
-            df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
-            df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
-        
+        # 2. Exclusión estricta de la IA Mónica (Mantenemos 'Sin Asignar' para que alerte si nadie lo toma)
+        agentes_ia = ["Monica", "monica", "mónica", "monica (bot)"]
+        df_activos["agente_clean"] = df_activos["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
+        df_activos = df_activos[~df_activos["agente_clean"].isin(agentes_ia)].copy()
+
         if not df_activos.empty:
-            created_utc = pd.to_datetime(df_activos["created_at"], errors="coerce", utc=True)
-            df_activos["created_at_dt"] = created_utc.dt.tz_convert("America/Asuncion")
+            # Si el chat fue derivado recientemente, medimos el tiempo transcurrido desde updated_at
+            fecha_ref = pd.to_datetime(df_activos["updated_at"].fillna(df_activos["created_at"]), errors="coerce", utc=True)
+            df_activos["created_at_dt"] = fecha_ref.dt.tz_convert("America/Asuncion")
             df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
             df_activos = df_activos.drop_duplicates(subset=["id"])
             
