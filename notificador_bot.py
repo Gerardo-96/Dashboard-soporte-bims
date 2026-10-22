@@ -200,7 +200,6 @@ def procesar_alertas_y_reportes():
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
     if tel_destino_indiv:
-        # Filtramos chats sin respuesta que estén ABIERTOS y asignados a "Sin Asignar" o vacíos
         res_activos = supabase.table("conversaciones")\
             .select("id, created_at, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
             .is_("primera_respuesta_min", "null")\
@@ -210,13 +209,11 @@ def procesar_alertas_y_reportes():
         for c in (res_activos.data or []):
             agente = str(c.get("agente_asignado", "")).strip().lower()
             
-            # FILTRO ESTRICTO: Solo se evalúa si el agente es "sin asignar", "none", "nan" o está vacío
-            # (Se excluye a Mónica y a cualquier agente que ya tenga asignación automática/manual)
+            # Solo se evalúa si está "sin asignar", vacío o en "soporte"
             es_sin_asignar = agente in ["sin asignar", "none", "nan", "", "soporte"] or "sin asignar" in agente
             if not es_sin_asignar:
                 continue
 
-            # El reloj de espera humana arranca en el momento de derivación (updated_at)
             fecha_ref = c.get("updated_at") or c.get("created_at")
             created_dt = parsear_fecha_utc(fecha_ref)
             if not created_dt:
@@ -244,22 +241,20 @@ def procesar_alertas_y_reportes():
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
-    res_abiertos = supabase.table("conversaciones")\
+    if jid_grupo and hs_grupo_th > 0:
+        res_abiertos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
             .not_.ilike("agente_asignado", "%monica%")\
             .not_.ilike("agente_asignado", "%soporte%")\
             .not_.ilike("agente_asignado", "%sin asignar%")\
-            .not_.ilike("agente_asignado", "%Monica%")\
-            .not_.ilike("agente_asignado", "%Soporte%")\
-            .not_.ilike("agente_asignado", "%Sin asignar%")\
             .not_.ilike("agente_asignado", "%none%")\
             .not_.ilike("agente_asignado", "%nan%")\
             .execute()
 
         for c in (res_abiertos.data or []):
             agente = str(c.get("agente_asignado", "")).strip()
-            if any(b in agente.lower() for b in ["monica", "mónica", "soporte", "none", "nan"]):
+            if any(b in agente.lower() for b in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]):
                 continue
 
             created_dt = parsear_fecha_utc(c.get("created_at"))
@@ -306,7 +301,7 @@ def procesar_alertas_y_reportes():
                     .update({"ultimo_multiplo_notificado": multiplo_actual})\
                     .eq("id", c['id'])\
                     .execute()
-
+                
     # -------------------------------------------------------------
     # C. RESUMEN DIARIO EMAIL
     # -------------------------------------------------------------
