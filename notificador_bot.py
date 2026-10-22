@@ -214,7 +214,8 @@ def procesar_alertas_y_reportes():
             .execute()
 
         for c in (res_activos.data or []):
-            agente = str(c.get("agente_asignado", "")).strip().lower()
+            agente_raw = str(c.get("agente_asignado") or "").strip()
+            agente_lower = agente_raw.lower()
 
             # Descarte de Mónica (IA) y de cualquier agente humano que ya esté asignado
             if any(bot_tag in agente_lower for bot_tag in ["monica", "mónica"]):
@@ -246,16 +247,15 @@ def procesar_alertas_y_reportes():
                 enviar_whatsapp(tel_destino_indiv, msg, mencionar_todos=True)
 
     # -------------------------------------------------------------
-    # B. ALERTA GRUPAL RECURRENTE (Múltiplos de X hs HÁBILES: 5h, 10h, 15h...)
+    # B. ALERTA GRUPAL RECURRENTE (Múltiplos de X hs HÁBILES)
     # -------------------------------------------------------------
-    hs_grupo_th = float(cfg.get("horas_alerta_grupo", 5.0))
+    hs_grupo_th = float(cfg.get("horas_alerta_grupo", 3.0))
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
-    print(f"📌 [PUNTO DE CONTROL 1] LLegó a Sección B. JID: '{jid_grupo}' | Umbral: {hs_grupo_th}")
+    print(f"📌 [PUNTO DE CONTROL 1] Llegó a Sección B. JID: '{jid_grupo}' | Umbral: {hs_grupo_th}")
     
     if jid_grupo and hs_grupo_th > 0:
-        # Consulta DIRECTA y LIMPIA a Supabase
         res_abiertos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
@@ -267,10 +267,6 @@ def procesar_alertas_y_reportes():
         for c in chats_recuperados:
             agente_raw = str(c.get("agente_asignado") or "").strip()
             agente_lower = agente_raw.lower()
-
-            # Descarte de IA, bots y chats sin asignar
-            if any(b in agente_lower for b in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]):
-                continue
 
             created_dt = parsear_fecha_utc(c.get("created_at"))
             if not created_dt:
@@ -285,18 +281,19 @@ def procesar_alertas_y_reportes():
 
             print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente_raw}' | Hs Hábiles: {hs_habiles} | Múltiplo actual: {multiplo_actual} | Último notificado: {ultimo_multiplo}")
 
-            # Si alcanzó un nuevo múltiplo (1x, 2x, 3x...), dispara el aviso correspondiente
+            # Descarte de IA, bots y chats sin asignar (sin la cadena vacía)
+            if not agente_lower or any(b in agente_lower for b in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]):
+                print(f"⏭️ [OMITIDO BOT/SIN ASIGNAR] Chat {c['id']} ({agente_raw})")
+                continue
+
+            # Si alcanzó un nuevo múltiplo (1x, 2x, 3x...), dispara la alerta correspondiente
             if multiplo_actual >= 1 and multiplo_actual > ultimo_multiplo:
-                # ---------------------------------------------------------
-                # BÚSQUEDA AISLADA Y LIMPIA DEL TELÉFONO DE ESTE CHAT
-                # ---------------------------------------------------------
                 tel_agente = None
                 
-                # 1. Coincidencia exacta por nombre completo
+                # Búsqueda limpia del teléfono del agente
                 if agente_lower in mapa_tels:
                     tel_agente = mapa_tels[agente_lower]
                 else:
-                    # 2. Coincidencia por primer nombre o coincidencia parcial
                     primer_nombre = agente_lower.split()[0] if agente_lower.split() else agente_lower
                     for nom_usr, tel_usr in mapa_tels.items():
                         if primer_nombre in nom_usr or nom_usr in agente_lower:
