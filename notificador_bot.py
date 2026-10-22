@@ -248,6 +248,8 @@ def procesar_alertas_y_reportes():
     minutos_grupo_th = hs_grupo_th * 60.0
     jid_grupo = cfg.get("jid_grupo_whatsapp")
 
+    print(f"📌 [PUNTO DE CONTROL 1] LLegó a Sección B. JID: '{jid_grupo}' | Umbral: {hs_grupo_th}")
+    
     if jid_grupo and hs_grupo_th > 0:
         res_abiertos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
