@@ -217,7 +217,7 @@ def procesar_alertas_y_reportes():
             agente = str(c.get("agente_asignado", "")).strip().lower()
             
             # Solo se evalúa si está "sin asignar", vacío o en "soporte"
-            es_sin_asignar = agente in ["sin asignar", "none", "nan", "", "soporte"] or "sin asignar" in agente
+            es_sin_asignar = agente in ["sin asignar", "none", "nan"] or "sin asignar" in agente
             if not es_sin_asignar:
                 continue
 
