@@ -42,7 +42,11 @@ ESTADOS_CERRADOS = ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cer
 # ==========================================
 
 def es_horario_laboral(now_dt):
-    """Verifica si es de Lunes a Viernes entre las 08:00 y las 18:00 hs (Paraguay) y NO es feriado."""
+    """
+    Verifica si estamos en jornada laboral (Paraguay) y NO es feriado:
+    - Lunes a Viernes: 08:00 a 18:00 hs
+    - Sábados: 09:00 a 12:00 hs
+    """
     fecha_str = now_dt.strftime("%Y-%m-%d")
     
     # 1. Si hoy es feriado, se inhabilita el envío de notificaciones
@@ -52,10 +56,13 @@ def es_horario_laboral(now_dt):
     dia_semana = now_dt.weekday()
     hora_actual = now_dt.time()
     
-    es_dia_habil = dia_semana in [0, 1, 2, 3, 4]
-    es_hora_habil = time(0, 0, 0) <= hora_actual <= time(23, 59, 59)
-    
-    return es_dia_habil and es_hora_habil
+    # 2. Evaluación de franja según el día de la semana
+    if dia_semana in [0, 1, 2, 3, 4]:  # Lunes a Viernes
+        return time(8, 0, 0) <= hora_actual <= time(18, 0, 0)
+    elif dia_semana == 5:  # Sábado
+        return time(9, 0, 0) <= hora_actual <= time(12, 0, 0)
+        
+    return False
 
 def parsear_fecha_utc(fecha_raw):
     """Convierte de forma segura un string ISO/UTC a datetime de Paraguay, o retorna None."""
