@@ -278,7 +278,7 @@ def procesar_alertas_y_reportes():
             multiplo_actual = int(minutos_habiles // minutos_grupo_th)
             ultimo_multiplo = int(c.get("ultimo_multiplo_notificado") or 0)
 
-            print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente}' | Hs Hábiles: {hs_habiles} | Múltiplo actual: {multiplo_actual} | Último notificado: {ultimo_multiplo}")
+            print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente_raw}' | Hs Hábiles: {hs_habiles} | Múltiplo actual: {multiplo_actual} | Último notificado: {ultimo_multiplo}")
 
             # Si alcanzó un nuevo múltiplo (1x, 2x, 3x...), dispara el aviso correspondiente
             if multiplo_actual >= 1 and multiplo_actual > ultimo_multiplo:
