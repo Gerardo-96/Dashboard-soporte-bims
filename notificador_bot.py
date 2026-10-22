@@ -261,8 +261,11 @@ def procesar_alertas_y_reportes():
             .not_.ilike("agente_asignado", "%nan%")\
             .execute()
 
-        for c in (res_abiertos.data or []):
-            agente_raw = str(c.get("agente_asignado", "")).strip()
+        chats_recuperados = res_abiertos.data or []
+        print(f"📌 [PUNTO 2] Supabase devolvió {len(chats_recuperados)} chats abiertos.")
+
+        for c in chats_recuperados:
+            agente_raw = str(c.get("agente_asignado") or "").strip()
             agente_lower = agente_raw.lower()
 
             # Descarte de IA, bots y chats sin asignar
