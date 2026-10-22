@@ -58,7 +58,7 @@ def es_horario_laboral(now_dt):
     
     # 2. Evaluación de franja según el día de la semana
     if dia_semana in [0, 1, 2, 3, 4]:  # Lunes a Viernes
-        return time(0, 0, 0) <= hora_actual <= time(18, 0, 0)
+        return time(8, 0, 0) <= hora_actual <= time(18, 0, 0)
     elif dia_semana == 5:  # Sábado
         return time(9, 0, 0) <= hora_actual <= time(12, 0, 0)
         
@@ -231,7 +231,7 @@ def procesar_alertas_y_reportes():
             if min_trans >= min_indiv_th:
                 # Agregamos la mención visible en el texto
                 msg = (
-                    f"⚠️ *@todos chat sin 1ra Respuesta (> {int(min_indiv_th)} min)*\n\n"
+                    f"⚠️ *@todos chat sin 1ra Respuesta*\n\n"
                     f"*ID:* {c['id']}\n"
                     f"*Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
