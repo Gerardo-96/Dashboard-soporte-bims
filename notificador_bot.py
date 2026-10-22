@@ -221,10 +221,12 @@ def procesar_alertas_y_reportes():
             if any(bot_tag in agente_lower for bot_tag in ["monica", "mónica"]):
                 continue
                 
-            # Solo se evalúa si está "sin asignar", vacío o en "soporte"
-            es_sin_asignar = agente in ["sin asignar", "none", "nan"] or "sin asignar" in agente
-            if not es_sin_asignar:
-                continue
+            # 2. Evaluación de 'Sin Asignar': Solo se evalúa si NO tiene agente humano asignado
+            es_sin_asignar = (
+                not agente_lower or 
+                agente_lower in ["sin asignar", "none", "nan", "soporte"] or 
+                "sin asignar" in agente_lower
+            )
 
             fecha_ref = c.get("updated_at") or c.get("created_at")
             created_dt = parsear_fecha_utc(fecha_ref)
