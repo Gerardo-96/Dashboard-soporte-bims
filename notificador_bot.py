@@ -58,7 +58,7 @@ def es_horario_laboral(now_dt):
     
     # 2. Evaluación de franja según el día de la semana
     if dia_semana in [0, 1, 2, 3, 4]:  # Lunes a Viernes
-        return time(8, 0, 0) <= hora_actual <= time(18, 0, 0)
+        return time(0, 0, 0) <= hora_actual <= time(18, 0, 0)
     elif dia_semana == 5:  # Sábado
         return time(9, 0, 0) <= hora_actual <= time(12, 0, 0)
         
