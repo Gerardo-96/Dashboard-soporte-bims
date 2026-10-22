@@ -53,7 +53,7 @@ def es_horario_laboral(now_dt):
     hora_actual = now_dt.time()
     
     es_dia_habil = dia_semana in [0, 1, 2, 3, 4]
-    es_hora_habil = time(8, 0, 0) <= hora_actual <= time(18, 0, 0)
+    es_hora_habil = time(0, 0, 0) <= hora_actual <= time(23, 59, 59)
     
     return es_dia_habil and es_hora_habil
 
