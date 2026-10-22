@@ -279,13 +279,27 @@ def procesar_alertas_y_reportes():
 
             # Si alcanzó un nuevo múltiplo (1x, 2x, 3x...), dispara el aviso correspondiente
             if multiplo_actual >= 1 and multiplo_actual > ultimo_multiplo:
-                tel_agente = mapa_tels.get(agente.lower())
-                tag_agente = f"@{tel_agente}" if tel_agente else f"*{agente}*"
+                # ---------------------------------------------------------
+                # BÚSQUEDA AISLADA Y LIMPIA DEL TELÉFONO DE ESTE CHAT
+                # ---------------------------------------------------------
+                tel_agente = None
+                
+                # 1. Coincidencia exacta por nombre completo
+                if agente_lower in mapa_tels:
+                    tel_agente = mapa_tels[agente_lower]
+                else:
+                    # 2. Coincidencia por primer nombre o coincidencia parcial
+                    primer_nombre = agente_lower.split()[0] if agente_lower.split() else agente_lower
+                    for nom_usr, tel_usr in mapa_tels.items():
+                        if primer_nombre in nom_usr or nom_usr in agente_lower:
+                            tel_agente = tel_usr
+                            break
+
+                tag_agente = f"@{tel_agente}" if tel_agente else f"*{agente_raw}*"
                 menciones_list = [tel_agente] if tel_agente else []
 
                 ai_title = c.get("ai_title") or "Sin título"
 
-                # Encabezado dinámico según el número de insistencia
                 if multiplo_actual == 1:
                     header_alerta = "🚨 *ALERTA DE SLA: Chat Pendiente*"
                 else:
