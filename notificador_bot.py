@@ -251,14 +251,10 @@ def procesar_alertas_y_reportes():
     print(f"📌 [PUNTO DE CONTROL 1] LLegó a Sección B. JID: '{jid_grupo}' | Umbral: {hs_grupo_th}")
     
     if jid_grupo and hs_grupo_th > 0:
+        # Consulta DIRECTA y LIMPIA a Supabase
         res_abiertos = supabase.table("conversaciones")\
             .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
-            .not_.ilike("agente_asignado", "%monica%")\
-            .not_.ilike("agente_asignado", "%soporte%")\
-            .not_.ilike("agente_asignado", "%sin asignar%")\
-            .not_.ilike("agente_asignado", "%none%")\
-            .not_.ilike("agente_asignado", "%nan%")\
             .execute()
 
         chats_recuperados = res_abiertos.data or []
