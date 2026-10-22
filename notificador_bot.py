@@ -265,7 +265,7 @@ def procesar_alertas_y_reportes():
             agente_lower = agente_raw.lower()
 
             # Descarte de IA, bots y chats sin asignar
-            if any(b in agente_lower for b in ["monica", "mónica", "soporte", "sin asignar", "none", "nan", ""]):
+            if any(b in agente_lower for b in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]):
                 continue
 
             created_dt = parsear_fecha_utc(c.get("created_at"))
