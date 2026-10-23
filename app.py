@@ -1900,7 +1900,72 @@ with tab_operativo:
     else:
         st.info("No hay chats registrados en la base de datos para mostrar métricas por agente.")
 
+    # ==============================================================================
+    # LISTADO DETALLADO: CHATS CON PRIMERA RESPUESTA FUERA DE SLA
+    # ==============================================================================
     st.markdown("---")
+
+    # Umbral de SLA para 1ra respuesta (puedes ajustar el valor por defecto si usas otro)
+    umbral_sla_1ra_resp = float(st.session_state.get("alerta_nuevo_th", 5.0))
+
+    if "df_activos" in locals() and not df_activos.empty:
+        # 1. Aseguramos conversión numérica
+        df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
+    
+        # 2. Filtrar chats que SUPERAN el SLA de 1ra respuesta (atendidos tarde o aún sin responder)
+        #    - Chats con respuesta pero > umbral
+        #    - Chats sin respuesta cuyo tiempo transcurrido ya superó el umbral
+        atendidos_tarde = df_activos["1ra_resp_num"] > umbral_sla_1ra_resp
+        sin_resp_fuera_sla = df_activos["1ra_resp_num"].isna() & (df_activos["min_transcurridos"] >= umbral_sla_1ra_resp)
+    
+        df_fuera_sla = df_activos[atendidos_tarde | sin_resp_fuera_sla].copy()
+
+        with st.expander(f"⚠️ Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_fuera_sla)}]", expanded=False):
+            if not df_fuera_sla.empty:
+                # Construir URL de Intercom si no existe
+                if "intercom_url" not in df_fuera_sla.columns:
+                    df_fuera_sla["id_str"] = df_fuera_sla["id"].astype(str).str.strip()
+                    df_fuera_sla["intercom_url"] = df_fuera_sla["id_str"].apply(
+                        lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+                    )
+
+                # Clasificación de Estado SLA para mostrar en la tabla
+                df_fuera_sla["estado_sla"] = df_fuera_sla["1ra_resp_num"].apply(
+                    lambda x: f"Atendido tarde ({round(x, 1)} min)" if pd.notna(x) else "🚨 Pendiente (Sin respuesta)"
+                )
+
+                cols_mostrar = [
+                    "intercom_url", "nombre_contacto", "tenant", 
+                    "agente_asignado", "estado_sla", "created_at_fmt", "estado"
+                ]
+            
+                if "canal" in df_fuera_sla.columns:
+                    cols_mostrar.append("canal")
+
+                df_mostrar = df_fuera_sla.reindex(columns=cols_mostrar).dropna(how="all", axis=1)
+
+                st.dataframe(
+                    df_mostrar,
+                    column_config={
+                        "intercom_url": st.column_config.LinkColumn(
+                            "ID Conversación", 
+                            display_text=r".*/(\d+)"
+                        ),
+                        "nombre_contacto": st.column_config.TextColumn("Contacto"),
+                        "tenant": st.column_config.TextColumn("Tenant"),
+                        "agente_asignado": st.column_config.TextColumn("Agente Asignado"),
+                        "estado_sla": st.column_config.TextColumn("Estado SLA 1ra Resp."),
+                        "created_at_fmt": st.column_config.TextColumn("Fecha Derivación"),
+                        "estado": st.column_config.TextColumn("Estado Chat"),
+                        "canal": st.column_config.TextColumn("Canal")
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+            else:
+                st.success("🟢 ¡Excelente! Todos los chats abiertos están dentro del objetivo de SLA para la primera respuesta.")
+    
+        st.markdown("---")
 
     # RANKING DE CHATS ABIERTOS FILTRADO POR FECHA
     if f_desde_v == f_hasta_v:
