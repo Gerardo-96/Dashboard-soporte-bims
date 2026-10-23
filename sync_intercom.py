@@ -153,23 +153,27 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             statistics = conv.get("statistics", {}) or {}
 
             # =========================================================================
-            # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA (DERIVACIÓN DEL BOT/EQUIPO)
+            # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA HUMANA (DERIVACIÓN A 'SIN ASIGNAR')
             # =========================================================================
-            first_assignment_at = statistics.get("first_assignment_at") or statistics.get("first_assignment_to_team_at")
+            ts_inicio_ref = None
             
-            # Respaldo: Buscar en conversation_parts la primera asignación a un EQUIPO (team)
-            if not first_assignment_at:
-                parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
-                team_assignments = [
-                    p.get("created_at") for p in parts 
-                    if p.get("part_type") == "assignment" and p.get("assigned_to", {}).get("type") == "team"
-                ]
-                if team_assignments:
-                    first_assignment_at = min(team_assignments)
+            # Recorremos conversation_parts buscando la primera derivación/asignación a la fila humana
+            parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
+            for p in parts:
+                part_type = p.get("part_type")
+                assigned_to_type = p.get("assigned_to", {}).get("type") if isinstance(p.get("assigned_to"), dict) else ""
+                
+                # Detectamos cuando pasó a un equipo/team o a 'Sin Asignar' (unassigned)
+                if part_type == "assignment":
+                    ts_inicio_ref = p.get("created_at")
+                    break  # Tomamos la marca de tiempo de la primera derivación humana
 
-            if first_assignment_at:
-                ts_inicio_ref = first_assignment_at
-            else:
+            # Si no hubo evento 'assignment' en las partes, buscamos en statistics
+            if not ts_inicio_ref:
+                ts_inicio_ref = statistics.get("first_assignment_at") or statistics.get("first_assignment_to_team_at")
+
+            # Fallback final: Si el cliente nunca interactuó con la IA y entró directo, usamos created_at
+            if not ts_inicio_ref:
                 ts_inicio_ref = created_at_orig
 
             inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
@@ -179,17 +183,24 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 continue
 
             # =========================================================================
-            # 2. PRIMERA RESPUESTA HUMANA
+            # 2. PRIMERA RESPUESTA HUMANA (CALCULADA DESDE LA DERIVACIÓN)
             # =========================================================================
             first_admin_reply = statistics.get("first_admin_reply_at")
-            time_to_reply = statistics.get("time_to_admin_reply")
 
+            # Si no viene en statistics, buscamos el primer comentario de un Admin humano en las partes
+            if not first_admin_reply and parts:
+                for p in parts:
+                    if p.get("part_type") == "comment" and p.get("author", {}).get("type") in ["admin", "user_admin"]:
+                        if not p.get("author", {}).get("from_ai_agent", False):
+                            first_admin_reply = p.get("created_at")
+                            break
+
+            # CÁLCULO EXACTO: Marca de tiempo 1er respuesta humana MINUS Marca de tiempo derivación
             if first_admin_reply and first_admin_reply >= ts_inicio_ref:
                 secs_espera = first_admin_reply - ts_inicio_ref
-                primera_respuesta_min = round(secs_espera / 60, 2)
-            elif time_to_reply is not None:
-                primera_respuesta_min = round(time_to_reply / 60, 2)
+                primera_respuesta_min = round(secs_espera / 60.0, 2)
             else:
+                # Sigue en espera sin responder por un humano
                 primera_respuesta_min = None
 
             # =========================================================================
