@@ -1905,47 +1905,59 @@ with tab_operativo:
     # ==============================================================================
     st.markdown("---")
 
-    # Umbral de SLA para 1ra respuesta (puedes ajustar el valor por defecto si usas otro)
-    umbral_sla_1ra_resp = float(st.session_state.get("alerta_nuevo_th", 5.0))
+    # Tomamos el umbral configurado de SLA 1ra Respuesta
+    umbral_sla_1ra_resp = float(st.session_state.get("sla_1ra_th", 2.0))
 
-    if "df_activos" in locals() and not df_activos.empty:
-        # 1. Aseguramos conversión numérica
-        df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
-    
-        # 2. Filtrar chats que SUPERAN el SLA de 1ra respuesta (atendidos tarde o aún sin responder)
-        #    - Chats con respuesta pero > umbral
-        #    - Chats sin respuesta cuyo tiempo transcurrido ya superó el umbral
-        atendidos_tarde = df_activos["1ra_resp_num"] > umbral_sla_1ra_resp
-        sin_resp_fuera_sla = df_activos["1ra_resp_num"].isna() & (df_activos["min_transcurridos"] >= umbral_sla_1ra_resp)
-    
-        df_fuera_sla = df_activos[atendidos_tarde | sin_resp_fuera_sla].copy()
+    if not df_filtered.empty:
+        df_fuera_eval = df_filtered.copy()
+        
+        # 1. Conversion numerica del tiempo de primera respuesta
+        df_fuera_eval["1ra_resp_num"] = pd.to_numeric(df_fuera_eval["primera_respuesta_min"], errors="coerce")
+        
+        # 2. Excluimos bots (Monica), sin asignar y conversaciones fuera de horario
+        agente_clean_fuera = df_fuera_eval.get("agente_asignado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
+        por_agente_fuera = df_fuera_eval.get("por_agente", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
+        
+        es_agente_valido_fuera = (
+            (por_agente_fuera == "no excluido") &
+            ~agente_clean_fuera.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"])
+        )
+        es_horario_valido_fuera = df_fuera_eval["horario_evaluado"] != "fuera de horario"
 
-        with st.expander(f"⚠️ Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_fuera_sla)}]", expanded=False):
-            if not df_fuera_sla.empty:
-                # Construir URL de Intercom si no existe
-                if "intercom_url" not in df_fuera_sla.columns:
-                    df_fuera_sla["id_str"] = df_fuera_sla["id"].astype(str).str.strip()
-                    df_fuera_sla["intercom_url"] = df_fuera_sla["id_str"].apply(
-                        lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
-                    )
+        df_fuera_eval = df_fuera_eval[es_agente_valido_fuera & es_horario_valido_fuera].copy()
 
-                # Clasificación de Estado SLA para mostrar en la tabla
-                df_fuera_sla["estado_sla"] = df_fuera_sla["1ra_resp_num"].apply(
-                    lambda x: f"Atendido tarde ({round(x, 1)} min)" if pd.notna(x) else "🚨 Pendiente (Sin respuesta)"
+        # 3. Filtrar chats fuera de objetivo SLA
+        #    - Atendidos tarde: la primera respuesta tardo mas que el umbral
+        #    - Aún sin responder: primera_respuesta_min es NaN y sigue abierto
+        atendidos_tarde = df_fuera_eval["1ra_resp_num"] > umbral_sla_1ra_resp
+        
+        # Para medir espera de los sin responder
+        now_dt_fuera = pd.Timestamp.now(tz="America/Asuncion")
+        calc_min_fuera = (now_dt_fuera - df_fuera_eval["created_at_dt"]).dt.total_seconds() / 60.0
+        df_fuera_eval["min_espera_calc"] = calc_min_fuera.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
+        
+        sin_resp_superado = df_fuera_eval["1ra_resp_num"].isna() & (df_fuera_eval["min_espera_calc"] >= umbral_sla_1ra_resp) & (~df_fuera_eval["es_cerrado"])
+
+        df_criticos_fuera = df_fuera_eval[atendidos_tarde | sin_resp_superado].copy()
+
+        with st.expander(f"⚠️ Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_criticos_fuera)}]", expanded=False):
+            if not df_criticos_fuera.empty:
+                # Clasificacion clara para cada registro
+                df_criticos_fuera["estado_sla"] = df_criticos_fuera.apply(
+                    lambda r: f"Atendido tarde ({round(r['1ra_resp_num'], 1)} min)" if pd.notna(r['1ra_resp_num']) else f"🚨 Pendiente ({r['min_espera_calc']} min)",
+                    axis=1
                 )
 
-                cols_mostrar = [
+                cols_mostrar_fuera = [
                     "intercom_url", "nombre_contacto", "tenant", 
                     "agente_asignado", "estado_sla", "created_at_fmt", "estado"
                 ]
-            
-                if "canal" in df_fuera_sla.columns:
-                    cols_mostrar.append("canal")
-
-                df_mostrar = df_fuera_sla.reindex(columns=cols_mostrar).dropna(how="all", axis=1)
+                
+                if "canal" in df_criticos_fuera.columns:
+                    cols_mostrar_fuera.append("canal")
 
                 st.dataframe(
-                    df_mostrar,
+                    df_criticos_fuera.reindex(columns=cols_mostrar_fuera).dropna(how="all", axis=1),
                     column_config={
                         "intercom_url": st.column_config.LinkColumn(
                             "ID Conversación", 
@@ -1955,7 +1967,7 @@ with tab_operativo:
                         "tenant": st.column_config.TextColumn("Tenant"),
                         "agente_asignado": st.column_config.TextColumn("Agente Asignado"),
                         "estado_sla": st.column_config.TextColumn("Estado SLA 1ra Resp."),
-                        "created_at_fmt": st.column_config.TextColumn("Fecha Derivación"),
+                        "created_at_fmt": st.column_config.TextColumn("Fecha Creación/Derivación"),
                         "estado": st.column_config.TextColumn("Estado Chat"),
                         "canal": st.column_config.TextColumn("Canal")
                     },
@@ -1963,7 +1975,7 @@ with tab_operativo:
                     use_container_width=True
                 )
             else:
-                st.success("🟢 ¡Excelente! Todos los chats abiertos están dentro del objetivo de SLA para la primera respuesta.")
+                st.success("🟢 ¡Excelente! Todos los chats evaluados en este período cumplen con el SLA de primera respuesta.")
     
         st.markdown("---")
 
