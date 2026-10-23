@@ -228,6 +228,9 @@ def procesar_alertas_y_reportes():
                 "sin asignar" in agente_lower
             )
 
+            if not es_sin_asignar:
+                continue
+
             fecha_ref = c.get("updated_at") or c.get("created_at")
             created_dt = parsear_fecha_utc(fecha_ref)
             if not created_dt:
