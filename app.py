@@ -347,7 +347,7 @@ def renderizar_panel_carga_asignador():
 
         df_c = pd.DataFrame(data_cargas)
 
-        # Garantizar presencia de todas las columnas necesarias para evitar KeyError
+        # Garantizar presencia de todas las columnas necesarias
         cols_requeridas = ["id", "agente_asignado", "estado", "fecha_cierre", "updated_at"]
         for col in cols_requeridas:
             if col not in df_c.columns:
@@ -372,7 +372,7 @@ def renderizar_panel_carga_asignador():
         df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
         df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
 
-        # 4. Agrupamiento por agente
+        # 4. Agrupamiento por agente con el ORDEN DE COLUMNAS SOLICITADO
         resumen = []
         for agente, grp in df_c.groupby("agente_clean"):
             pendientes = int(grp["es_abierto_actual"].sum())
@@ -382,15 +382,16 @@ def renderizar_panel_carga_asignador():
             if total_asignados > 0:
                 resumen.append({
                     "Agente de Soporte": agente,
-                    "Pendientes (Abiertos) 🔴": pendientes,
+                    "Total Asignados Hoy 📋": total_asignados,
                     "Cerrados (Hoy) 🟢": cerrados_hoy,
-                    "Total Asignados Hoy 📋": total_asignados
+                    "Pendientes (Abiertos) 🔴": pendientes
                 })
 
         df_resumen = pd.DataFrame(resumen)
 
         if not df_resumen.empty:
-            df_resumen = df_resumen.sort_values(by="Pendientes (Abiertos) 🔴", ascending=False)
+            # ORDENAMIENTO POR DEFECTO: Por Total Asignados Hoy de forma descendente
+            df_resumen = df_resumen.sort_values(by="Total Asignados Hoy 📋", ascending=False)
 
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Chats Pendientes", df_resumen["Pendientes (Abiertos) 🔴"].sum())
@@ -399,13 +400,14 @@ def renderizar_panel_carga_asignador():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
+            # Muestra la tabla en la nueva secuencia de columnas definida
             st.dataframe(
                 df_resumen,
                 column_config={
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
-                    "Total Asignados Hoy 📋": st.column_config.NumberColumn("Total Asignados Hoy"),
+                    "Total Asignados Hoy 📋": st.column_config.NumberColumn("Total Asignados Hoy", help="Total gestionados durante la jornada"),
                     "Cerrados (Hoy) 🟢": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día de hoy"),
-                    "Pendientes (Abiertos) 🔴": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados en este momento")
+                    "Pendientes (Abiertos) 🔴": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados pendientes en este momento")
                 },
                 hide_index=True,
                 use_container_width=True
