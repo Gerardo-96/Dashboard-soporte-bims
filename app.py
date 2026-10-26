@@ -278,6 +278,111 @@ if not st.session_state["user_authenticated"]:
 # FUNCIONES AUXILIARES DE TIEMPOS Y REGLAS DE NEGOCIO
 # ==========================================
 
+# ==========================================
+# CONSULTA GLOBAL CACHEADA DE CARGA (MÁXIMO 2 PETICIONES/MIN A SUPABASE)
+# ==========================================
+@st.cache_data(ttl=60, show_spinner=False)
+def obtener_cargas_agentes_db(hoy_inicio_utc):
+    """
+    Recupera chats abiertos y cerrados hoy.
+    El resultado se guarda 60 segundos en RAM del servidor para todas las sesiones.
+    """
+    res_abiertos = supabase.table("conversaciones")\
+        .select("id, agente_asignado, estado")\
+        .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+        .execute()
+
+    res_cerrados_hoy = supabase.table("conversaciones")\
+        .select("id, agente_asignado, estado")\
+        .in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+        .gte("fecha_cierre", hoy_inicio_utc)\
+        .execute()
+
+    return (res_abiertos.data or []) + (res_cerrados_hoy.data or [])
+
+# ==========================================
+# FRAGMENTO DE CARGA DE AGENTES EN VIVO
+# ==========================================
+@st.fragment(run_every=60)
+def renderizar_panel_carga_asignador():
+    tz_py = timezone(timedelta(hours=-3))
+    now_dt = datetime.now(tz_py)
+
+    # Validar jornada laboral (Lunes a Viernes de 08:00 a 18:00 hs PY)
+    fecha_str = now_dt.strftime("%Y-%m-%d")
+    dia_semana = now_dt.weekday()
+    hora_actual = now_dt.time()
+
+    if (
+        fecha_str in FERIADOS
+        or dia_semana not in [0, 1, 2, 3, 4]
+        or not (time(8, 0, 0) <= hora_actual <= time(18, 0, 0))
+    ):
+        st.info(f"⏸️ **Panel pausado fuera de jornada laboral.** Horario operativo: L-V de 08:00 a 18:00 hs (PY). Hora actual: {now_dt.strftime('%H:%M:%S')} hs.")
+        return
+
+    try:
+        hoy_inicio_utc = now_dt.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        # Llama a la función cacheada (no satura la BD)
+        data_cargas = obtener_cargas_agentes_db(hoy_inicio_utc)
+
+        if not data_cargas:
+            st.info("No hay conversaciones activas ni registradas el día de hoy.")
+            return
+
+        df_c = pd.DataFrame(data_cargas)
+
+        # Limpieza de nombres y descarte de bots
+        df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+        agentes_omitir = ["monica", "mónica", "monica (bot)", "soporte", "none", "nan", ""]
+        df_c = df_c[~df_c["agente_clean"].str.lower().isin(agentes_omitir)]
+
+        estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+        df_c["es_cerrado"] = df_c["estado"].fillna("").astype(str).str.strip().str.lower().isin(estados_cerrados)
+
+        resumen = []
+        for agente, grp in df_c.groupby("agente_clean"):
+            pendientes = int((~grp["es_cerrado"]).sum())
+            cerrados_hoy = int(grp["es_cerrado"].sum())
+            total_asignados = pendientes + cerrados_hoy
+
+            resumen.append({
+                "Agente de Soporte": agente,
+                "Pendientes (Abiertos) 🔴": pendientes,
+                "Cerrados (Hoy) 🟢": cerrados_hoy,
+                "Total Asignados Hoy 📋": total_asignados
+            })
+
+        df_resumen = pd.DataFrame(resumen)
+
+        if not df_resumen.empty:
+            df_resumen = df_resumen.sort_values(by="Pendientes (Abiertos) 🔴", ascending=False)
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Chats Pendientes", df_resumen["Pendientes (Abiertos) 🔴"].sum())
+            col2.metric("Total Cerrados Hoy", df_resumen["Cerrados (Hoy) 🟢"].sum())
+            col3.metric("Última actualización", now_dt.strftime("%H:%M:%S hs"))
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            st.dataframe(
+                df_resumen,
+                column_config={
+                    "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
+                    "Pendientes (Abiertos) 🔴": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados en este momento"),
+                    "Cerrados (Hoy) 🟢": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día"),
+                    "Total Asignados Hoy 📋": st.column_config.NumberColumn("Total Asignados Hoy")
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+        else:
+            st.info("No hay asignaciones registradas para agentes humanos el día de hoy.")
+
+    except Exception as e:
+        st.error(f"Error consultando carga en tiempo real: {e}")
+
 def obtener_fecha_local_hoy():
     """Retorna la fecha actual exacta en Paraguay (UTC-3)."""
     tz_py = timezone(timedelta(hours=-3))
@@ -1204,8 +1309,9 @@ else:
 
 st.markdown(badge_html, unsafe_allow_html=True)
 
-tab_operativo, tab_resumen, tab_admin, tab_faq = st.tabs([
+tab_operativo, tab_carga_vivo, tab_resumen, tab_admin, tab_faq = st.tabs([
     "Control Operativo & SLA", 
+    "Distribución de Carga",
     "Resumen de Chats & Agentes", 
     "Administración & Configuracion",
     "FAQ"
@@ -2139,6 +2245,11 @@ with tab_operativo:
             st.caption("Selecciona al menos un Tenant o Agente arriba para desplegar los resultados.")
     else:
         st.info("Sin datos para el buscador.")
+
+with tab_carga_vivo:
+    st.markdown("### 📊 Distribución y Carga de Trabajo del Equipo (Tiempo Real)")
+    st.caption("Panel en vivo pensado para el asignador. Muestra la cantidad de chats abiertos activos y resueltos hoy por cada agente.")
+    renderizar_panel_carga_asignador()
 
 with tab_resumen:
     f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
