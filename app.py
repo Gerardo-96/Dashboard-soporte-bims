@@ -399,9 +399,9 @@ def renderizar_panel_carga_asignador():
                 df_resumen,
                 column_config={
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
-                    "Total Asignados Hoy 📋": st.column_config.NumberColumn("Total Asignados Hoy")
+                    "Total Asignados Hoy 📋": st.column_config.NumberColumn("Total Asignados Hoy"),
                     "Cerrados (Hoy) 🟢": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día de hoy"),
-                    "Pendientes (Abiertos) 🔴": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados en este momento"),
+                    "Pendientes (Abiertos) 🔴": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados en este momento")
                 },
                 hide_index=True,
                 use_container_width=True
