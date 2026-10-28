@@ -452,7 +452,7 @@ def renderizar_panel_carga_asignador():
                 plot_bgcolor="#1e293b",
                 font=dict(color="#cbd5e1", size=12),
                 xaxis=dict(gridcolor="#334155", title=None),
-                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats", allowdecay=False),
+                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats", allowdecimals=False),
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
