@@ -279,33 +279,41 @@ if not st.session_state["user_authenticated"]:
 # ==========================================
 
 # ==========================================
-# CONSULTA GLOBAL CACHEADA DE CARGA (MÁXIMO 2 PETICIONES/MIN A SUPABASE)
+# CONSULTA GLOBAL CACHEADA DE CARGA (CORREGIDA PARA MAYÚSCULAS/MINÚSCULAS)
 # ==========================================
 @st.cache_data(ttl=30, show_spinner=False)
-def obtener_cargas_agentes_db():
+def obtener_cargas_agentes_db(hoy_inicio_utc):
     """
-    Calcula la fecha de inicio del día de hoy internamente para evitar que
-    el caché de Streamlit se congele entre días.
+    Recupera chats abiertos y cerrados hoy manejando variantes de mayúsculas/minúsculas.
     """
-    tz_py = timezone(timedelta(hours=-3))
-    now_dt = datetime.now(tz_py)
-    hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Incluimos las variantes con mayúscula inicial que están guardadas en Supabase ("Cerrado", "Closed", etc.)
+    estados_cerrados_list = [
+        "cerrado", "closed", "resolved", "resuelto", "snoozed",
+        "Cerrado", "Closed", "Resolved", "Resuelto", "Snoozed"
+    ]
 
     # 1. Chats abiertos actualmente
     res_abiertos = supabase.table("conversaciones")\
         .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
-        .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+        .not_.in_("estado", estados_cerrados_list)\
         .execute()
 
-    # 2. Chats cerrados o actualizados hoy
+    # 2. Chats cerrados hoy (filtrados desde el inicio del día local en UTC)
     res_cerrados_hoy = supabase.table("conversaciones")\
         .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
-        .in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+        .in_("estado", estados_cerrados_list)\
+        .gte("fecha_cierre", hoy_inicio_utc)\
+        .execute()
+
+    # 3. Respaldo para chats cerrados cuya fecha_cierre sea NULL
+    res_cerrados_respaldo = supabase.table("conversaciones")\
+        .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
+        .in_("estado", estados_cerrados_list)\
+        .is_("fecha_cierre", "null")\
         .gte("updated_at", hoy_inicio_utc)\
         .execute()
 
-    todos = (res_abiertos.data or []) + (res_cerrados_hoy.data or [])
+    todos = (res_abiertos.data or []) + (res_cerrados_hoy.data or []) + (res_cerrados_respaldo.data or [])
     
     # Eliminar duplicados por ID
     unicos = {r["id"]: r for r in todos}
@@ -337,7 +345,7 @@ def renderizar_panel_carga_asignador():
         hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
         hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        data_cargas = obtener_cargas_agentes_db()
+        data_cargas = obtener_cargas_agentes_db(hoy_inicio_utc)
 
         if not data_cargas:
             st.info("No hay conversaciones activas ni registradas el día de hoy.")
@@ -351,9 +359,9 @@ def renderizar_panel_carga_asignador():
             if col not in df_c.columns:
                 df_c[col] = None
 
-        # 1. Normalizar fecha de cierre a zona horaria de Paraguay
+        # 1. Normalizar fecha de cierre a zona horaria de Paraguay usando ISO8601
         df_c["fecha_ref"] = df_c["fecha_cierre"].fillna(df_c["updated_at"])
-        fecha_ref_dt = pd.to_datetime(df_c["fecha_ref"], errors="coerce", utc=True)
+        fecha_ref_dt = pd.to_datetime(df_c["fecha_ref"], format="ISO8601", errors="coerce", utc=True)
         df_c["fecha_ref_py"] = fecha_ref_dt.dt.tz_convert("America/Asuncion")
         df_c["fecha_solo_py"] = df_c["fecha_ref_py"].dt.date
 
@@ -370,7 +378,7 @@ def renderizar_panel_carga_asignador():
         df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
         df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
 
-        # 4. Agrupamiento por agente con el ORDEN DE COLUMNAS SOLICITADO
+        # 4. Agrupamiento por agente
         resumen = []
         for agente, grp in df_c.groupby("agente_clean"):
             pendientes = int(grp["es_abierto_actual"].sum())
@@ -388,7 +396,6 @@ def renderizar_panel_carga_asignador():
         df_resumen = pd.DataFrame(resumen)
 
         if not df_resumen.empty:
-            # ORDENAMIENTO POR DEFECTO: Por Total Asignados Hoy de forma descendente
             df_resumen = df_resumen.sort_values(by="Total Asignados Hoy 📋", ascending=False)
 
             col1, col2, col3 = st.columns(3)
@@ -398,7 +405,6 @@ def renderizar_panel_carga_asignador():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Muestra la tabla en la nueva secuencia de columnas definida
             st.dataframe(
                 df_resumen,
                 column_config={
