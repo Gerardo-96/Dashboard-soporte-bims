@@ -463,21 +463,21 @@ def renderizar_panel_carga_asignador():
                     ascending=[True, True]
                 ).head(3)
 
-                medallas = ["🥇 1ª Opción", "🥈 2ª Opción", "🥉 3ª Opción"]
+                medallas = ["1ª Opción", "2ª Opción", "3ª Opción"]
                 badges_list = []
 
                 for idx, (_, row) in enumerate(df_sugeridos.iterrows()):
                     medalla = medallas[idx] if idx < len(medallas) else f"Opción {idx+1}"
                     agente_nombre = row["Agente de Soporte"]
-                    pend = row["Pendientes (Abiertos) 🔴"]
-                    tot = row["Total Asignados Hoy 📋"]
+                    pend = row["Pendientes (Abiertos)"]
+                    tot = row["Total Asignados Hoy"]
 
                     # HTML en una sola línea continua para evitar que Streamlit lo interprete como código
                     card_html = (
                         f'<div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; flex: 1; min-width: 180px;">'
                         f'<span style="font-size: 0.78rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">{medalla}</span>'
                         f'<div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-top: 2px;">{agente_nombre}</div>'
-                        f'<div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">🔴 {pend} pendientes &nbsp;|&nbsp; 📋 {tot} asignados hoy</div>'
+                        f'<div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">{pend} pendientes &nbsp;|&nbsp; {tot} asignados hoy</div>'
                         f'</div>'
                     )
                     badges_list.append(card_html)
@@ -487,14 +487,14 @@ def renderizar_panel_carga_asignador():
                 # HTML principal sin saltos de línea conflictivos
                 html_sugerencias = (
                     f'<div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #0284c7; border-radius: 12px; padding: 16px; margin-top: 15px; margin-bottom: 20px;">'
-                    f'<div style="font-size: 0.9rem; font-weight: 700; color: #38bdf8; margin-bottom: 10px;">💡 <b>Sugerencia de Asignación Prioritaria (Agentes Disponibles)</b></div>'
+                    f'<div style="font-size: 0.9rem; font-weight: 700; color: #38bdf8; margin-bottom: 10px;"><b>Sugerencia de Asignación Prioritaria (Agentes Disponibles)</b></div>'
                     f'<div style="display: flex; gap: 12px; flex-wrap: wrap;">{contenedor_badges}</div>'
                     f'</div>'
                 )
 
                 st.markdown(html_sugerencias, unsafe_allow_html=True)
             else:
-                st.warning("⚠️ Todos los agentes se encuentran marcados como Ausentes (🟡) o sin disponibilidad.")
+                st.warning("Todos los agentes se encuentran marcados como Ausentes (🟡) o sin disponibilidad.")
 
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -548,7 +548,7 @@ def renderizar_panel_carga_asignador():
                 plot_bgcolor="#1e293b",
                 font=dict(color="#cbd5e1", size=12),
                 xaxis=dict(gridcolor="#334155", title=None),
-                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats", showgrid=False, dtick=1),
+                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats", showgrid=False, showticklabels=False, dtick=1),
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
