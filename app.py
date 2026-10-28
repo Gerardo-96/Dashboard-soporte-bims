@@ -405,6 +405,70 @@ def renderizar_panel_carga_asignador():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
+            # ==========================================
+            # GRÁFICO DE BARRAS VERTICAL ACUMULADO
+            # ==========================================
+            fig_carga = go.Figure()
+
+            # Serie 1: Cerrados hoy (Base de la barra - Verde Esmeralda)
+            fig_carga.add_trace(go.Bar(
+                x=df_resumen["Agente de Soporte"],
+                y=df_resumen["Cerrados (Hoy) 🟢"],
+                name="Cerrados Hoy 🟢",
+                marker_color="#10b981",
+                text=df_resumen["Cerrados (Hoy) 🟢"].apply(lambda v: str(v) if v > 0 else ""),
+                textposition="inside",
+                insidetextanchor="middle",
+                hovertemplate="<b>%{x}</b><br>Cerrados Hoy: %{y}<extra></extra>"
+            ))
+
+            # Serie 2: Pendientes / Abiertos (Parte superior - Coral/Naranja)
+            fig_carga.add_trace(go.Bar(
+                x=df_resumen["Agente de Soporte"],
+                y=df_resumen["Pendientes (Abiertos) 🔴"],
+                name="Abiertos Pendientes 🔴",
+                marker_color="#f97316",
+                text=df_resumen["Pendientes (Abiertos) 🔴"].apply(lambda v: str(v) if v > 0 else ""),
+                textposition="inside",
+                insidetextanchor="middle",
+                hovertemplate="<b>%{x}</b><br>Abiertos Pendientes: %{y}<extra></extra>"
+            ))
+
+            # Añadir etiqueta con el TOTAL asignado arriba de cada barra
+            for idx, row in df_resumen.iterrows():
+                fig_carga.add_annotation(
+                    x=row["Agente de Soporte"],
+                    y=row["Total Asignados Hoy 📋"],
+                    text=f"<b>{row['Total Asignados Hoy 📋']}</b>",
+                    showarrow=False,
+                    yshift=12,
+                    font=dict(color="#f8fafc", size=13)
+                )
+
+            fig_carga.update_layout(
+                barmode="stack",
+                title="<b>Distribución y Carga Actual del Equipo (Apilado)</b>",
+                paper_bgcolor="#1e293b",
+                plot_bgcolor="#1e293b",
+                font=dict(color="#cbd5e1", size=12),
+                xaxis=dict(gridcolor="#334155", title=None),
+                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats", allowdecay=False),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                ),
+                margin=dict(t=60, b=30, l=40, r=40),
+                height=380
+            )
+
+            st.plotly_chart(fig_carga, use_container_width=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # TABLA DETALLADA DEBAJO DEL GRÁFICO
             st.dataframe(
                 df_resumen,
                 column_config={
