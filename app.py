@@ -279,6 +279,21 @@ if not st.session_state["user_authenticated"]:
 # ==========================================
 
 # ==========================================
+# MAPA EN TIEMPO REAL DE PRESENCIA DE AGENTES
+# ==========================================
+@st.cache_data(ttl=30, show_spinner=False)
+def obtener_mapa_estados_agentes():
+    """Recupera la presencia de cada agente guardada en la tabla estado_agentes."""
+    try:
+        res = supabase.table("estado_agentes").select("nombre, away").execute()
+        return {
+            r["nombre"].strip().lower(): ("🟡 Ausente" if r.get("away") else "🟢 Disponible")
+            for r in (res.data or [])
+        }
+    except Exception:
+        return {}
+
+# ==========================================
 # CONSULTA GLOBAL CACHEADA DE CARGA (CORREGIDA PARA MAYÚSCULAS/MINÚSCULAS)
 # ==========================================
 @st.cache_data(ttl=30, show_spinner=False)
@@ -378,12 +393,21 @@ def renderizar_panel_carga_asignador():
         df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
         df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
 
-        # 4. Agrupamiento por agente
+        # 4. Obtener presencia actual de agentes desde la BD
+        mapa_estados = obtener_mapa_estados_agentes()
+
+        # 5. Agrupamiento por agente
         resumen = []
         for agente, grp in df_c.groupby("agente_clean"):
             pendientes = int(grp["es_abierto_actual"].sum())
             cerrados_hoy = int(grp["es_cerrado_hoy"].sum())
             total_asignados = pendientes + cerrados_hoy
+
+            # Estado de presencia actual
+            estado_presencia = mapa_estados.get(agente.lower(), "🟢 Disponible")
+            
+            # Etiqueta para el eje X del gráfico
+            etiqueta_grafico = f"{'🟢' if 'Disponible' in estado_presencia else '🟡'} {agente}"
 
             if total_asignados > 0:
                 resumen.append({
@@ -478,6 +502,7 @@ def renderizar_panel_carga_asignador():
             st.dataframe(
                 df_resumen,
                 column_config={
+                    "Estado": st.column_config.TextColumn("Presencia", help="Disponibilidad en Intercom"),
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
                     "Total Asignados Hoy 📋": st.column_config.NumberColumn("Total Asignados Hoy", help="Total gestionados durante la jornada"),
                     "Cerrados (Hoy) 🟢": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día de hoy"),
