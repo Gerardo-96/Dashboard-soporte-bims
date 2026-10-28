@@ -367,7 +367,7 @@ def renderizar_panel_carga_asignador():
 
         # 2. Limpieza de nombres de agentes y descarte de bots
         df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-        agentes_omitir = ["monica", "mónica", "monica (bot)", "soporte", "none", "nan", "Sin asignar", ""]
+        agentes_omitir = ["monica", "mónica", "monica (bot)", "soporte", "none", "nan", "sin asignar", ""]
         df_c = df_c[~df_c["agente_clean"].str.lower().isin(agentes_omitir)]
 
         estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
