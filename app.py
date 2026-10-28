@@ -469,8 +469,8 @@ def renderizar_panel_carga_asignador():
                 for idx, (_, row) in enumerate(df_sugeridos.iterrows()):
                     medalla = medallas[idx] if idx < len(medallas) else f"Opción {idx+1}"
                     agente_nombre = row["Agente de Soporte"]
-                    pend = row["Pendientes (Abiertos)"]
-                    tot = row["Total Asignados Hoy"]
+                    pend = row["Pendientes (Abiertos) 🔴"]
+                    tot = row["Total Asignados Hoy 📋"]
 
                     # HTML en una sola línea continua para evitar que Streamlit lo interprete como código
                     card_html = (
