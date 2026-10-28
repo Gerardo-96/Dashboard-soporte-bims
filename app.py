@@ -415,7 +415,10 @@ def renderizar_panel_carga_asignador():
                 x=df_resumen["Agente de Soporte"],
                 y=df_resumen["Cerrados (Hoy) 🟢"],
                 name="Cerrados Hoy",
-                marker_color="#10b981",
+                marker=dict(
+                    color="#10b981",
+                    cornerradius=8
+                ),
                 text=df_resumen["Cerrados (Hoy) 🟢"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
                 insidetextanchor="middle",
@@ -427,7 +430,10 @@ def renderizar_panel_carga_asignador():
                 x=df_resumen["Agente de Soporte"],
                 y=df_resumen["Pendientes (Abiertos) 🔴"],
                 name="Abiertos Pendientes",
-                marker_color="#f97316",
+                marker=dict(
+                    color="#f97316",
+                    cornerradius=8
+                ),
                 text=df_resumen["Pendientes (Abiertos) 🔴"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
                 insidetextanchor="middle",
