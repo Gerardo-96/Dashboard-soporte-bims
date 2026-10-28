@@ -281,33 +281,31 @@ if not st.session_state["user_authenticated"]:
 # ==========================================
 # CONSULTA GLOBAL CACHEADA DE CARGA (MÁXIMO 2 PETICIONES/MIN A SUPABASE)
 # ==========================================
-@st.cache_data(ttl=60, show_spinner=False)
-def obtener_cargas_agentes_db(hoy_inicio_utc):
+@st.cache_data(ttl=30, show_spinner=False)
+def obtener_cargas_agentes_db():
     """
-    Recupera chats abiertos y cerrados hoy garantizando todas las columnas requeridas.
+    Calcula la fecha de inicio del día de hoy internamente para evitar que
+    el caché de Streamlit se congele entre días.
     """
-    # 1. Chats abiertos actualmente (incluimos fecha_cierre en la selección)
+    tz_py = timezone(timedelta(hours=-3))
+    now_dt = datetime.now(tz_py)
+    hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # 1. Chats abiertos actualmente
     res_abiertos = supabase.table("conversaciones")\
         .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
         .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
         .execute()
 
-    # 2. Chats cerrados hoy (filtrados desde el inicio del día local en UTC)
+    # 2. Chats cerrados o actualizados hoy
     res_cerrados_hoy = supabase.table("conversaciones")\
         .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
         .in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-        .gte("fecha_cierre", hoy_inicio_utc)\
-        .execute()
-
-    # 3. Respaldo para chats cerrados cuya fecha_cierre sea NULL
-    res_cerrados_respaldo = supabase.table("conversaciones")\
-        .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
-        .in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-        .is_("fecha_cierre", "null")\
         .gte("updated_at", hoy_inicio_utc)\
         .execute()
 
-    todos = (res_abiertos.data or []) + (res_cerrados_hoy.data or []) + (res_cerrados_respaldo.data or [])
+    todos = (res_abiertos.data or []) + (res_cerrados_hoy.data or [])
     
     # Eliminar duplicados por ID
     unicos = {r["id"]: r for r in todos}
