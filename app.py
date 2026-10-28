@@ -337,7 +337,7 @@ def renderizar_panel_carga_asignador():
         hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
         hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        data_cargas = obtener_cargas_agentes_db(hoy_inicio_utc)
+        data_cargas = obtener_cargas_agentes_db()
 
         if not data_cargas:
             st.info("No hay conversaciones activas ni registradas el día de hoy.")
