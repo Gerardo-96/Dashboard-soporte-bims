@@ -356,68 +356,91 @@ def renderizar_panel_carga_asignador():
         return
 
     try:
-        # Calcular inicio del día local de Paraguay en formato UTC
         hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
         hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         data_cargas = obtener_cargas_agentes_db(hoy_inicio_utc)
+        mapa_estados = obtener_mapa_estados_agentes()
 
-        if not data_cargas:
-            st.info("No hay conversaciones activas ni registradas el día de hoy.")
-            return
+        # Lista de agentes/entidades a EXCLUIR explícitamente
+        agentes_omitir = [
+            "monica", "mónica", "monica (bot)", "soporte", 
+            "gerardo gaona", "gerardo.gaona@itti.digital",
+            "none", "nan", "sin asignar", ""
+        ]
 
-        df_c = pd.DataFrame(data_cargas)
+        # 1. Obtener lista maestra de agentes desde la tabla usuarios_autorizados
+        lista_agentes_maestra = set()
+        try:
+            res_u = supabase.table("usuarios_autorizados").select("nombre").eq("activo", True).execute()
+            for u in (res_u.data or []):
+                nombre_u = u.get("nombre", "").strip()
+                if nombre_u and nombre_u.lower() not in agentes_omitir:
+                    lista_agentes_maestra.add(nombre_u)
+        except Exception:
+            pass
 
-        # Garantizar presencia de todas las columnas necesarias
-        cols_requeridas = ["id", "agente_asignado", "estado", "fecha_cierre", "updated_at"]
-        for col in cols_requeridas:
+        df_c = pd.DataFrame(data_cargas) if data_cargas else pd.DataFrame()
+
+        # Garantizar presencia de columnas en df_c
+        for col in ["id", "agente_asignado", "estado", "fecha_cierre", "updated_at"]:
             if col not in df_c.columns:
                 df_c[col] = None
 
-        # 1. Normalizar fecha de cierre a zona horaria de Paraguay usando ISO8601
-        df_c["fecha_ref"] = df_c["fecha_cierre"].fillna(df_c["updated_at"])
-        fecha_ref_dt = pd.to_datetime(df_c["fecha_ref"], format="ISO8601", errors="coerce", utc=True)
-        df_c["fecha_ref_py"] = fecha_ref_dt.dt.tz_convert("America/Asuncion")
-        df_c["fecha_solo_py"] = df_c["fecha_ref_py"].dt.date
+        if not df_c.empty:
+            df_c["fecha_ref"] = df_c["fecha_cierre"].fillna(df_c["updated_at"])
+            fecha_ref_dt = pd.to_datetime(df_c["fecha_ref"], format="ISO8601", errors="coerce", utc=True)
+            df_c["fecha_ref_py"] = fecha_ref_dt.dt.tz_convert("America/Asuncion")
+            df_c["fecha_solo_py"] = df_c["fecha_ref_py"].dt.date
 
-        # 2. Limpieza de nombres de agentes y descarte de bots
-        df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-        agentes_omitir = ["monica", "mónica", "monica (bot)", "soporte", "none", "nan", "sin asignar", ""]
-        df_c = df_c[~df_c["agente_clean"].str.lower().isin(agentes_omitir)]
+            df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+            
+            # Incorporar cualquier otro agente humano presente en las conversaciones de hoy
+            for ag in df_c["agente_clean"].unique():
+                if ag.lower() not in agentes_omitir:
+                    lista_agentes_maestra.add(ag)
 
-        estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
-        df_c["es_cerrado"] = df_c["estado"].fillna("").astype(str).str.strip().str.lower().isin(estados_cerrados)
+            estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+            df_c["es_cerrado"] = df_c["estado"].fillna("").astype(str).str.strip().str.lower().isin(estados_cerrados)
 
-        # 3. Filtro estricto de cerrados HOY en fecha local de Paraguay
-        hoy_date_py = now_dt.date()
-        df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
-        df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
+            hoy_date_py = now_dt.date()
+            df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
+            df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
 
-        # 4. Obtener presencia actual de agentes desde la BD
-        mapa_estados = obtener_mapa_estados_agentes()
-
-        # 5. Agrupamiento por agente
+        # 2. Agrupamiento por agente humano
         resumen = []
-        for agente, grp in df_c.groupby("agente_clean"):
-            pendientes = int(grp["es_abierto_actual"].sum())
-            cerrados_hoy = int(grp["es_cerrado_hoy"].sum())
+        for agente in sorted(list(lista_agentes_maestra)):
+            if agente.lower() in agentes_omitir:
+                continue
+
+            if not df_c.empty and "agente_clean" in df_c.columns:
+                grp = df_c[df_c["agente_clean"] == agente]
+                pendientes = int(grp["es_abierto_actual"].sum()) if not grp.empty else 0
+                cerrados_hoy = int(grp["es_cerrado_hoy"].sum()) if not grp.empty else 0
+            else:
+                pendientes = 0
+                cerrados_hoy = 0
+
             total_asignados = pendientes + cerrados_hoy
 
-            # Estado de presencia actual desde la BD
-            estado_presencia = mapa_estados.get(agente.lower(), "🟢 Disponible")
-            
-            # Etiqueta visual para el eje X del gráfico
+            # Presencia actual con coincidencia flexible por nombre
+            estado_presencia = "🟢 Disponible"
+            agente_lower = agente.lower()
+            for k_nombre, v_estado in mapa_estados.items():
+                if k_nombre in agente_lower or agente_lower in k_nombre:
+                    estado_presencia = v_estado
+                    break
+
             etiqueta_grafico = f"{'🟢' if 'Disponible' in estado_presencia else '🟡'} {agente}"
 
-            if total_asignados > 0:
-                resumen.append({
-                    "Estado": estado_presencia,  # 👈 SE AGREGA LA COLUMNA DE PRESENCIA
-                    "Agente de Soporte": agente,
-                    "Agente Grafico": etiqueta_grafico,  # 👈 SE AGREGA LA ETIQUETA CON PUNTO VERDE/AMARILLO
-                    "Total Asignados Hoy 📋": total_asignados,
-                    "Cerrados (Hoy) 🟢": cerrados_hoy,
-                    "Pendientes (Abiertos) 🔴": pendientes
-                })
+            resumen.append({
+                "Estado": estado_presencia,
+                "Agente de Soporte": agente,
+                "Agente Grafico": etiqueta_grafico,
+                "Total Asignados Hoy 📋": total_asignados,
+                "Cerrados (Hoy) 🟢": cerrados_hoy,
+                "Pendientes (Abiertos) 🔴": pendientes
+            })
 
         df_resumen = pd.DataFrame(resumen)
 
@@ -432,11 +455,10 @@ def renderizar_panel_carga_asignador():
             # ==========================================
             # 🚀 SUGERENCIA INTELIGENTE DE ASIGNACIÓN (TOP 3)
             # ==========================================
-            # 1. Filtrar solo agentes Disponibles
             df_disponibles = df_resumen[df_resumen["Estado"].str.contains("Disponible", case=False, na=False)].copy()
 
             if not df_disponibles.empty:
-                # 2. Ordenar por: Menor Abiertos -> Menor Total Asignados Hoy
+                # Priorización: 1° Menor Abiertos -> 2° Menor Total Asignados Hoy
                 df_sugeridos = df_disponibles.sort_values(
                     by=["Pendientes (Abiertos) 🔴", "Total Asignados Hoy 📋"], 
                     ascending=[True, True]
@@ -482,9 +504,8 @@ def renderizar_panel_carga_asignador():
             # ==========================================
             fig_carga = go.Figure()
 
-            # Serie 1: Cerrados hoy (Verde Esmeralda)
             fig_carga.add_trace(go.Bar(
-                x=df_resumen["Agente Grafico"],  # 👈 AHORA USA LA ETIQUETA CON PUNTO VERDE/AMARILLO
+                x=df_resumen["Agente Grafico"],
                 y=df_resumen["Cerrados (Hoy) 🟢"],
                 name="Cerrados Hoy",
                 marker=dict(
@@ -497,9 +518,8 @@ def renderizar_panel_carga_asignador():
                 hovertemplate="<b>%{x}</b><br>Cerrados Hoy: %{y}<extra></extra>"
             ))
 
-            # Serie 2: Pendientes / Abiertos (Coral/Naranja)
             fig_carga.add_trace(go.Bar(
-                x=df_resumen["Agente Grafico"],  # 👈 AHORA USA LA ETIQUETA CON PUNTO VERDE/AMARILLO
+                x=df_resumen["Agente Grafico"],
                 y=df_resumen["Pendientes (Abiertos) 🔴"],
                 name="Abiertos Pendientes",
                 marker=dict(
@@ -512,10 +532,9 @@ def renderizar_panel_carga_asignador():
                 hovertemplate="<b>%{x}</b><br>Abiertos Pendientes: %{y}<extra></extra>"
             ))
 
-            # Añadir etiqueta con el TOTAL asignado arriba de cada barra
             for idx, row in df_resumen.iterrows():
                 fig_carga.add_annotation(
-                    x=row["Agente Grafico"],  # 👈 MISMAS COORDENADAS DEL EJE X
+                    x=row["Agente Grafico"],
                     y=row["Total Asignados Hoy 📋"],
                     text=f"<b>{row['Total Asignados Hoy 📋']}</b>",
                     showarrow=False,
@@ -546,11 +565,10 @@ def renderizar_panel_carga_asignador():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # TABLA DETALLADA DEBAJO DEL GRÁFICO (REORDENAMOS LAS COLUMNAS)
             cols_tabla = ["Estado", "Agente de Soporte", "Total Asignados Hoy 📋", "Cerrados (Hoy) 🟢", "Pendientes (Abiertos) 🔴"]
 
             st.dataframe(
-                df_resumen[cols_tabla],  # 👈 PASAMOS LAS COLUMNAS EXPLICITAMENTE
+                df_resumen[cols_tabla],
                 column_config={
                     "Estado": st.column_config.TextColumn("Presencia", help="Disponibilidad en Intercom"),
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
