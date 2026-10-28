@@ -56,13 +56,49 @@ def get_attr(contact, key):
     return contact.get("custom_attributes", {}).get(key, "Sin datos")
 
 def obtener_agentes():
+    """
+    1. Consulta la API de Admins de Intercom.
+    2. Actualiza la presencia (away mode) de cada agente en la tabla 'estado_agentes' de Supabase.
+    3. Retorna el diccionario id -> nombre para resolver asignaciones en el script.
+    """
     url = "https://api.intercom.io/admins"
+    agentes_dict = {}
+    registros_estado = []
+
     try:
         resp = requests.get(url, headers=headers)
-        data = resp.json()
-        return {str(a["id"]).strip(): a.get("name", "Desconocido") for a in data.get("admins", [])}
-    except Exception:
-        return {}
+        if resp.status_code == 200:
+            data = resp.json()
+            admins = data.get("admins", [])
+            
+            for a in admins:
+                admin_id = str(a.get("id")).strip()
+                admin_name = a.get("name", "Desconocido")
+                
+                # Mapeo id -> nombre para el funcionamiento interno de sync_intercom.py
+                agentes_dict[admin_id] = admin_name
+
+                # Registro de presencia para la tabla estado_agentes
+                registros_estado.append({
+                    "id": admin_id,
+                    "nombre": admin_name,
+                    "email": a.get("email", ""),
+                    "away": bool(a.get("away_mode_enabled", False)),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                })
+
+            # Guardar o actualizar la presencia de los agentes en Supabase
+            if registros_estado:
+                try:
+                    supabase.table("estado_agentes").upsert(registros_estado, on_conflict="id").execute()
+                except Exception as ex_db:
+                    print(f"⚠️ Error actualizando estado_agentes en Supabase: {ex_db}")
+
+            return agentes_dict
+    except Exception as e:
+        print(f"❌ Error al consultar admins de Intercom: {e}")
+
+    return agentes_dict
 
 def obtener_canal(conv):
     source_type = conv.get("source", {}).get("type", "chat")
