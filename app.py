@@ -458,14 +458,13 @@ def renderizar_panel_carga_asignador():
             df_disponibles = df_resumen[df_resumen["Estado"].str.contains("Disponible", case=False, na=False)].copy()
 
             if not df_disponibles.empty:
-                # Priorización: 1° Menor Abiertos -> 2° Menor Total Asignados Hoy
                 df_sugeridos = df_disponibles.sort_values(
                     by=["Pendientes (Abiertos) 🔴", "Total Asignados Hoy 📋"], 
                     ascending=[True, True]
                 ).head(3)
 
                 medallas = ["🥇 1ª Opción", "🥈 2ª Opción", "🥉 3ª Opción"]
-                badges_html = []
+                badges_list = []
 
                 for idx, (_, row) in enumerate(df_sugeridos.iterrows()):
                     medalla = medallas[idx] if idx < len(medallas) else f"Opción {idx+1}"
@@ -473,26 +472,26 @@ def renderizar_panel_carga_asignador():
                     pend = row["Pendientes (Abiertos) 🔴"]
                     tot = row["Total Asignados Hoy 📋"]
 
-                    badges_html.append(f"""
-                    <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; flex: 1; min-width: 180px;">
-                        <span style="font-size: 0.78rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">{medalla}</span>
-                        <div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-top: 2px;">{agente_nombre}</div>
-                        <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
-                            🔴 {pend} pendientes &nbsp;|&nbsp; 📋 {tot} asignados hoy
-                        </div>
-                    </div>
-                    """)
+                    # HTML en una sola línea continua para evitar que Streamlit lo interprete como código
+                    card_html = (
+                        f'<div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; flex: 1; min-width: 180px;">'
+                        f'<span style="font-size: 0.78rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">{medalla}</span>'
+                        f'<div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-top: 2px;">{agente_nombre}</div>'
+                        f'<div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">🔴 {pend} pendientes &nbsp;|&nbsp; 📋 {tot} asignados hoy</div>'
+                        f'</div>'
+                    )
+                    badges_list.append(card_html)
 
-                html_sugerencias = f"""
-                <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #0284c7; border-radius: 12px; padding: 16px; margin-top: 15px; margin-bottom: 20px;">
-                    <div style="font-size: 0.9rem; font-weight: 700; color: #38bdf8; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                        💡 <b>Sugerencia de Asignación Prioritaria (Agentes Disponibles)</b>
-                    </div>
-                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                        {"".join(badges_html)}
-                    </div>
-                </div>
-                """
+                contenedor_badges = "".join(badges_list)
+                
+                # HTML principal sin saltos de línea conflictivos
+                html_sugerencias = (
+                    f'<div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #0284c7; border-radius: 12px; padding: 16px; margin-top: 15px; margin-bottom: 20px;">'
+                    f'<div style="font-size: 0.9rem; font-weight: 700; color: #38bdf8; margin-bottom: 10px;">💡 <b>Sugerencia de Asignación Prioritaria (Agentes Disponibles)</b></div>'
+                    f'<div style="display: flex; gap: 12px; flex-wrap: wrap;">{contenedor_badges}</div>'
+                    f'</div>'
+                )
+
                 st.markdown(html_sugerencias, unsafe_allow_html=True)
             else:
                 st.warning("⚠️ Todos los agentes se encuentran marcados como Ausentes (🟡) o sin disponibilidad.")
