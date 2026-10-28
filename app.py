@@ -367,7 +367,7 @@ def renderizar_panel_carga_asignador():
 
         # 2. Limpieza de nombres de agentes y descarte de bots
         df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-        agentes_omitir = ["monica", "mónica", "monica (bot)", "soporte", "none", "nan", ""]
+        agentes_omitir = ["monica", "mónica", "monica (bot)", "soporte", "none", "nan", "Sin asignar", ""]
         df_c = df_c[~df_c["agente_clean"].str.lower().isin(agentes_omitir)]
 
         estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
@@ -414,7 +414,7 @@ def renderizar_panel_carga_asignador():
             fig_carga.add_trace(go.Bar(
                 x=df_resumen["Agente de Soporte"],
                 y=df_resumen["Cerrados (Hoy) 🟢"],
-                name="Cerrados Hoy 🟢",
+                name="Cerrados Hoy",
                 marker_color="#10b981",
                 text=df_resumen["Cerrados (Hoy) 🟢"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
@@ -426,7 +426,7 @@ def renderizar_panel_carga_asignador():
             fig_carga.add_trace(go.Bar(
                 x=df_resumen["Agente de Soporte"],
                 y=df_resumen["Pendientes (Abiertos) 🔴"],
-                name="Abiertos Pendientes 🔴",
+                name="Abiertos Pendientes",
                 marker_color="#f97316",
                 text=df_resumen["Pendientes (Abiertos) 🔴"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
