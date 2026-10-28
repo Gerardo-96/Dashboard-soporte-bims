@@ -403,15 +403,17 @@ def renderizar_panel_carga_asignador():
             cerrados_hoy = int(grp["es_cerrado_hoy"].sum())
             total_asignados = pendientes + cerrados_hoy
 
-            # Estado de presencia actual
+            # Estado de presencia actual desde la BD
             estado_presencia = mapa_estados.get(agente.lower(), "🟢 Disponible")
             
-            # Etiqueta para el eje X del gráfico
+            # Etiqueta visual para el eje X del gráfico
             etiqueta_grafico = f"{'🟢' if 'Disponible' in estado_presencia else '🟡'} {agente}"
 
             if total_asignados > 0:
                 resumen.append({
+                    "Estado": estado_presencia,  # 👈 SE AGREGA LA COLUMNA DE PRESENCIA
                     "Agente de Soporte": agente,
+                    "Agente Grafico": etiqueta_grafico,  # 👈 SE AGREGA LA ETIQUETA CON PUNTO VERDE/AMARILLO
                     "Total Asignados Hoy 📋": total_asignados,
                     "Cerrados (Hoy) 🟢": cerrados_hoy,
                     "Pendientes (Abiertos) 🔴": pendientes
@@ -434,9 +436,9 @@ def renderizar_panel_carga_asignador():
             # ==========================================
             fig_carga = go.Figure()
 
-            # Serie 1: Cerrados hoy (Base de la barra - Verde Esmeralda)
+            # Serie 1: Cerrados hoy (Verde Esmeralda)
             fig_carga.add_trace(go.Bar(
-                x=df_resumen["Agente de Soporte"],
+                x=df_resumen["Agente Grafico"],  # 👈 AHORA USA LA ETIQUETA CON PUNTO VERDE/AMARILLO
                 y=df_resumen["Cerrados (Hoy) 🟢"],
                 name="Cerrados Hoy",
                 marker=dict(
@@ -449,9 +451,9 @@ def renderizar_panel_carga_asignador():
                 hovertemplate="<b>%{x}</b><br>Cerrados Hoy: %{y}<extra></extra>"
             ))
 
-            # Serie 2: Pendientes / Abiertos (Parte superior - Coral/Naranja)
+            # Serie 2: Pendientes / Abiertos (Coral/Naranja)
             fig_carga.add_trace(go.Bar(
-                x=df_resumen["Agente de Soporte"],
+                x=df_resumen["Agente Grafico"],  # 👈 AHORA USA LA ETIQUETA CON PUNTO VERDE/AMARILLO
                 y=df_resumen["Pendientes (Abiertos) 🔴"],
                 name="Abiertos Pendientes",
                 marker=dict(
@@ -467,7 +469,7 @@ def renderizar_panel_carga_asignador():
             # Añadir etiqueta con el TOTAL asignado arriba de cada barra
             for idx, row in df_resumen.iterrows():
                 fig_carga.add_annotation(
-                    x=row["Agente de Soporte"],
+                    x=row["Agente Grafico"],  # 👈 MISMAS COORDENADAS DEL EJE X
                     y=row["Total Asignados Hoy 📋"],
                     text=f"<b>{row['Total Asignados Hoy 📋']}</b>",
                     showarrow=False,
@@ -498,9 +500,11 @@ def renderizar_panel_carga_asignador():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # TABLA DETALLADA DEBAJO DEL GRÁFICO
+            # TABLA DETALLADA DEBAJO DEL GRÁFICO (REORDENAMOS LAS COLUMNAS)
+            cols_tabla = ["Estado", "Agente de Soporte", "Total Asignados Hoy 📋", "Cerrados (Hoy) 🟢", "Pendientes (Abiertos) 🔴"]
+
             st.dataframe(
-                df_resumen,
+                df_resumen[cols_tabla],  # 👈 PASAMOS LAS COLUMNAS EXPLICITAMENTE
                 column_config={
                     "Estado": st.column_config.TextColumn("Presencia", help="Disponibilidad en Intercom"),
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
