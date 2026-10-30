@@ -6,3 +6,4 @@ requests
 supabase
 websockets
 extra-streamlit-components
+matplotlib
