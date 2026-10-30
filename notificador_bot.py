@@ -8,9 +8,6 @@ import pandas as pd
 from supabase import create_client
 from fastapi import FastAPI, Header, HTTPException
 import io
-import matplotlib
-matplotlib.use('Agg')  # Modo servidor sin interfaz gráfica
-import matplotlib.pyplot as plt
 from email.mime.image import MIMEImage
 
 app = FastAPI()
@@ -407,14 +404,14 @@ def reiniciar_servicio(authorization: str = Header(None)):
         return {"status": "error", "message": str(e)}
 
 # ==========================================
-# ENDPOINT EXCLUSIVO: REPORTE DIARIO CON GRÁFICO
+# ENDPOINT EXCLUSIVO: REPORTE DIARIO CON BARRAS HTML
 # ==========================================
 @app.post("/ejecutar-reporte-email-diario")
 @app.get("/ejecutar-reporte-email-diario")
 def trigger_reporte_email(authorization: str = Header(None)):
     """
-    Cron exclusivo para enviar el resumen diario por correo con el gráfico
-    apilado de Distribución de Carga (Cerrados vs Abiertos).
+    Cron exclusivo para enviar el resumen diario por correo con gráfico
+    de barras visual apilado en HTML/CSS nativo (sin dependencias externas).
     """
     if authorization != f"Bearer {CRON_SECRET_TOKEN}":
         raise HTTPException(status_code=401, detail="No autorizado")
@@ -438,13 +435,13 @@ def trigger_reporte_email(authorization: str = Header(None)):
     if hoy_str in FERIADOS or now_dt.weekday() in [5, 6]:
         return {"status": "skipped", "reason": "Día no hábil / Feriado"}
 
-    # 1. Traer lista maestra de agentes autorizados
     agentes_omitir = [
         "monica", "mónica", "monica (bot)", "soporte", 
         "gerardo gaona", "gerardo.gaona@itti.digital", 
         "none", "nan", "sin asignar", ""
     ]
-    
+
+    # 1. Obtener lista de agentes autorizados
     lista_agentes_maestra = set()
     try:
         res_u = supabase.table("usuarios_autorizados").select("nombre").eq("activo", True).execute()
@@ -455,7 +452,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
     except Exception:
         pass
 
-    # 2. Consultar conversaciones del día (UTC) y abiertas
+    # 2. Consultar chats abiertos y cerrados hoy
     hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -493,7 +490,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
         df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
         df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
 
-    # 3. Consolidar métricas de carga por agente
+    # 3. Consolidar métricas
     resumen = []
     for agente in sorted(list(lista_agentes_maestra)):
         if agente.lower() in agentes_omitir:
@@ -519,118 +516,99 @@ def trigger_reporte_email(authorization: str = Header(None)):
     if not df_res.empty:
         df_res = df_res.sort_values(by="total", ascending=False)
 
-    # 4. Generación del gráfico de barras idéntico al Dashboard
-    img_buffer = io.BytesIO()
-    hay_grafico = False
+    # 4. Construcción del Gráfico Visual en Barras HTML
+    max_total = df_res["total"].max() if (not df_res.empty and df_res["total"].max() > 0) else 1
+    barras_grafico_html = []
 
-    if not df_res.empty and df_res["total"].sum() > 0:
-        fig, ax = plt.subplots(figsize=(8, 4.2), facecolor='#1e293b')
-        ax.set_facecolor('#1e293b')
+    for _, r in df_res.iterrows():
+        nom = r["agente"]
+        c = r["cerrados"]
+        p = r["pendientes"]
+        tot = r["total"]
 
-        nombres = df_res["agente"].tolist()
-        val_cerrados = df_res["cerrados"].tolist()
-        val_pendientes = df_res["pendientes"].tolist()
-        val_totales = df_res["total"].tolist()
+        pct_c = round((c / max_total) * 100, 1)
+        pct_p = round((p / max_total) * 100, 1)
 
-        ancho_barra = 0.55
-        indices = range(len(nombres))
+        txt_c = f"{c}" if c > 0 else ""
+        txt_p = f"{p}" if p > 0 else ""
 
-        # Barra base: Cerrados Hoy (Verde Esmeralda)
-        ax.bar(indices, val_cerrados, label='Cerrados Hoy', color='#10b981', width=ancho_barra)
-        # Barra superior apilada: Abiertos Pendientes (Naranja/Coral)
-        ax.bar(indices, val_pendientes, bottom=val_cerrados, label='Abiertos Pendientes', color='#f97316', width=ancho_barra)
+        barras_grafico_html.append(f"""
+        <div style="margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 4px;">
+                <span><b>{nom}</b></span>
+                <span style="color: #f8fafc; font-weight: 700;">Total: {tot}</span>
+            </div>
+            <div style="background-color: #0f172a; border-radius: 6px; height: 26px; display: flex; overflow: hidden; width: 100%; border: 1px solid #334155;">
+                <div style="width: {pct_c}%; background-color: #10b981; color: white; font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: center;" title="Cerrados: {c}">
+                    {txt_c}
+                </div>
+                <div style="width: {pct_p}%; background-color: #f97316; color: white; font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: center;" title="Pendientes: {p}">
+                    {txt_p}
+                </div>
+            </div>
+        </div>
+        """)
 
-        # Números internos y total en la cabecera
-        for i, (c, p, tot) in enumerate(zip(val_cerrados, val_pendientes, val_totales)):
-            if tot > 0:
-                ax.text(i, tot + (max(val_totales) * 0.03), str(tot), ha='center', va='bottom', color='#f8fafc', fontweight='bold', fontsize=11)
-            if c > 0:
-                ax.text(i, c / 2, str(c), ha='center', va='center', color='#ffffff', fontweight='bold', fontsize=10)
-            if p > 0:
-                ax.text(i, c + (p / 2), str(p), ha='center', va='center', color='#ffffff', fontweight='bold', fontsize=10)
-
-        ax.set_xticks(indices)
-        ax.set_xticklabels(nombres, color='#cbd5e1', fontsize=10, rotation=15, ha='right')
-        ax.yaxis.set_visible(False)  # Quita números y líneas del eje Y
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-        ax.legend(facecolor='#1e293b', edgecolor='#334155', labelcolor='#cbd5e1', loc='upper right', framealpha=0.9)
-        plt.title('Distribución y Carga del Equipo (Cierre de Jornada)', color='#f8fafc', fontsize=12, fontweight='bold', pad=18)
-        
-        plt.tight_layout()
-        plt.savefig(img_buffer, format='png', dpi=130, facecolor=fig.get_facecolor(), edgecolor='none')
-        plt.close(fig)
-        img_buffer.seek(0)
-        hay_grafico = True
-
-    # 5. Armado de la tabla HTML
+    # 5. Armado de la tabla descriptiva
     filas_table = "".join([
-        f"<tr><td style='padding:10px;border:1px solid #e2e8f0;font-weight:600;'>{r['agente']}</td>"
-        f"<td style='padding:10px;border:1px solid #e2e8f0;text-align:center;'>{r['total']}</td>"
-        f"<td style='padding:10px;border:1px solid #e2e8f0;text-align:center;color:#10b981;font-weight:600;'>{r['cerrados']}</td>"
-        f"<td style='padding:10px;border:1px solid #e2e8f0;text-align:center;color:#f97316;font-weight:600;'>{r['pendientes']}</td></tr>"
+        f"<tr><td style='padding:9px;border:1px solid #334155;color:#f8fafc;'>{r['agente']}</td>"
+        f"<td style='padding:9px;border:1px solid #334155;text-align:center;font-weight:700;color:#f8fafc;'>{r['total']}</td>"
+        f"<td style='padding:9px;border:1px solid #334155;text-align:center;color:#10b981;font-weight:700;'>{r['cerrados']}</td>"
+        f"<td style='padding:9px;border:1px solid #334155;text-align:center;color:#f97316;font-weight:700;'>{r['pendientes']}</td></tr>"
         for _, r in df_res.iterrows()
-    ]) if not df_res.empty else "<tr><td colspan='4' style='text-align:center;padding:12px;'>Sin actividad registrada.</td></tr>"
-
-    seccion_grafico_html = """
-    <div style="margin-top:20px;text-align:center;">
-        <img src="cid:grafico_distribucion" style="width:100%;max-width:600px;border-radius:10px;border:1px solid #334155;" alt="Gráfico de Carga">
-    </div>
-    """ if hay_grafico else ""
+    ]) if not df_res.empty else "<tr><td colspan='4' style='text-align:center;padding:12px;color:#94a3b8;'>Sin actividad registrada.</td></tr>"
 
     html_body = f"""
-    <div style="font-family: Arial, sans-serif; color: #1e293b; max-width: 640px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; background-color: #ffffff;">
-        <h2 style="color: #0284c7; margin-top: 0;">📊 Cierre Operativo Soporte BIMS</h2>
-        <p style="font-size: 0.95rem; color: #475569;">
-            Resumen consolidado de carga correspondiente a la jornada del <b>{hoy_str}</b>:
-        </p>
+    <div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 25px; color: #f8fafc;">
+        <div style="max-width: 620px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 24px;">
+            <h2 style="color: #38bdf8; margin-top: 0; font-size: 1.25rem;">📊 Cierre Operativo Soporte BIMS - {hoy_str}</h2>
+            <p style="color: #94a3b8; font-size: 0.88rem; margin-bottom: 20px;">
+                Distribución y carga de trabajo acumulada durante la jornada:
+            </p>
 
-        {seccion_grafico_html}
+            <!-- CONTENEDOR DEL GRÁFICO VISUAL -->
+            <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; font-size: 0.78rem;">
+                    <span style="color: #10b981; font-weight: 700;">🟢 Cerrados Hoy</span>
+                    <span style="color: #f97316; font-weight: 700;">🔴 Abiertos Pendientes</span>
+                </div>
+                {''.join(barras_grafico_html)}
+            </div>
 
-        <h3 style="color:#1e293b;margin-top:25px;font-size:1rem;">Detalle por Agente</h3>
-        <table style='border-collapse:collapse;width:100%;font-size:0.9rem;'>
-            <thead>
-                <tr style='background:#0284c7;color:white;'>
-                    <th style='padding:10px;border:1px solid #0284c7;text-align:left;'>Agente</th>
-                    <th style='padding:10px;border:1px solid #0284c7;text-align:center;'>Total Asignados</th>
-                    <th style='padding:10px;border:1px solid #0284c7;text-align:center;'>Cerrados Hoy</th>
-                    <th style='padding:10px;border:1px solid #0284c7;text-align:center;'>Pendientes Actuales</th>
-                </tr>
-            </thead>
-            <tbody>
-                {filas_table}
-            </tbody>
-        </table>
+            <!-- TABLA DE DETALLE -->
+            <table style='border-collapse:collapse;width:100%;font-size:0.85rem;background-color:#0f172a;border-radius:6px;overflow:hidden;'>
+                <thead>
+                    <tr style='background:#0284c7;color:white;'>
+                        <th style='padding:9px;border:1px solid #0284c7;text-align:left;'>Agente</th>
+                        <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Total</th>
+                        <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Cerrados</th>
+                        <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Abiertos</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {filas_table}
+                </tbody>
+            </table>
 
-        <p style="font-size:0.78rem;color:#94a3b8;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:12px;">
-            Notificación automática de fin de jornada generada por el Bot Notificador BIMS.
-        </p>
+            <p style="font-size:0.75rem;color:#64748b;margin-top:22px;border-top:1px solid #334155;padding-top:12px;">
+                Reporte diario automatizado emitido por el sistema de monitoreo BIMS.
+            </p>
+        </div>
     </div>
     """
 
-    msg_mail = MIMEMultipart('related')
+    msg_mail = MIMEMultipart('alternative')
     msg_mail['From'] = EMAIL_EMISOR
     msg_mail['To'] = email_dest
     msg_mail['Subject'] = f"📈 Cierre Operativo Soporte BIMS - {hoy_str}"
-
-    msg_alt = MIMEMultipart('alternative')
-    msg_mail.attach(msg_alt)
-    msg_alt.attach(MIMEText(html_body, 'html'))
-
-    # Adjuntar imagen como elemento inline CID
-    if hay_grafico:
-        img_mime = MIMEImage(img_buffer.read())
-        img_mime.add_header('Content-ID', '<grafico_distribucion>')
-        img_mime.add_header('Content-Disposition', 'inline', filename="grafico_distribucion.png")
-        msg_mail.attach(img_mime)
+    msg_mail.attach(MIMEText(html_body, 'html'))
 
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=18) as server:
             server.starttls()
             server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
             server.send_message(msg_mail)
-        print(f"✅ Reporte con gráfico enviado exitosamente a {email_dest}")
+        print(f"✅ Reporte diario enviado a {email_dest}")
         return {"status": "success", "destino": email_dest, "fecha": hoy_str}
     except Exception as ex:
         print(f"❌ Error SMTP en reporte diario: {ex}")
