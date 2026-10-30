@@ -480,6 +480,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
     """
     Cron exclusivo para enviar el resumen diario por correo con gráfico
     de barras visual apilado en HTML/CSS nativo (sin dependencias externas).
+    Envío mediante la API REST de Gmail (vía HTTPS / puerto 443).
     """
     if authorization != f"Bearer {CRON_SECRET_TOKEN}":
         raise HTTPException(status_code=401, detail="No autorizado")
@@ -493,8 +494,8 @@ def trigger_reporte_email(authorization: str = Header(None)):
 
     if not email_dest:
         return {"status": "skipped", "reason": "No hay email de destino configurado"}
-    if not EMAIL_EMISOR or not EMAIL_PASSWORD:
-        return {"status": "error", "reason": "Credenciales SMTP incompletas en variables de entorno"}
+    if not EMAIL_EMISOR:
+        return {"status": "error", "reason": "Falta la variable de entorno EMAIL_EMISOR en Render"}
 
     now_dt = datetime.now(tz_py)
     hoy_str = now_dt.strftime("%Y-%m-%d")
@@ -664,30 +665,6 @@ def trigger_reporte_email(authorization: str = Header(None)):
         </div>
     </div>
     """
-
-    msg_mail = MIMEMultipart('alternative')
-    msg_mail['From'] = EMAIL_EMISOR
-    msg_mail['To'] = email_dest
-    msg_mail['Subject'] = f"📈 Cierre Operativo Soporte BIMS - {hoy_str}"
-    msg_mail.attach(MIMEText(html_body, 'html'))
-
-    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-
-    if not RESEND_API_KEY:
-        return {"status": "error", "reason": "Falta la variable de entorno RESEND_API_KEY en Render"}
-
-    payload_resend = {
-        # Para pruebas puedes usar 'onboarding@resend.dev' o configurar tu dominio verificado
-        "from": "Soporte BIMS <onboarding@resend.dev>",
-        "to": [email_dest],
-        "subject": f"📈 Cierre Operativo Soporte BIMS - {hoy_str}",
-        "html": html_body
-    }
-
-    headers_resend = {
-        "Authorization": f"Bearer {RESEND_API_KEY}",
-        "Content-Type": "application/json"
-    }
 
     asunto_mail = f"📈 Cierre Operativo Soporte BIMS - {hoy_str}"
 
