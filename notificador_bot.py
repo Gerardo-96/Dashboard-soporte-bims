@@ -7,6 +7,11 @@ from datetime import datetime, timezone, timedelta, time
 import pandas as pd
 from supabase import create_client
 from fastapi import FastAPI, Header, HTTPException
+import io
+import matplotlib
+matplotlib.use('Agg')  # Modo servidor sin interfaz gráfica
+import matplotlib.pyplot as plt
+from email.mime.image import MIMEImage
 
 app = FastAPI()
 
@@ -333,65 +338,7 @@ def procesar_alertas_y_reportes():
                     .eq("id", c['id'])\
                     .execute()
                 
-    # -------------------------------------------------------------
-    # C. RESUMEN DIARIO EMAIL
-    # -------------------------------------------------------------
-    hora_cfg_str = cfg.get("hora_reporte_diario", "18:00:00")
-    try:
-        hora_objetivo = datetime.strptime(hora_cfg_str, "%H:%M:%S").time()
-    except Exception:
-        hora_objetivo = time(18, 0)
-
-    if now_dt.time().hour == hora_objetivo.hour and now_dt.time().minute <= 10:
-        email_dest = cfg.get("email_destino_reporte")
-        if email_dest:
-            hoy_str = now_dt.strftime("%Y-%m-%d")
-            res_hoy = supabase.table("conversaciones")\
-                .select("id, agente_asignado, primera_respuesta_min, estado")\
-                .gte("created_at", f"{hoy_str}T00:00:00Z")\
-                .execute()
-            df_h = pd.DataFrame(res_hoy.data or [])
-
-            if not df_h.empty:
-                grp = df_h.groupby("agente_asignado").agg(
-                    total=("id", "count"), 
-                    prom_resp=("primera_respuesta_min", "mean")
-                ).reset_index()
-
-                filas_table = "".join([
-                    f"<tr><td style='padding:8px;border:1px solid #ddd;'>{r['agente_asignado']}</td>"
-                    f"<td style='padding:8px;border:1px solid #ddd;'>{r['total']}</td>"
-                    f"<td style='padding:8px;border:1px solid #ddd;'>{round(r['prom_resp'], 1) if pd.notna(r['prom_resp']) else 0} min</td></tr>"
-                    for _, r in grp.iterrows()
-                ])
-
-                html_body = f"""
-                <h2>📊 Resumen Diario Soporte BIMS - {hoy_str}</h2>
-                <table style='border-collapse:collapse;width:100%;'>
-                    <tr style='background:#0284c7;color:white;'>
-                        <th style='padding:8px;border:1px solid #ddd;'>Agente</th>
-                        <th style='padding:8px;border:1px solid #ddd;'>Chats Total</th>
-                        <th style='padding:8px;border:1px solid #ddd;'>Prom. Respuesta</th>
-                    </tr>
-                    {filas_table}
-                </table>
-                """
-                
-                msg_mail = MIMEMultipart()
-                msg_mail['From'] = EMAIL_EMISOR
-                msg_mail['To'] = email_dest
-                msg_mail['Subject'] = f"📈 Reporte Diario Soporte BIMS - {hoy_str}"
-                msg_mail.attach(MIMEText(html_body, 'html'))
-
-                try:
-                    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-                        server.starttls()
-                        server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
-                        server.send_message(msg_mail)
-                    print(f"✅ Reporte diario enviado a {email_dest}")
-                except Exception as ex_mail:
-                    print(f"Error enviando correo: {ex_mail}")
-
+    
     return {"status": "success", "processed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S")}
 
 # ==========================================
@@ -458,3 +405,233 @@ def reiniciar_servicio(authorization: str = Header(None)):
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# ==========================================
+# ENDPOINT EXCLUSIVO: REPORTE DIARIO CON GRÁFICO
+# ==========================================
+@app.post("/ejecutar-reporte-email-diario")
+@app.get("/ejecutar-reporte-email-diario")
+def trigger_reporte_email(authorization: str = Header(None)):
+    """
+    Cron exclusivo para enviar el resumen diario por correo con el gráfico
+    apilado de Distribución de Carga (Cerrados vs Abiertos).
+    """
+    if authorization != f"Bearer {CRON_SECRET_TOKEN}":
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    cfg_res = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
+    if not cfg_res.data:
+        raise HTTPException(status_code=404, detail="Configuración no encontrada en Supabase")
+
+    cfg = cfg_res.data[0]
+    email_dest = cfg.get("email_destino_reporte")
+
+    if not email_dest:
+        return {"status": "skipped", "reason": "No hay email de destino configurado"}
+    if not EMAIL_EMISOR or not EMAIL_PASSWORD:
+        return {"status": "error", "reason": "Credenciales SMTP incompletas en variables de entorno"}
+
+    now_dt = datetime.now(tz_py)
+    hoy_str = now_dt.strftime("%Y-%m-%d")
+
+    # Si es fin de semana o feriado oficial, no despacha reporte
+    if hoy_str in FERIADOS or now_dt.weekday() in [5, 6]:
+        return {"status": "skipped", "reason": "Día no hábil / Feriado"}
+
+    # 1. Traer lista maestra de agentes autorizados
+    agentes_omitir = [
+        "monica", "mónica", "monica (bot)", "soporte", 
+        "gerardo gaona", "gerardo.gaona@itti.digital", 
+        "none", "nan", "sin asignar", ""
+    ]
+    
+    lista_agentes_maestra = set()
+    try:
+        res_u = supabase.table("usuarios_autorizados").select("nombre").eq("activo", True).execute()
+        for u in (res_u.data or []):
+            nom = u.get("nombre", "").strip()
+            if nom and nom.lower() not in agentes_omitir:
+                lista_agentes_maestra.add(nom)
+    except Exception:
+        pass
+
+    # 2. Consultar conversaciones del día (UTC) y abiertas
+    hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    res_abiertos = supabase.table("conversaciones")\
+        .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
+        .not_.in_("estado", ESTADOS_CERRADOS)\
+        .execute()
+
+    res_cerrados_hoy = supabase.table("conversaciones")\
+        .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
+        .in_("estado", ESTADOS_CERRADOS)\
+        .gte("fecha_cierre", hoy_inicio_utc)\
+        .execute()
+
+    todos = (res_abiertos.data or []) + (res_cerrados_hoy.data or [])
+    unicos = {r["id"]: r for r in todos}
+    data_cargas = list(unicos.values())
+
+    df_c = pd.DataFrame(data_cargas) if data_cargas else pd.DataFrame()
+
+    if not df_c.empty:
+        df_c["fecha_ref"] = df_c["fecha_cierre"].fillna(df_c["updated_at"])
+        fecha_ref_dt = pd.to_datetime(df_c["fecha_ref"], format="ISO8601", errors="coerce", utc=True)
+        df_c["fecha_solo_py"] = fecha_ref_dt.dt.tz_convert("America/Asuncion").dt.date
+
+        df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+        for ag in df_c["agente_clean"].unique():
+            if ag.lower() not in agentes_omitir:
+                lista_agentes_maestra.add(ag)
+
+        df_c["es_cerrado"] = df_c["estado"].fillna("").astype(str).str.strip().str.lower().isin(
+            [e.lower() for e in ESTADOS_CERRADOS]
+        )
+        hoy_date_py = now_dt.date()
+        df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
+        df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
+
+    # 3. Consolidar métricas de carga por agente
+    resumen = []
+    for agente in sorted(list(lista_agentes_maestra)):
+        if agente.lower() in agentes_omitir:
+            continue
+
+        if not df_c.empty and "agente_clean" in df_c.columns:
+            grp = df_c[df_c["agente_clean"] == agente]
+            pendientes = int(grp["es_abierto_actual"].sum()) if not grp.empty else 0
+            cerrados_hoy = int(grp["es_cerrado_hoy"].sum()) if not grp.empty else 0
+        else:
+            pendientes = 0
+            cerrados_hoy = 0
+
+        total_asig = pendientes + cerrados_hoy
+        resumen.append({
+            "agente": agente,
+            "cerrados": cerrados_hoy,
+            "pendientes": pendientes,
+            "total": total_asig
+        })
+
+    df_res = pd.DataFrame(resumen)
+    if not df_res.empty:
+        df_res = df_res.sort_values(by="total", ascending=False)
+
+    # 4. Generación del gráfico de barras idéntico al Dashboard
+    img_buffer = io.BytesIO()
+    hay_grafico = False
+
+    if not df_res.empty and df_res["total"].sum() > 0:
+        fig, ax = plt.subplots(figsize=(8, 4.2), facecolor='#1e293b')
+        ax.set_facecolor('#1e293b')
+
+        nombres = df_res["agente"].tolist()
+        val_cerrados = df_res["cerrados"].tolist()
+        val_pendientes = df_res["pendientes"].tolist()
+        val_totales = df_res["total"].tolist()
+
+        ancho_barra = 0.55
+        indices = range(len(nombres))
+
+        # Barra base: Cerrados Hoy (Verde Esmeralda)
+        ax.bar(indices, val_cerrados, label='Cerrados Hoy', color='#10b981', width=ancho_barra)
+        # Barra superior apilada: Abiertos Pendientes (Naranja/Coral)
+        ax.bar(indices, val_pendientes, bottom=val_cerrados, label='Abiertos Pendientes', color='#f97316', width=ancho_barra)
+
+        # Números internos y total en la cabecera
+        for i, (c, p, tot) in enumerate(zip(val_cerrados, val_pendientes, val_totales)):
+            if tot > 0:
+                ax.text(i, tot + (max(val_totales) * 0.03), str(tot), ha='center', va='bottom', color='#f8fafc', fontweight='bold', fontsize=11)
+            if c > 0:
+                ax.text(i, c / 2, str(c), ha='center', va='center', color='#ffffff', fontweight='bold', fontsize=10)
+            if p > 0:
+                ax.text(i, c + (p / 2), str(p), ha='center', va='center', color='#ffffff', fontweight='bold', fontsize=10)
+
+        ax.set_xticks(indices)
+        ax.set_xticklabels(nombres, color='#cbd5e1', fontsize=10, rotation=15, ha='right')
+        ax.yaxis.set_visible(False)  # Quita números y líneas del eje Y
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        ax.legend(facecolor='#1e293b', edgecolor='#334155', labelcolor='#cbd5e1', loc='upper right', framealpha=0.9)
+        plt.title('Distribución y Carga del Equipo (Cierre de Jornada)', color='#f8fafc', fontsize=12, fontweight='bold', pad=18)
+        
+        plt.tight_layout()
+        plt.savefig(img_buffer, format='png', dpi=130, facecolor=fig.get_facecolor(), edgecolor='none')
+        plt.close(fig)
+        img_buffer.seek(0)
+        hay_grafico = True
+
+    # 5. Armado de la tabla HTML
+    filas_table = "".join([
+        f"<tr><td style='padding:10px;border:1px solid #e2e8f0;font-weight:600;'>{r['agente']}</td>"
+        f"<td style='padding:10px;border:1px solid #e2e8f0;text-align:center;'>{r['total']}</td>"
+        f"<td style='padding:10px;border:1px solid #e2e8f0;text-align:center;color:#10b981;font-weight:600;'>{r['cerrados']}</td>"
+        f"<td style='padding:10px;border:1px solid #e2e8f0;text-align:center;color:#f97316;font-weight:600;'>{r['pendientes']}</td></tr>"
+        for _, r in df_res.iterrows()
+    ]) if not df_res.empty else "<tr><td colspan='4' style='text-align:center;padding:12px;'>Sin actividad registrada.</td></tr>"
+
+    seccion_grafico_html = """
+    <div style="margin-top:20px;text-align:center;">
+        <img src="cid:grafico_distribucion" style="width:100%;max-width:600px;border-radius:10px;border:1px solid #334155;" alt="Gráfico de Carga">
+    </div>
+    """ if hay_grafico else ""
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; color: #1e293b; max-width: 640px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; background-color: #ffffff;">
+        <h2 style="color: #0284c7; margin-top: 0;">📊 Cierre Operativo Soporte BIMS</h2>
+        <p style="font-size: 0.95rem; color: #475569;">
+            Resumen consolidado de carga correspondiente a la jornada del <b>{hoy_str}</b>:
+        </p>
+
+        {seccion_grafico_html}
+
+        <h3 style="color:#1e293b;margin-top:25px;font-size:1rem;">Detalle por Agente</h3>
+        <table style='border-collapse:collapse;width:100%;font-size:0.9rem;'>
+            <thead>
+                <tr style='background:#0284c7;color:white;'>
+                    <th style='padding:10px;border:1px solid #0284c7;text-align:left;'>Agente</th>
+                    <th style='padding:10px;border:1px solid #0284c7;text-align:center;'>Total Asignados</th>
+                    <th style='padding:10px;border:1px solid #0284c7;text-align:center;'>Cerrados Hoy</th>
+                    <th style='padding:10px;border:1px solid #0284c7;text-align:center;'>Pendientes Actuales</th>
+                </tr>
+            </thead>
+            <tbody>
+                {filas_table}
+            </tbody>
+        </table>
+
+        <p style="font-size:0.78rem;color:#94a3b8;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:12px;">
+            Notificación automática de fin de jornada generada por el Bot Notificador BIMS.
+        </p>
+    </div>
+    """
+
+    msg_mail = MIMEMultipart('related')
+    msg_mail['From'] = EMAIL_EMISOR
+    msg_mail['To'] = email_dest
+    msg_mail['Subject'] = f"📈 Cierre Operativo Soporte BIMS - {hoy_str}"
+
+    msg_alt = MIMEMultipart('alternative')
+    msg_mail.attach(msg_alt)
+    msg_alt.attach(MIMEText(html_body, 'html'))
+
+    # Adjuntar imagen como elemento inline CID
+    if hay_grafico:
+        img_mime = MIMEImage(img_buffer.read())
+        img_mime.add_header('Content-ID', '<grafico_distribucion>')
+        img_mime.add_header('Content-Disposition', 'inline', filename="grafico_distribucion.png")
+        msg_mail.attach(img_mime)
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
+            server.starttls()
+            server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
+            server.send_message(msg_mail)
+        print(f"✅ Reporte con gráfico enviado exitosamente a {email_dest}")
+        return {"status": "success", "destino": email_dest, "fecha": hoy_str}
+    except Exception as ex:
+        print(f"❌ Error SMTP en reporte diario: {ex}")
+        return {"status": "error_smtp", "error": str(ex)}
