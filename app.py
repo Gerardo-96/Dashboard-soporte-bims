@@ -301,7 +301,6 @@ def obtener_cargas_agentes_db(hoy_inicio_utc):
     """
     Recupera chats abiertos y cerrados hoy manejando variantes de mayúsculas/minúsculas.
     """
-    # Incluimos las variantes con mayúscula inicial que están guardadas en Supabase ("Cerrado", "Closed", etc.)
     estados_cerrados_list = [
         "cerrado", "closed", "resolved", "resuelto", "snoozed",
         "Cerrado", "Closed", "Resolved", "Resuelto", "Snoozed"
@@ -313,11 +312,12 @@ def obtener_cargas_agentes_db(hoy_inicio_utc):
         .not_.in_("estado", estados_cerrados_list)\
         .execute()
 
-    # 2. Chats cerrados hoy (filtrados desde el inicio del día local en UTC)
+    # 2. Chats cerrados hoy (donde tanto el cierre como la asignación/creación sean de hoy)
     res_cerrados_hoy = supabase.table("conversaciones")\
         .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
         .in_("estado", estados_cerrados_list)\
         .gte("fecha_cierre", hoy_inicio_utc)\
+        .gte("created_at", hoy_inicio_utc)\
         .execute()
 
     # 3. Respaldo para chats cerrados cuya fecha_cierre sea NULL
@@ -326,11 +326,11 @@ def obtener_cargas_agentes_db(hoy_inicio_utc):
         .in_("estado", estados_cerrados_list)\
         .is_("fecha_cierre", "null")\
         .gte("updated_at", hoy_inicio_utc)\
+        .gte("created_at", hoy_inicio_utc)\
         .execute()
 
     todos = (res_abiertos.data or []) + (res_cerrados_hoy.data or []) + (res_cerrados_respaldo.data or [])
     
-    # Eliminar duplicados por ID
     unicos = {r["id"]: r for r in todos}
     return list(unicos.values())
 
@@ -383,15 +383,21 @@ def renderizar_panel_carga_asignador():
         df_c = pd.DataFrame(data_cargas) if data_cargas else pd.DataFrame()
 
         # Garantizar presencia de columnas en df_c
-        for col in ["id", "agente_asignado", "estado", "fecha_cierre", "updated_at"]:
+        for col in ["id", "agente_asignado", "estado", "fecha_cierre", "updated_at", "created_at"]:
             if col not in df_c.columns:
                 df_c[col] = None
 
         if not df_c.empty:
+            # Fecha de cierre / resolución en hora local
             df_c["fecha_ref"] = df_c["fecha_cierre"].fillna(df_c["updated_at"])
             fecha_ref_dt = pd.to_datetime(df_c["fecha_ref"], format="ISO8601", errors="coerce", utc=True)
             df_c["fecha_ref_py"] = fecha_ref_dt.dt.tz_convert("America/Asuncion")
             df_c["fecha_solo_py"] = df_c["fecha_ref_py"].dt.date
+
+            # Fecha de creación / asignación en hora local
+            created_dt = pd.to_datetime(df_c["created_at"], format="ISO8601", errors="coerce", utc=True)
+            df_c["created_py"] = created_dt.dt.tz_convert("America/Asuncion")
+            df_c["created_solo_py"] = df_c["created_py"].dt.date
 
             df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
             
@@ -404,7 +410,13 @@ def renderizar_panel_carga_asignador():
             df_c["es_cerrado"] = df_c["estado"].fillna("").astype(str).str.strip().str.lower().isin(estados_cerrados)
 
             hoy_date_py = now_dt.date()
-            df_c["es_cerrado_hoy"] = df_c["es_cerrado"] & (df_c["fecha_solo_py"] == hoy_date_py)
+
+            # Solo cuenta como cerrado hoy si FUE CERRADO HOY y ADEMÁS FUE ASIGNADO/CREADO HOY
+            df_c["es_cerrado_hoy"] = (
+                df_c["es_cerrado"] 
+                & (df_c["fecha_solo_py"] == hoy_date_py) 
+                & (df_c["created_solo_py"] == hoy_date_py)
+            )
             df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
 
         # 2. Agrupamiento por agente humano
