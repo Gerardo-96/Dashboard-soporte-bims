@@ -9,6 +9,7 @@ from supabase import create_client
 from fastapi import FastAPI, Header, HTTPException
 import io
 from email.mime.image import MIMEImage
+import base64
 
 app = FastAPI()
 
@@ -108,6 +109,73 @@ def asegurar_conexion_whatsapp():
             print(f"❌ Error al disparar Deploy Hook: {e}")
             
     return False
+
+# ==========================================
+# ENVÍO DE CORREO VÍA GMAIL REST API (HTTPS / PUERTO 443)
+# ==========================================
+def obtener_access_token_gmail():
+    """Genera un token de acceso temporal utilizando el refresh token de Google."""
+    client_id = os.environ.get("GMAIL_CLIENT_ID", "")
+    client_secret = os.environ.get("GMAIL_CLIENT_SECRET", "")
+    refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN", "")
+
+    if not client_id or not client_secret or not refresh_token:
+        print("❌ Faltan credenciales de Gmail OAuth en las variables de entorno.")
+        return None
+
+    url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    }
+
+    try:
+        resp = requests.post(url, data=payload, timeout=12)
+        if resp.status_code == 200:
+            return resp.json().get("access_token")
+        else:
+            print(f"❌ Error renovando Access Token de Gmail: {resp.text}")
+            return None
+    except Exception as e:
+        print(f"❌ Excepción contactando endpoint OAuth de Google: {e}")
+        return None
+
+def enviar_correo_gmail_api(email_emisor, email_dest, asunto, html_body):
+    """Construye el mensaje MIME y lo envía por la API de Gmail por puerto 443."""
+    access_token = obtener_access_token_gmail()
+    if not access_token:
+        return {"status": "error_token", "error": "No se pudo obtener el Access Token de Gmail"}
+
+    # Construcción estándar del correo HTML
+    msg = MIMEMultipart("alternative")
+    msg["From"] = email_emisor
+    msg["To"] = email_dest
+    msg["Subject"] = asunto
+    msg.attach(MIMEText(html_body, "html"))
+
+    # Gmail API requiere codificación Base64 URL-Safe
+    raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
+
+    url_send = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        res = requests.post(url_send, json={"raw": raw_message}, headers=headers, timeout=15)
+        if res.status_code in [200, 201]:
+            print(f"✅ Reporte diario enviado exitosamente vía Gmail API a {email_dest}")
+            return {"status": "success", "destino": email_dest, "gmail_id": res.json().get("id")}
+        else:
+            print(f"❌ Error en Gmail API: {res.text}")
+            return {"status": "error_gmail_api", "error": res.json()}
+    except Exception as ex:
+        print(f"❌ Excepción enviando correo por Gmail API: {ex}")
+        return {"status": "error_http", "error": str(ex)}
+        
 
 def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
     if pd.isna(dt_inicio) or pd.isna(dt_fin) or dt_fin <= dt_inicio:
@@ -621,17 +689,11 @@ def trigger_reporte_email(authorization: str = Header(None)):
         "Content-Type": "application/json"
     }
 
-    try:
-        res = requests.post("https://api.resend.com/emails", json=payload_resend, headers=headers_resend, timeout=15)
-        res_json = res.json()
-        
-        if res.status_code in [200, 201]:
-            print(f"✅ Reporte diario enviado a {email_dest} vía Resend (HTTPS)")
-            return {"status": "success", "destino": email_dest, "fecha": hoy_str, "resend_id": res_json.get("id")}
-        else:
-            print(f"❌ Error en API Resend: {res_json}")
-            return {"status": "error_api", "error": res_json}
-            
-    except Exception as ex_http:
-        print(f"❌ Error HTTP al contactar Resend: {ex_http}")
-        return {"status": "error_http", "error": str(ex_http)}
+    asunto_mail = f"📈 Cierre Operativo Soporte BIMS - {hoy_str}"
+
+    return enviar_correo_gmail_api(
+        email_emisor=EMAIL_EMISOR,
+        email_dest=email_dest,
+        asunto=asunto_mail,
+        html_body=html_body
+    )
