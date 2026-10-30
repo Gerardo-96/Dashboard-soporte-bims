@@ -603,13 +603,35 @@ def trigger_reporte_email(authorization: str = Header(None)):
     msg_mail['Subject'] = f"📈 Cierre Operativo Soporte BIMS - {hoy_str}"
     msg_mail.attach(MIMEText(html_body, 'html'))
 
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+
+    if not RESEND_API_KEY:
+        return {"status": "error", "reason": "Falta la variable de entorno RESEND_API_KEY en Render"}
+
+    payload_resend = {
+        # Para pruebas puedes usar 'onboarding@resend.dev' o configurar tu dominio verificado
+        "from": "Soporte BIMS <onboarding@resend.dev>",
+        "to": [email_dest],
+        "subject": f"📈 Cierre Operativo Soporte BIMS - {hoy_str}",
+        "html": html_body
+    }
+
+    headers_resend = {
+        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=18) as server:
-            server.starttls()
-            server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
-            server.send_message(msg_mail)
-        print(f"✅ Reporte diario enviado a {email_dest}")
-        return {"status": "success", "destino": email_dest, "fecha": hoy_str}
-    except Exception as ex:
-        print(f"❌ Error SMTP en reporte diario: {ex}")
-        return {"status": "error_smtp", "error": str(ex)}
+        res = requests.post("https://api.resend.com/emails", json=payload_resend, headers=headers_resend, timeout=15)
+        res_json = res.json()
+        
+        if res.status_code in [200, 201]:
+            print(f"✅ Reporte diario enviado a {email_dest} vía Resend (HTTPS)")
+            return {"status": "success", "destino": email_dest, "fecha": hoy_str, "resend_id": res_json.get("id")}
+        else:
+            print(f"❌ Error en API Resend: {res_json}")
+            return {"status": "error_api", "error": res_json}
+            
+    except Exception as ex_http:
+        print(f"❌ Error HTTP al contactar Resend: {ex_http}")
+        return {"status": "error_http", "error": str(ex_http)}
