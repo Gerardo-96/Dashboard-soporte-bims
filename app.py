@@ -3321,79 +3321,70 @@ with tab_admin:
 
 with tab_faq:
     st.markdown("### Preguntas Frecuentes & Criterios Operativos")
-    st.caption("Guía detallada sobre las reglas de negocio, horarios de atención, medición de SLA y evaluación del CSAT.")
+    st.caption("Guía oficial sobre reglas de negocio, horarios hábiles, medición de SLA y evaluación del CSAT.")
 
-    with st.expander("1. ¿Cómo se evalúa el SLA en la Pantalla (Dashboard En Vivo)?", expanded=True):
+    with st.expander("1. ¿Cómo se evalúa el SLA Operativo en Pantalla (Dashboard en Vivo)?", expanded=True):
         st.markdown(r"""
-        * **Chats Evaluados:** Se incluyen solo los chats asignados a agentes humanos (`por_agente == 'no excluido'`) y que hayan sido creados dentro de la jornada operativa (`horario_evaluado != 'fuera de horario'`).
-        * **Promedios de Respuesta y Gestión:** Se calcula la media numérica (`mean`) en minutos de la **Primera Respuesta** y del **Tiempo de Resolución/Gestión** de los chats válidos del rango de fechas consultado.
-        * **Porcentaje de Cumplimiento:** Es la proporción de conversaciones donde el tiempo de respuesta o gestión fue menor o igual al umbral objetivo configurado (ejemplo: $\le 2.0$ min para 1ra respuesta y $\le 60.0$ min para gestión).
+        * **Chats Evaluados:** Se incluyen exclusivamente conversaciones atendidas por **agentes humanos** (`por_agente == 'no excluido'`), excluyendo a *Mónica (Bot)*, *Soporte* o estados *Sin Asignar*[cite: 4].
+        * **Franja Horaria Válida:** Solo califican los chats ingresados dentro de la jornada laboral hábil (Lunes a Viernes de 08:00 a 17:30 hs y Sábados de 09:00 a 11:45 hs)[cite: 4]. Los chats en feriados o fuera de horario quedan marcados como `fuera de horario` / `excluido`[cite: 4].
+        * **Promedio 1ra Respuesta:** Media numérica en minutos desde la creación/derivación del chat hasta la primera intervención humana[cite: 4]. Meta: $\le 2.0$ min[cite: 4].
+        * **Promedio de Gestión:** Media en minutos hábiles de resolución de chats cerrados[cite: 4]. **Importante:** Se descartan automáticamente los tickets con etiqueta *"Sin Respuesta"*[cite: 4]. Meta: $\le 60.0$ min[cite: 4].
+        * **Porcentaje de Cumplimiento (% SLA):** Proporción de casos válidos que cumplieron la meta sobre el total evaluable. Objetivo operativo: $\ge 90\%$[cite: 4].
         """)
 
-    with st.expander("2. ¿Cómo se contabiliza el tiempo hábil para el SLA?", expanded=False):
+    with st.expander("2. ¿Cómo se computa el tiempo hábil para el SLA de Gestión?", expanded=False):
         st.markdown(r"""
-        ### ⏱️ El SLA contabiliza únicamente tiempo hábil
+        ### ⏱️ El SLA mide tiempo operativo real, no horas reloj
 
-        El tiempo utilizado para medir los SLA **no corresponde al tiempo calendario transcurrido** entre la creación y la respuesta o cierre de una conversación.
+        El tiempo de resolución **no cuenta el tiempo calendario transcurrido**, sino únicamente los minutos transcurridos dentro de los turnos hábiles definidos:
 
-        El sistema contabiliza únicamente los minutos que se encuentran dentro de las **jornadas operativas definidas**. Por lo tanto, las horas que están fuera de estas jornadas **no suman tiempo al SLA**.
+        * **Lunes a Viernes:** 08:00 a 17:30 hs[cite: 4].
+        * **Sábados:** 09:00 a 11:45 hs[cite: 4].
+        * **Domingos y Feriados:** Inactivos (no acumulan minutos de SLA)[cite: 4].
+        *(Nota: El turno extendido nocturno se encuentra actualmente pausado en las evaluaciones activas).*
 
-        #### 📅 Días Feriados
-        Las conversaciones creadas en días feriados oficiales se marcan automáticamente como **`excluido`**.
-
-        #### 🕒 Horario Hábil Normal
-        * **Lunes a Viernes:** 08:00 a 17:30 hs (Jornada continua, sin pausar almuerzo).
-        * **Sábados:** 09:00 a 11:45 hs.
-
-        #### 🌙 Horario Extendido (Turno Noche / Fin de Semana)
-        * **Lunes a Miércoles:** 19:00 a 02:00 hs (del día siguiente).
-        * **Jueves a Domingo:** 18:00 a 03:00 hs (del día siguiente, incluye fines de semana).
-
-        Cuando una jornada termina después de medianoche, el sistema entiende correctamente que la jornada continúa durante la madrugada del día siguiente.
-
-        #### 📌 Ejemplo práctico
-
-        Si una conversación se crea un lunes a las **16:00 hs** y se cierra el martes a las **09:00 hs**, el SLA **no contabiliza las 17 horas de tiempo calendario sino 9,5 horas habiles**.
-
-        Solo se contabilizan los períodos que pertenecen a las jornadas hábiles correspondientes. El tiempo transcurrido durante la noche y fuera de las franjas operativas no incrementa el SLA.
-
-        #### 🚫 ¿Qué períodos no cuentan?
-
-        No se acumulan minutos de SLA durante:
-        - Horas fuera de las jornadas operativas.
-        - Períodos nocturnos que no formen parte de la jornada extendida.
-        - Domingos fuera de la jornada extendida correspondiente.
-        - Días feriados cuando la conversación queda excluida por las reglas de SLA.
-
-        **En resumen:** el SLA mide **tiempo operativo**, no tiempo de reloj. Por eso una conversación puede haber estado abierta durante muchas horas, pero tener contabilizado menos tiempo para el SLA.
+        > **Ejemplo:** Si un ticket ingresa un viernes a las 17:00 hs y se resuelve el lunes siguiente a las 08:30 hs, el SLA **no contabiliza 63 horas calendario, sino exactamente 60 minutos hábiles** (30 min del viernes + 30 min del lunes).
         """)
 
-
-    with st.expander("3. ¿Cómo se miden el SLA Normal, SLA Extendido y SLA Gestión en el reporte de Excel?", expanded=False):
+    with st.expander("3. ¿Por qué la etiqueta 'Sin Respuesta' se excluye solo en Gestión?", expanded=False):
         st.markdown(r"""
-        En el archivo Excel descargable, cada conversación contiene tres columnas de evaluación independiente:
-
-        * **SLA Normal:** 
-          * **Cumple:** Creado en Día Laboral, Horario Normal, con agente asignado, y cuya primera respuesta tomó $\le$ al límite ($2.0$ min).
-          * **No Cumple:** Creado en Día Laboral, Horario Normal pero la primera respuesta superó el tiempo límite.
-          * **Excluído:** Creado fuera de los días laborales o en feriado, o fuera del Horario Normal, o atendido exclusivamente por el bot.
-
-        * **SLA Extendido:** 
-          * **Cumple:** Creado dentro de la franja de Horario Extendido, con agente asignado, y con primera respuesta $\le$ al límite ($2.0$ min).
-          * **No Cumple:** Creado en Horario Extendido pero la primera respuesta superó el límite de tiempo.
-          * **Excluido por filtro:** Creado fuera del Horario Extendido.
-
-        * **SLA Tiempo Gestión:** 
-          * **Cumple:** Creado en horario hábil, sin la etiqueta *"Sin Respuesta"* y resuelto/cerrado en un tiempo $\le$ al umbral ($60$ min).
-          * **No Cumple:** Creado en horario hábil pero su tiempo de resolución superó el umbral.
-          * **Sin cerrar:** Conversación aún abierta pendiente de resolución.
-          * **Excluido por filtro:** Conversación que contiene la etiqueta *"sin respuesta"*, creada en feriado o fuera de horario hábil.
+        * **En Tiempo de Gestión (Excluido):** Cuando un cliente abandona la consulta y se cierra por inactividad tras varios días de espera, incluirlo distorsionaría injustamente los tiempos del equipo. Por ello, se marca como `excluido por filtro` en gestión[cite: 4].
+        * **En Primera Respuesta (Incluido):** El deber de atender con rapidez al cliente al momento de ingresar existe antes de saber si responderá luego. Si la primera atención tardó de más, el incumplimiento se contabiliza[cite: 4].
+        * **En Conteo de Volumen (Incluido):** El chat ingresó y demandó tiempo de seguimiento, por lo que forma parte del volumen atendido en la jornada[cite: 4].
         """)
 
-    with st.expander("4. ¿Cómo se calcula y agrupa la métrica CSAT (Satisfacción del Cliente)?", expanded=False):
+    with st.expander("4. ¿Cuál es el criterio para 'Cerrados Hoy' y 'Distribución de Carga'?", expanded=False):
         st.markdown(r"""
-        * **Origen de la Fecha:** Las métricas, gráficos y tablas de CSAT se alimentan de la **marca de tiempo exacta en que el cliente calificó la atención** (`fecha_calificacion`).
-        * **Calificaciones Válidas:** Se consideran las puntuaciones numéricas entre **1 y 5 estrellas** de conversaciones atendidas por agentes humanos.
-        * **Fórmula de CSAT:**
-          $$\text{CSAT (\%)} = \left( \frac{\text{Total de Calificaciones Positivas (4 y 5 estrellas)}}{\text{Total de Encuestas Validadas}} \right) \times 100$$
+        Para asegurar una medición justa de la jornada diaria:
+        * **Cerrados Hoy (en métricas de carga):** Solo contabiliza tickets cuya **fecha de cierre sea hoy Y cuya fecha de creación/asignación también sea de hoy**[cite: 4].
+        * Los tickets de días anteriores que se resuelvan hoy no alteran la carga de asignaciones generadas en el día, garantizando que el gráfico apilado refleje el flujo exacto de la jornada actual[cite: 4].
+        """)
+
+    with st.expander("5. ¿Cómo se mide y evoluciona el CSAT (Satisfacción del Cliente)?", expanded=False):
+        st.markdown(r"""
+        * **Origen de la Fecha:** Se toma la marca de tiempo exacta en que el cliente emitió la calificación (`fecha_calificacion`), no la fecha de apertura del chat[cite: 4].
+        * **Encuestas Positivas:** Puntuaciones de **4 y 5 estrellas** sobre el total de encuestas validadas recibidas[cite: 4]:
+          $$\text{CSAT (\%)} = \left( \frac{\text{Encuestas Positivas}}{\text{Total Encuestas}} \right) \times 100$$
+        * **Evolución Semanal:** Agrupa el rendimiento en semanas de **Lunes a Domingo** identificadas con la semana del año (**S41, S42...**) tomando como histórico desde el trimestre anterior ($Q_{n-1}$)[cite: 4].
+        """)
+
+    with st.expander("6. ¿Cómo opera el Bot de Notificaciones y Alertas por WhatsApp?", expanded=False):
+        st.markdown(r"""
+        El sistema cuenta con un bot automatizado integrado con Evolution API y Render para el monitoreo proactivo de la atención:
+
+        * **Horario Operativo del Bot:**
+          * **Lunes a Viernes:** de 08:15 a 18:00 hs.
+          * **Sábados:** de 09:15 a 12:00 hs.
+          * **Domingos y Feriados:** Inactivo.
+        
+        * **Tipos de Alertas:**
+          * **Alerta Individual (Chat Sin Asignar):** Si un chat entrante no tiene agente asignado y supera el tiempo límite configurado (ej. $\ge 5.0$ min), el bot envía una alerta con mención global (`@todos`) al número administrativo asignado.
+          * **Alerta Grupal Recurrente (Antigüedad de Chats):** Para chats abiertos asignados a agentes humanos, el bot notifica en el grupo de WhatsApp cada vez que se cumple un múltiplo de horas hábiles (ej. cada 3 o 5 hs hábiles). En cada reiteración menciona directamente al agente responsable con su `@telefono`.
+        
+        * **Indicador de Estado (Cabecera):**
+          * **🟢 Bot Operativo (open):** Sesión de WhatsApp activa y lista para emitir alertas.
+          * **🔴 Bot Desconectado:** La sesión se cerró o se desvinculó. Dispone de un mecanismo de auto-recuperación y un botón de reinicio manual en la pestaña de Administración.
+        
+        * **Reporte Diario por Correo:**
+          * Se despacha automáticamente al finalizar la jornada (Lunes a Viernes a las 18:30 hs) vía Gmail API, incluyendo el resumen ejecutivo de volumen, cumplimiento de SLA, CSAT y el gráfico de distribución por agente.
         """)
