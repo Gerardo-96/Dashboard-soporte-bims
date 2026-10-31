@@ -1838,23 +1838,26 @@ with tab_operativo:
                     type="line",
                     x0=0, x1=1, xref="paper",
                     y0=90, y1=90, yref="y",
-                    line=dict(color="#34d399", width=2, dash="dash")
+                    line=dict(color="#34d399", width=1.5, dash="dash")
                 )
 
+                # Anotación reubicada al inicio del gráfico (lado izquierdo) y por debajo de la línea
                 fig_csat.add_annotation(
-                    x=1, y=90, xref="paper", yref="y",
+                    x=0.01, y=90, xref="paper", yref="y",
                     text="<b>Meta Objetivo (90%)</b>",
                     showarrow=False,
-                    yshift=12,
-                    font=dict(color="#34d399", size=12)
+                    xanchor="left",
+                    yshift=-12,  # Debajo de la línea para no chocar con los números de la curva
+                    font=dict(color="#34d399", size=11),
+                    bgcolor="rgba(30, 41, 59, 0.75)"  # Fondo translúcido protector
                 )
 
                 fig_csat.update_layout(
                     title=f"<b>Evolución Semanal de Satisfacción al Cliente (Desde Q{q_ant_evo})</b>",
-                    xaxis_title="Semana (Lunes a Domingo)",
+                    xaxis_title="Semana del Año",
                     yaxis_title="",
                     yaxis=dict(
-                        range=[0, 115],
+                        range=[0, 120],  # Rango ampliado para que el 100% tenga suficiente aire superior
                         showgrid=False,
                         showline=False,
                         zeroline=False,
