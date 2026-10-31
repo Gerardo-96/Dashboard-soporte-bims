@@ -1823,12 +1823,13 @@ with tab_operativo:
                 fig_csat.add_trace(go.Scatter(
                     x=df_evo_csat["Semana"],
                     y=df_evo_csat["CSAT %"],
-                    mode="lines+markers+text",
+                    mode="lines+text",
                     name="CSAT (%)",
-                    text=[f"<b>{v}%</b><br>({n} enc.)" for v, n in zip(df_evo_csat["CSAT %"], df_evo_csat["Encuestas"])],
+                    text=[f"<b>{v}%</b>" for v in df_evo_csat["CSAT %"]],
                     textposition="top center",
+                    hovertemplate="<b>%{x}</b><br>CSAT: <b>%{y}%</b><br>Total encuestas: %{customdata}<extra></extra>",
+                    customdata=df_evo_csat["Encuestas"],
                     line=dict(color="#38bdf8", width=3, shape="spline"),
-                    marker=dict(size=8, color="#0284c7", symbol="circle", line=dict(color="#ffffff", width=1.5)),
                     fill="tozeroy",
                     fillcolor="rgba(56, 189, 248, 0.08)"
                 ))
