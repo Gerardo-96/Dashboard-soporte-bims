@@ -502,8 +502,8 @@ def trigger_reporte_email(authorization: str = Header(None)):
     hoy_date_py = now_dt.date()
 
     # Si es fin de semana o feriado oficial, no despacha reporte
-    if hoy_str in FERIADOS or now_dt.weekday() in [5, 6]:
-        return {"status": "skipped", "reason": "Día no hábil / Feriado"}
+    #if hoy_str in FERIADOS or now_dt.weekday() in [5, 6]:
+        #return {"status": "skipped", "reason": "Día no hábil / Feriado"}
 
     agentes_omitir = [
         "monica", "mónica", "monica (bot)", "soporte", 
