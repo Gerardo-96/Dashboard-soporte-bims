@@ -1800,9 +1800,13 @@ with tab_operativo:
             df_csat_evo = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_inicio_q_ant_evo].copy()
 
             if not df_csat_evo.empty:
-                # Agrupación por semana ISO (Lunes a Domingo) y formateo como SXX
+                # Agrupación por semana ISO (Lunes a Domingo)
                 df_csat_evo["Inicio_Semana"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(lambda r: r.start_time)
                 df_csat_evo["Semana_Etiqueta"] = df_csat_evo["fecha_calificacion_dt"].dt.isocalendar().week.apply(lambda w: f"S{w}")
+                # Rango legible de fechas de Lunes a Domingo para el tooltip
+                df_csat_evo["Rango_Fechas"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(
+                    lambda r: f"{r.start_time.strftime('%d/%m')} al {r.end_time.strftime('%d/%m')}"
+                )
 
                 res_csat_semanal = []
                 for _, grp in df_csat_evo.groupby(["Inicio_Semana", "Semana_Etiqueta"]):
@@ -1812,6 +1816,7 @@ with tab_operativo:
                     res_csat_semanal.append({
                         "Inicio_Semana": grp["Inicio_Semana"].iloc[0],
                         "Semana": grp["Semana_Etiqueta"].iloc[0],
+                        "Rango_Fechas": grp["Rango_Fechas"].iloc[0],
                         "CSAT %": val_csat,
                         "Encuestas": tot
                     })
@@ -1827,8 +1832,13 @@ with tab_operativo:
                     name="CSAT (%)",
                     text=[f"<b>{v}%</b>" for v in df_evo_csat["CSAT %"]],
                     textposition="top center",
-                    hovertemplate="<b>%{x}</b><br>CSAT: <b>%{y}%</b><br>Total encuestas: %{customdata}<extra></extra>",
-                    customdata=df_evo_csat["Encuestas"],
+                    # %{customdata[0]} = Rango de fechas | %{customdata[1]} = Cantidad de encuestas
+                    hovertemplate=(
+                        "<b>%{x}</b> (%{customdata[0]})<br>"
+                        "CSAT: <b>%{y}%</b><br>"
+                        "Total encuestas: %{customdata[1]}<extra></extra>"
+                    ),
+                    customdata=np.stack((df_evo_csat["Rango_Fechas"], df_evo_csat["Encuestas"]), axis=-1),
                     line=dict(color="#38bdf8", width=3, shape="spline"),
                     fill="tozeroy",
                     fillcolor="rgba(56, 189, 248, 0.08)"
