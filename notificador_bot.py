@@ -32,11 +32,23 @@ CRON_SECRET_TOKEN = os.environ.get("CRON_SECRET_TOKEN", "bims_secret_cron_123")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 tz_py = timezone(timedelta(hours=-3))
 
-FERIADOS = [
-    "2026-01-01", "2026-03-02", "2026-04-02", "2026-04-03", "2026-05-01", 
-    "2026-05-14", "2026-05-15", "2026-06-12", "2026-06-22", "2026-06-30", 
+FERIADOS_DEFAULT = [
+    "2026-01-01", "2026-03-02", "2026-04-02", "2026-04-03", "2026-05-01",
+    "2026-05-14", "2026-05-15", "2026-06-12", "2026-06-22", "2026-06-30",
     "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
 ]
+
+def obtener_feriados_bot():
+    """Obtiene los feriados desde la configuración general sin peticiones adicionales."""
+    try:
+        res = supabase.table("config_notificaciones").select("feriados").eq("id", 1).execute()
+        if res.data and res.data[0].get("feriados"):
+            return res.data[0]["feriados"]
+    except Exception:
+        pass
+    return FERIADOS_DEFAULT
+
+FERIADOS = obtener_feriados_bot()
 
 ESTADOS_CERRADOS = ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"]
 
@@ -263,6 +275,11 @@ def procesar_alertas_y_reportes():
     if not cfg_res.data:
         return {"status": "error", "reason": "Configuración no encontrada"}
     cfg = cfg_res.data[0]
+
+    # Actualiza los feriados en memoria si existen en la configuración
+    global FERIADOS
+    if cfg.get("feriados"):
+        FERIADOS = cfg.get("feriados")
 
     usrs_res = supabase.table("usuarios_autorizados").select("nombre, telefono_whatsapp").execute()
     mapa_tels = {
@@ -491,6 +508,11 @@ def trigger_reporte_email(authorization: str = Header(None)):
     if not cfg_res.data:
         raise HTTPException(status_code=404, detail="Configuración no encontrada en Supabase")
 
+    # Actualiza los feriados en memoria si existen en la configuración
+    global FERIADOS
+    if cfg.get("feriados"):
+        FERIADOS = cfg.get("feriados")
+
     cfg = cfg_res.data[0]
     email_dest = cfg.get("email_destino_reporte")
 
@@ -504,8 +526,8 @@ def trigger_reporte_email(authorization: str = Header(None)):
     hoy_date_py = now_dt.date()
 
     # Si es fin de semana o feriado oficial, no despacha reporte
-    #if hoy_str in FERIADOS or now_dt.weekday() in [5, 6]:
-        #return {"status": "skipped", "reason": "Día no hábil / Feriado"}
+    if hoy_str in FERIADOS or now_dt.weekday() in [6]:
+        return {"status": "skipped", "reason": "Día no hábil / Feriado"}
 
     agentes_omitir = [
         "monica", "mónica", "monica (bot)", "soporte", 
