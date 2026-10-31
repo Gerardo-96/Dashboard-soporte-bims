@@ -1138,13 +1138,14 @@ def obtener_df_csat_valido(df_in):
     return df_c.drop_duplicates(subset=["id"])
 
 def calcular_csat_rapido(df_csat_preparado):
-    """Calcula CSAT instantáneo sobre DataFrame pre-filtrado."""
+    """Calcula CSAT instantáneo sobre DataFrame pre-filtrado retornando (pct, positivas, total)."""
     if df_csat_preparado.empty:
-        return 0.0, 0
+        return 0.0, 0, 0
     ratings = df_csat_preparado["rating_num"]
-    positivas = (ratings >= 4).sum()
+    positivas = int((ratings >= 4).sum())
     total = len(ratings)
-    return round((positivas / total) * 100, 1), total
+    pct = round((positivas / total) * 100, 1) if total > 0 else 0.0
+    return pct, positivas, total
 
 # ==========================
 # ESTADO DE SESIÓN Y PARÁMETROS
@@ -1719,50 +1720,50 @@ with tab_operativo:
     df_csat_global = obtener_df_csat_valido(df_all)
 
     if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
-        c_hoy, k_hoy = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == now_date])
-        c_ayer, _ = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
+        c_hoy, pos_hoy, k_hoy = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == now_date])
+        c_ayer, _, _ = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
         diff_hoy = round(c_hoy - c_ayer, 1)
 
         inicio_sem = now_date - timedelta(days=now_date.weekday())
-        c_sem, k_sem = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_sem) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
+        c_sem, pos_sem, k_sem = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_sem) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
         ini_sem_ant = inicio_sem - timedelta(days=7)
         fin_sem_ant = inicio_sem - timedelta(days=1)
-        c_sem_ant, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_sem_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_sem_ant)])
+        c_sem_ant, _, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_sem_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_sem_ant)])
         diff_sem = round(c_sem - c_sem_ant, 1)
 
         inicio_mes = now_date.replace(day=1)
-        c_mes, k_mes = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_mes) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
+        c_mes, pos_mes, k_mes = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_mes) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
         fin_mes_ant = inicio_mes - timedelta(days=1)
         ini_mes_ant = fin_mes_ant.replace(day=1)
-        c_mes_ant, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_mes_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_mes_ant)])
+        c_mes_ant, _, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_mes_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_mes_ant)])
         diff_mes = round(c_mes - c_mes_ant, 1)
 
         q_act = (now_date.month - 1) // 3 + 1
+        q_ant = 4 if q_act == 1 else q_act - 1
         ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
-        c_q, k_q = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
+        c_q, pos_q, k_q = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
         fin_q_ant = ini_q - timedelta(days=1)
-        q_ant = (fin_q_ant.month - 1) // 3 + 1
         ini_q_ant = datetime(fin_q_ant.year, 3 * (q_ant - 1) + 1, 1).date()
-        c_q_ant, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_q_ant)])
+        c_q_ant, _, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_q_ant)])
         diff_q = round(c_q - c_q_ant, 1)
 
         df_filtered_csat = df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= f_desde_v) & (df_csat_global["fecha_calificacion_solo"] <= f_hasta_v)]
-        c_rango, k_rango = calcular_csat_rapido(df_filtered_csat)
+        c_rango, pos_rango, k_rango = calcular_csat_rapido(df_filtered_csat)
         duracion_dias = (f_hasta_v - f_desde_v).days + 1
         f_hasta_prev = f_desde_v - timedelta(days=1)
         f_desde_prev = f_hasta_prev - timedelta(days=duracion_dias - 1)
         df_prev_rango = df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= f_desde_prev) & (df_csat_global["fecha_calificacion_solo"] <= f_hasta_prev)]
-        c_rango_prev, _ = calcular_csat_rapido(df_prev_rango)
+        c_rango_prev, _, _ = calcular_csat_rapido(df_prev_rango)
         diff_rango = round(c_rango - c_rango_prev, 1)
     else:
-        c_hoy, k_hoy, diff_hoy = 0.0, 0, 0.0
-        c_sem, k_sem, diff_sem = 0.0, 0, 0.0
-        c_mes, k_mes, diff_mes = 0.0, 0, 0.0
-        c_q, k_q, diff_q, q_act = 0.0, 0, 0.0, 1
-        c_rango, k_rango, diff_rango = 0.0, 0, 0.0
+        c_hoy, pos_hoy, k_hoy, diff_hoy = 0.0, 0, 0, 0.0
+        c_sem, pos_sem, k_sem, diff_sem = 0.0, 0, 0, 0.0
+        c_mes, pos_mes, k_mes, diff_mes = 0.0, 0, 0, 0.0
+        c_q, pos_q, k_q, diff_q, q_act, q_ant = 0.0, 0, 0, 0.0, 1, 4
+        c_rango, pos_rango, k_rango, diff_rango = 0.0, 0, 0, 0.0
         df_filtered_csat = pd.DataFrame()
 
-    def render_metric_card(title, value, diff, sub_text):
+    def render_metric_card(title, value, diff, comp_texto, sub_text):
         diff_color = "#34d399" if diff >= 0 else "#f43f5e"
         diff_symbol = "▲" if diff >= 0 else "▼"
         return f"""
@@ -1770,49 +1771,59 @@ with tab_operativo:
             <div class="metric-card-title">{title}</div>
             <div class="metric-card-value">{value}</div>
             <div style="color: {diff_color}; font-size: 0.8rem; font-weight: 600; margin-top: 2px;">
-                {diff_symbol} {abs(diff)}% vs anterior
+                {diff_symbol} {abs(diff)}% {comp_texto}
             </div>
             <div class="metric-card-sub">{sub_text}</div>
         </div>
         """
 
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, f"{k_hoy} encuestas"), unsafe_allow_html=True)
-    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, f"{k_sem} encuestas"), unsafe_allow_html=True)
-    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, f"{k_mes} encuestas"), unsafe_allow_html=True)
-    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"{k_q} encuestas"), unsafe_allow_html=True)
-    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, f"{k_rango} encuestas"), unsafe_allow_html=True)
+    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas"), unsafe_allow_html=True)
+    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas"), unsafe_allow_html=True)
+    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas"), unsafe_allow_html=True)
+    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas"), unsafe_allow_html=True)
+    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas"), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # EVOLUCIÓN HISTÓRICA DE CSAT
-    with st.expander("Ver Grafico de Evolucion del CSAT (Ultimos 6 Meses)", expanded=False):
+    # EVOLUCIÓN HISTÓRICA DE CSAT (SEMANAL DESDE Q ANTERIOR)
+    q_act_evo = (now_date.month - 1) // 3 + 1
+    q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
+    titulo_expander_csat = f"Ver Gráfico de Evolución del CSAT (Desde Q{q_ant_evo})"
+
+    with st.expander(titulo_expander_csat, expanded=False):
         if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
-            fecha_6m_atras = (pd.Timestamp.now(tz="America/Asuncion") - timedelta(days=180)).date()
-            df_csat_6m = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_6m_atras].copy()
+            anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
+            mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
+            fecha_inicio_q_ant_evo = date(anio_inicio_q, mes_inicio_q, 1)
 
-            if not df_csat_6m.empty:
-                df_csat_6m["Periodo_Sort"] = df_csat_6m["fecha_calificacion_dt"].dt.to_period("M")
-                df_csat_6m["Mes_Nombre"] = df_csat_6m["fecha_calificacion_dt"].dt.strftime("%b %Y").fillna("")
+            df_csat_evo = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_inicio_q_ant_evo].copy()
 
-                res_csat_mensual = []
-                for period, grp in df_csat_6m.groupby("Periodo_Sort"):
+            if not df_csat_evo.empty:
+                # Semanas de Lunes a Domingo
+                df_csat_evo["Inicio_Semana"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(lambda r: r.start_time)
+                df_csat_evo["Semana_Etiqueta"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(
+                    lambda r: f"{r.start_time.strftime('%d/%m')} - {r.end_time.strftime('%d/%m')}"
+                )
+
+                res_csat_semanal = []
+                for _, grp in df_csat_evo.groupby(["Inicio_Semana", "Semana_Etiqueta"]):
                     tot = len(grp)
                     pos = len(grp[grp["rating_num"] >= 4])
-                    val_csat = round((pos / tot) * 100, 1)
-                    res_csat_mensual.append({
-                        "Periodo_Sort": period,
-                        "Mes": grp["Mes_Nombre"].iloc[0],
+                    val_csat = round((pos / tot) * 100, 1) if tot > 0 else 0.0
+                    res_csat_semanal.append({
+                        "Inicio_Semana": grp["Inicio_Semana"].iloc[0],
+                        "Semana": grp["Semana_Etiqueta"].iloc[0],
                         "CSAT %": val_csat,
                         "Encuestas": tot
                     })
 
-                df_evo_csat = pd.DataFrame(res_csat_mensual).sort_values("Periodo_Sort")
+                df_evo_csat = pd.DataFrame(res_csat_semanal).sort_values("Inicio_Semana")
 
                 fig_csat = go.Figure()
 
                 fig_csat.add_trace(go.Scatter(
-                    x=df_evo_csat["Mes"],
+                    x=df_evo_csat["Semana"],
                     y=df_evo_csat["CSAT %"],
                     mode="lines+markers+text",
                     name="CSAT (%)",
@@ -1840,21 +1851,27 @@ with tab_operativo:
                 )
 
                 fig_csat.update_layout(
-                    title="<b>Evolucion Mensual de Satisfaccion al Cliente (CSAT)</b>",
-                    xaxis_title="Mes",
-                    yaxis_title="Satisfaccion Positiva (%)",
-                    yaxis=dict(range=[0, 105], gridcolor="#334155"),
+                    title=f"<b>Evolución Semanal de Satisfacción al Cliente (Desde Q{q_ant_evo})</b>",
+                    xaxis_title="Semana (Lunes a Domingo)",
+                    yaxis_title="",
+                    yaxis=dict(
+                        range=[0, 115],
+                        showgrid=False,
+                        showline=False,
+                        zeroline=False,
+                        showticklabels=False
+                    ),
                     xaxis=dict(gridcolor="#334155"),
                     paper_bgcolor="#1e293b",
                     plot_bgcolor="#1e293b",
                     font=dict(color="#cbd5e1"),
-                    margin=dict(t=50, b=40, l=40, r=40),
+                    margin=dict(t=50, b=40, l=20, r=20),
                     height=380
                 )
 
                 st.plotly_chart(fig_csat, use_container_width=True)
             else:
-                st.info("No hay suficientes encuestas validadas en los ultimos 6 meses para generar el grafico.")
+                st.info(f"No hay encuestas registradas desde Q{q_ant_evo} para generar el gráfico.")
         else:
             st.info("Sin registros en la base de datos.")
 
@@ -2079,7 +2096,7 @@ with tab_operativo:
         # "Humano": incluye a Monica y también conversaciones con etiqueta
         # "Sin Respuesta". Solo se excluyen bots/sin asignar.
         es_humano_f = (
-            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica (bot)"])
+            ~agente_f.isin(["", "sin asignar", "none", "monica", "mónica", "nan", "monica (bot)"])
         )
         ingresados_humanos = int(es_humano_f.sum())
 
@@ -2306,7 +2323,7 @@ with tab_operativo:
     # ==========================================
     if not df_abiertos_all.empty:
         # Exclusión explícita de Mónica, Soporte y sin asignar
-        agentes_omitidos = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
+        agentes_omitidos = ["monica", "mónica", "monica (bot)", "sin asignar", "none", "nan", ""]
         df_abiertos_rank_filtro = df_abiertos_all[
             ~df_abiertos_all["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitidos)
         ].copy()
