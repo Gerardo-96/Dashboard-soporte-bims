@@ -2235,34 +2235,20 @@ with tab_operativo:
     if not df_filtered.empty:
         df_fuera_eval = df_filtered.copy()
         
-        # 1. Conversion numerica del tiempo de primera respuesta
-        df_fuera_eval["1ra_resp_num"] = pd.to_numeric(df_fuera_eval["primera_respuesta_min"], errors="coerce")
-        
-        # 2. Excluimos bots (Monica), sin asignar y conversaciones fuera de horario
-        agente_clean_fuera = df_fuera_eval.get("agente_asignado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
-        por_agente_fuera = df_fuera_eval.get("por_agente", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
-        
-        es_agente_valido_fuera = (
-            (por_agente_fuera == "no excluido") &
-            ~agente_clean_fuera.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"])
+        # 1. Aplicar la misma evaluación exacta que el Excel para 1ra Respuesta
+        df_fuera_eval["sla_eval_excel"] = df_fuera_eval.apply(
+            lambda r: evaluar_sla_normal_excel(r, umbral_sla_1ra_resp), axis=1
         )
-        es_horario_valido_fuera = df_fuera_eval["horario_evaluado"] != "fuera de horario"
-
-        df_fuera_eval = df_fuera_eval[es_agente_valido_fuera & es_horario_valido_fuera].copy()
-
-        # 3. Filtrar chats fuera de objetivo SLA
-        #    - Atendidos tarde: la primera respuesta tardo mas que el umbral
-        #    - Aún sin responder: primera_respuesta_min es NaN y sigue abierto
-        atendidos_tarde = df_fuera_eval["1ra_resp_num"] > umbral_sla_1ra_resp
         
-        # Para medir espera de los sin responder
+        # 2. Filtrar únicamente chats que fueron EVALUADOS dentro de jornada y NO CUMPLIERON
+        # (Esto excluye automáticamente los que fueron fuera de horario, feriados o de bots)
+        df_criticos_fuera = df_fuera_eval[df_fuera_eval["sla_eval_excel"] == "no cumple"].copy()
+
+        # 3. Conversión para etiquetas en pantalla
+        df_criticos_fuera["1ra_resp_num"] = pd.to_numeric(df_criticos_fuera["primera_respuesta_min"], errors="coerce")
         now_dt_fuera = pd.Timestamp.now(tz="America/Asuncion")
-        calc_min_fuera = (now_dt_fuera - df_fuera_eval["created_at_dt"]).dt.total_seconds() / 60.0
-        df_fuera_eval["min_espera_calc"] = calc_min_fuera.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
-        
-        sin_resp_superado = df_fuera_eval["1ra_resp_num"].isna() & (df_fuera_eval["min_espera_calc"] >= umbral_sla_1ra_resp) & (~df_fuera_eval["es_cerrado"])
-
-        df_criticos_fuera = df_fuera_eval[atendidos_tarde | sin_resp_superado].copy()
+        calc_min_fuera = (now_dt_fuera - df_criticos_fuera["created_at_dt"]).dt.total_seconds() / 60.0
+        df_criticos_fuera["min_espera_calc"] = calc_min_fuera.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
 
         with st.expander(f"⚠️ Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_criticos_fuera)}]", expanded=False):
             if not df_criticos_fuera.empty:
