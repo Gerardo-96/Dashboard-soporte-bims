@@ -917,6 +917,14 @@ st.markdown("""
         padding-top: 0.2rem !important;
     }
 
+    div[data-testid="stDateInput"] button {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
     .metric-card {
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
         color: #f8fafc;
