@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta, time
 import pandas as pd
 from supabase import create_client
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import PlainTextResponse
 import io
 from email.mime.image import MIMEImage
 import base64
@@ -438,13 +439,13 @@ def trigger_notificaciones(authorization: str = Header(None)):
     
     try:
         resultado = procesar_alertas_y_reportes()
-        # Solo imprimimos en la consola de Render para monitoreo
-        print(f"Resultado notificaciones: {resultado.get('status') if isinstance(resultado, dict) else 'completado'}")
+        print(f"✅ Resultado ejecucion: {resultado}")
+        return PlainTextResponse("OK", status_code=200)
     except Exception as e:
-        print(f"Error procesando notificaciones: {e}")
-
-    # Retorna un texto plano ultra ligero (2 bytes) imposible de superar cualquier límite
-    return PlainTextResponse("OK", status_code=200)
+        import traceback
+        print(f"❌ ERROR CRÍTICO EN PROCESAR NOTIFICACIONES:\n{traceback.format_exc()}")
+        # Retornamos 200 con el detalle en log para que cron-job.org no suspenda el cron
+        return PlainTextResponse(f"ERROR: {str(e)}", status_code=200)
 
 @app.get("/health-status")
 def health_status():
