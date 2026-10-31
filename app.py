@@ -1686,10 +1686,21 @@ with tab_operativo:
         # Identificamos si el agente asignado es sin asignar o Mónica
         agente_clean = df_all.get("agente_asignado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
         es_monica_o_sin_asignar = agente_clean.isin(["sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"])
+
+        # Regla de Horario Normal idéntica a evaluar_sla_normal_excel
+        dt_1ra = df_all["created_at_dt"]
+        dia_1ra = dt_1ra.dt.dayofweek
+        hora_1ra = dt_1ra.dt.time
+        fecha_1ra = dt_1ra.dt.strftime("%Y-%m-%d")
+        
+        es_horario_normal_1ra = (
+            ((dia_1ra.isin([0, 1, 2, 3, 4])) & (hora_1ra >= time(8, 0)) & (hora_1ra <= time(17, 30))) |
+            ((dia_1ra == 5) & (hora_1ra >= time(9, 0)) & (hora_1ra <= time(11, 45)))
+        ) & (~fecha_1ra.isin(FERIADOS))
         
         # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
         cond_1ra = [
-            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario") | es_monica_o_sin_asignar,
+            (df_all["por_agente"] == "excluido") | (~es_horario_normal_1ra) | es_monica_o_sin_asignar,
             df_all["primera_respuesta_min"].isna(),
             df_all["primera_respuesta_min"] <= sla_1ra_th
         ]
