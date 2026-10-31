@@ -421,11 +421,13 @@ def trigger_notificaciones(authorization: str = Header(None)):
     
     try:
         resultado = procesar_alertas_y_reportes()
-        print(f"Resultado ejecucion: {resultado}")
+        # Solo imprimimos en la consola de Render para monitoreo
+        print(f"Resultado notificaciones: {resultado.get('status') if isinstance(resultado, dict) else 'completado'}")
     except Exception as e:
         print(f"Error procesando notificaciones: {e}")
 
-    return {"status": "ok"}
+    # Retorna un texto plano ultra ligero (2 bytes) imposible de superar cualquier límite
+    return PlainTextResponse("OK", status_code=200)
 
 @app.get("/health-status")
 def health_status():
