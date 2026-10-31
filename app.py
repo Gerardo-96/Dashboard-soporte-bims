@@ -587,23 +587,35 @@ def obtener_tiempo_transcurrido(fecha_dt):
     else:
         return f"hace {secs // 86400} días"
 
-FERIADOS = [
-    "2026-01-01",  # Año Nuevo
-    "2026-03-02",  # Día de los Héroes (Trasladado de domingo 1 a lunes 2)
-    "2026-04-02",  # Jueves Santo
-    "2026-04-03",  # Viernes Santo
-    "2026-05-01",  # Día de los Trabajadores
-    "2026-05-14",  # Día de la Independencia Nacional (Día 1)
-    "2026-05-15",  # Día de la Independencia Nacional (Día 2)
-    "2026-06-12",  # Día de la Paz del Chaco
-    "2026-06-22",  # Día de la Jura de la Constitución (Trasladado de sábado 20 a lunes 22)
-    "2026-06-30",  # Feriado Nacional Extraordinario (Decreto Presidencial - Clasificación a Octavos)
-    "2026-08-15",  # Fundación de Asunción (Inamovible)
-    "2026-09-28",  # Victoria de Boquerón (Adelantado de martes 29 a lunes 28)
-    "2026-12-08",  # Día de la Virgen de Caacupé
-    "2026-12-25",  # Navidad
-    "2026-12-31",  # Víspera de Año Nuevo (Cierre/Feriado Bancario y Operativo)
+FERIADOS_DEFAULT = [
+    "2026-01-01", "2026-03-02", "2026-04-02", "2026-04-03", "2026-05-01",
+    "2026-05-14", "2026-05-15", "2026-06-12", "2026-06-22", "2026-06-30",
+    "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
 ]
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_feriados_activos():
+    """Recupera la lista de feriados (se ejecuta máximo 1 vez al día)."""
+    try:
+        res = supabase.table("config_notificaciones").select("feriados").eq("id", 1).execute()
+        if res.data and res.data[0].get("feriados"):
+            return sorted(list(set(res.data[0]["feriados"])))
+    except Exception:
+        pass
+    return sorted(FERIADOS_DEFAULT)
+
+def guardar_feriados_db(lista_feriados):
+    """Actualiza los feriados en Supabase y limpia la caché en memoria."""
+    try:
+        limpios = sorted(list(set(str(d).strip() for d in lista_feriados if str(d).strip())))
+        supabase.table("config_notificaciones").update({"feriados": limpios}).eq("id", 1).execute()
+        obtener_feriados_activos.clear()
+        return True
+    except Exception as e:
+        st.error(f"Error guardando feriados: {e}")
+        return False
+
+FERIADOS = obtener_feriados_activos()
 
 def evaluar_horario_dashboard_dt(dt_series):
     """Evaluación vectorizada sobre la Serie completa de Datetime de Pandas."""
@@ -3268,6 +3280,44 @@ with tab_admin:
                     st.info("No hay usuarios registrados aún.")
             except Exception as ex_u:
                 st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
+
+        # GESTIÓN DINÁMICA DE FERIADOS
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">📅 Calendario de Feriados Oficiales & Móviles</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            feriados_actuales = obtener_feriados_activos()
+
+            col_add1, col_add2 = st.columns([2, 1])
+            fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
+            
+            if col_add2.button("➕ Agregar Feriado", use_container_width=True):
+                str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
+                if str_f not in feriados_actuales:
+                    feriados_actuales.append(str_f)
+                    if guardar_feriados_db(feriados_actuales):
+                        st.success(f"Feriado {str_f} agregado correctamente.")
+                        st.rerun()
+                else:
+                    st.info("Esa fecha ya se encuentra registrada como feriado.")
+
+            df_feriados_adm = pd.DataFrame({"Fecha Feriado (YYYY-MM-DD)": feriados_actuales})
+            st.dataframe(df_feriados_adm, use_container_width=True, hide_index=True)
+
+            col_del1, col_del2 = st.columns([2, 1])
+            feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
+            if col_del2.button("🗑️ Eliminar Feriado Seleccionado", use_container_width=True):
+                feriados_actuales.remove(feriado_a_borrar)
+                if guardar_feriados_db(feriados_actuales):
+                    st.success(f"Feriado {feriado_a_borrar} eliminado.")
+                    st.rerun()
 
 with tab_faq:
     st.markdown("### Preguntas Frecuentes & Criterios Operativos")
