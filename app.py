@@ -1800,11 +1800,9 @@ with tab_operativo:
             df_csat_evo = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_inicio_q_ant_evo].copy()
 
             if not df_csat_evo.empty:
-                # Semanas de Lunes a Domingo
+                # Agrupación por semana ISO (Lunes a Domingo) y formateo como SXX
                 df_csat_evo["Inicio_Semana"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(lambda r: r.start_time)
-                df_csat_evo["Semana_Etiqueta"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(
-                    lambda r: f"{r.start_time.strftime('%d/%m')} - {r.end_time.strftime('%d/%m')}"
-                )
+                df_csat_evo["Semana_Etiqueta"] = df_csat_evo["fecha_calificacion_dt"].dt.isocalendar().week.apply(lambda w: f"S{w}")
 
                 res_csat_semanal = []
                 for _, grp in df_csat_evo.groupby(["Inicio_Semana", "Semana_Etiqueta"]):
