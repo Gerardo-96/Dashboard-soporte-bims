@@ -9,6 +9,7 @@ from supabase import create_client
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import PlainTextResponse
 import io
+import traceback
 from email.mime.image import MIMEImage
 import base64
 
@@ -442,7 +443,6 @@ def trigger_notificaciones(authorization: str = Header(None)):
         print(f"✅ Resultado ejecucion: {resultado}")
         return PlainTextResponse("OK", status_code=200)
     except Exception as e:
-        import traceback
         print(f"❌ ERROR CRÍTICO EN PROCESAR NOTIFICACIONES:\n{traceback.format_exc()}")
         # Retornamos 200 con el detalle en log para que cron-job.org no suspenda el cron
         return PlainTextResponse(f"ERROR: {str(e)}", status_code=200)
@@ -498,400 +498,356 @@ def reiniciar_servicio(authorization: str = Header(None)):
 @app.get("/ejecutar-reporte-email-diario")
 def trigger_reporte_email(authorization: str = Header(None)):
     """
-    Cron exclusivo para enviar el resumen diario por correo con métricas completas de SLA,
-    CSAT, volumen general y gráfico de barras HTML idéntico a la pestaña 1 del Dashboard.
-    Envío mediante la API REST de Gmail (vía HTTPS / puerto 443).
+    Cron exclusivo para enviar el resumen diario por correo.
+    Protegido contra excepciones y blindado para responder 200 OK a cron-job.org.
     """
     if authorization != f"Bearer {CRON_SECRET_TOKEN}":
         raise HTTPException(status_code=401, detail="No autorizado")
 
-    cfg_res = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
-    if not cfg_res.data:
-        raise HTTPException(status_code=404, detail="Configuración no encontrada en Supabase")
-
-    # Actualiza los feriados en memoria si existen en la configuración
-    global FERIADOS
-    if cfg.get("feriados"):
-        FERIADOS = cfg.get("feriados")
-
-    cfg = cfg_res.data[0]
-    email_dest = cfg.get("email_destino_reporte")
-
-    if not email_dest:
-        return {"status": "skipped", "reason": "No hay email de destino configurado"}
-    if not EMAIL_EMISOR:
-        return {"status": "error", "reason": "Falta la variable de entorno EMAIL_EMISOR en Render"}
-
-    now_dt = datetime.now(tz_py)
-    hoy_str = now_dt.strftime("%Y-%m-%d")
-    hoy_date_py = now_dt.date()
-
-    # Si es fin de semana o feriado oficial, no despacha reporte
-    if hoy_str in FERIADOS or now_dt.weekday() in [6]:
-        return {"status": "skipped", "reason": "Día no hábil / Feriado"}
-
-    agentes_omitir = [
-        "monica", "mónica", "monica (bot)", "soporte", 
-        "gerardo gaona", "gerardo.gaona@itti.digital", 
-        "none", "nan", "sin asignar", ""
-    ]
-
-    # Umbrales estándar del Dashboard
-    sla_1ra_th = 2.0
-    sla_gest_th = 60.0
-
-    # 1. Obtener lista de agentes autorizados
-    lista_agentes_maestra = set()
     try:
-        res_u = supabase.table("usuarios_autorizados").select("nombre").eq("activo", True).execute()
-        for u in (res_u.data or []):
-            nom = u.get("nombre", "").strip()
-            if nom and nom.lower() not in agentes_omitir:
-                lista_agentes_maestra.add(nom)
-    except Exception:
-        pass
+        cfg_res = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
+        if not cfg_res.data:
+            print("⚠️ [Reporte Email] Configuración no encontrada en Supabase.")
+            return PlainTextResponse("ERROR: Configuración no encontrada", status_code=200)
 
-    # 2. Consultar chats necesarios desde Supabase
-    hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cfg = cfg_res.data[0]
+        email_dest = cfg.get("email_destino_reporte")
 
-    COLUMNAS_CONSULTA = (
-        "id, created_at, updated_at, estado, agente_asignado, por_agente, "
-        "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
-        "etiquetas, fecha_cierre"
-    )
+        if not email_dest:
+            print("⚠️ [Reporte Email] No hay email de destino configurado.")
+            return PlainTextResponse("SKIPPED: Sin destinatario", status_code=200)
+            
+        if not EMAIL_EMISOR:
+            print("❌ [Reporte Email] Falta la variable de entorno EMAIL_EMISOR en Render.")
+            return PlainTextResponse("ERROR: Falta EMAIL_EMISOR", status_code=200)
 
-    # A. Chats abiertos actualmente
-    res_abiertos = supabase.table("conversaciones")\
-        .select(COLUMNAS_CONSULTA)\
-        .not_.in_("estado", ESTADOS_CERRADOS)\
-        .execute()
+        now_dt = datetime.now(tz_py)
+        hoy_str = now_dt.strftime("%Y-%m-%d")
+        hoy_date_py = now_dt.date()
 
-    # B. Chats creados hoy
-    res_creados_hoy = supabase.table("conversaciones")\
-        .select(COLUMNAS_CONSULTA)\
-        .gte("created_at", hoy_inicio_utc)\
-        .execute()
+        agentes_omitir = [
+            "monica", "mónica", "monica (bot)", "soporte", 
+            "gerardo gaona", "gerardo.gaona@itti.digital", 
+            "none", "nan", "sin asignar", ""
+        ]
 
-    # C. Chats calificados hoy (para CSAT exacto)
-    res_csat_hoy = supabase.table("conversaciones")\
-        .select(COLUMNAS_CONSULTA)\
-        .gte("fecha_calificacion", hoy_inicio_utc)\
-        .execute()
+        sla_1ra_th = 2.0
+        sla_gest_th = 60.0
 
-    # D. Chats cerrados hoy
-    res_cerrados_hoy = supabase.table("conversaciones")\
-        .select(COLUMNAS_CONSULTA)\
-        .in_("estado", ESTADOS_CERRADOS)\
-        .gte("fecha_cierre", hoy_inicio_utc)\
-        .execute()
+        # 1. Obtener lista de agentes autorizados
+        lista_agentes_maestra = set()
+        try:
+            res_u = supabase.table("usuarios_autorizados").select("nombre").eq("activo", True).execute()
+            for u in (res_u.data or []):
+                nom = u.get("nombre", "").strip()
+                if nom and nom.lower() not in agentes_omitir:
+                    lista_agentes_maestra.add(nom)
+        except Exception as e_usr:
+            print(f"⚠️ Error cargando usuarios: {e_usr}")
 
-    todos = (res_abiertos.data or []) + (res_creados_hoy.data or []) + (res_csat_hoy.data or []) + (res_cerrados_hoy.data or [])
-    unicos = {r["id"]: r for r in todos}
-    df_all = pd.DataFrame(list(unicos.values())) if unicos else pd.DataFrame()
+        # 2. Consultar chats necesarios desde Supabase
+        hoy_inicio_utc = datetime(now_dt.year, now_dt.month, now_dt.day, 0, 0, 0, tzinfo=tz_py).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # 3. Normalización y cálculo de fechas en America/Asuncion
-    if not df_all.empty:
-        # created_at
-        c_dt = pd.to_datetime(df_all["created_at"], errors="coerce", utc=True)
-        df_all["created_at_dt"] = c_dt.dt.tz_convert("America/Asuncion")
-        df_all["fecha_creado_py"] = df_all["created_at_dt"].dt.date
-
-        # fecha_cierre / updated_at
-        df_all["fecha_ref"] = df_all["fecha_cierre"].fillna(df_all["updated_at"])
-        ref_dt = pd.to_datetime(df_all["fecha_ref"], errors="coerce", utc=True)
-        df_all["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
-        df_all["fecha_cierre_py"] = df_all["fecha_cierre_dt"].dt.date
-
-        # fecha_calificacion
-        calif_dt = pd.to_datetime(df_all.get("fecha_calificacion"), errors="coerce", utc=True)
-        df_all["fecha_calif_py"] = calif_dt.dt.tz_convert("America/Asuncion").dt.date
-
-        # Estado y agente
-        df_all["estado_clean"] = df_all["estado"].fillna("").astype(str).str.strip().str.lower()
-        df_all["es_cerrado"] = df_all["estado_clean"].isin([e.lower() for e in ESTADOS_CERRADOS])
-        df_all["agente_clean"] = df_all["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-        df_all["por_agente_clean"] = df_all.get("por_agente", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
-        df_all["etiquetas_clean"] = df_all.get("etiquetas", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
-
-        # Evaluación de horario hábil
-        dias_sem = df_all["created_at_dt"].dt.dayofweek
-        horas_dec = df_all["created_at_dt"].dt.hour + (df_all["created_at_dt"].dt.minute / 60.0)
-        es_normal_lv = (dias_sem.isin([0, 1, 2, 3, 4])) & (horas_dec >= 8.0) & (horas_dec <= 17.5)
-        es_normal_sab = (dias_sem == 5) & (horas_dec >= 9.0) & (horas_dec <= 11.75)
-        df_all["es_horario_habil"] = (es_normal_lv | es_normal_sab) & (~df_all["created_at_dt"].dt.strftime("%Y-%m-%d").isin(FERIADOS))
-
-        # Tiempo de resolución en minutos hábiles
-        df_all["tiempo_res_min"] = df_all.apply(
-            lambda r: calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"])
-            if r.get("es_horario_habil") and r.get("es_cerrado") else None,
-            axis=1
+        COLUMNAS_CONSULTA = (
+            "id, created_at, updated_at, estado, agente_asignado, por_agente, "
+            "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
+            "etiquetas, fecha_cierre"
         )
-    else:
-        df_all = pd.DataFrame()
 
-    # ==========================================
-    # CÁLCULOS IDÉNTICOS A LA PESTAÑA 1 DEL DASHBOARD
-    # ==========================================
-    # Chats del día (creados hoy)
-    df_hoy = df_all[df_all["fecha_creado_py"] == hoy_date_py].copy() if not df_all.empty else pd.DataFrame()
+        try:
+            res_abiertos = supabase.table("conversaciones").select(COLUMNAS_CONSULTA).not_.in_("estado", ESTADOS_CERRADOS).execute()
+            res_creados_hoy = supabase.table("conversaciones").select(COLUMNAS_CONSULTA).gte("created_at", hoy_inicio_utc).execute()
+            res_csat_hoy = supabase.table("conversaciones").select(COLUMNAS_CONSULTA).gte("fecha_calificacion", hoy_inicio_utc).execute()
+            res_cerrados_hoy = supabase.table("conversaciones").select(COLUMNAS_CONSULTA).in_("estado", ESTADOS_CERRADOS).gte("fecha_cierre", hoy_inicio_utc).execute()
 
-    # Conteo general
-    total_recibidos_hoy = len(df_hoy)
-    total_abiertos_actuales = len(df_all[~df_all["es_cerrado"]]) if not df_all.empty else 0
-    
-    # Cerrados hoy que además fueron ASIGNADOS/CREADOS HOY
-    cerrados_hoy_asig_hoy = (
-        (df_all["es_cerrado"]) & 
-        (df_all["fecha_cierre_py"] == hoy_date_py) & 
-        (df_all["fecha_creado_py"] == hoy_date_py)
-    ) if not df_all.empty else pd.Series(dtype=bool)
-    total_cerrados_hoy = int(cerrados_hoy_asig_hoy.sum()) if not df_all.empty else 0
+            todos = (res_abiertos.data or []) + (res_creados_hoy.data or []) + (res_csat_hoy.data or []) + (res_cerrados_hoy.data or [])
+            unicos = {r["id"]: r for r in todos}
+            df_all = pd.DataFrame(list(unicos.values())) if unicos else pd.DataFrame()
+        except Exception as e_db:
+            print(f"❌ Error consultando Supabase: {e_db}")
+            df_all = pd.DataFrame()
 
-    # 1. CSAT del día
-    csat_pct = 0.0
-    csat_total = 0
-    if not df_all.empty:
-        df_csat = df_all[
-            (df_all["fecha_calif_py"] == hoy_date_py) & 
-            (df_all["rating"].notna()) &
-            (df_all["por_agente_clean"] != "excluido")
-        ].copy()
-        if not df_csat.empty:
-            df_csat["rating_num"] = pd.to_numeric(df_csat["rating"], errors="coerce")
-            df_csat = df_csat.dropna(subset=["rating_num"])
-            csat_total = len(df_csat)
-            if csat_total > 0:
-                positivas = (df_csat["rating_num"] >= 4).sum()
-                csat_pct = round((positivas / csat_total) * 100, 1)
+        # Garantizar columnas obligatorias en df_all para evitar KeyError
+        columnas_necesarias = [
+            "id", "created_at", "updated_at", "estado", "agente_asignado", "por_agente",
+            "primera_respuesta_min", "tiempo_resolucion_minutos", "rating", "fecha_calificacion",
+            "etiquetas", "fecha_cierre"
+        ]
+        for col in columnas_necesarias:
+            if col not in df_all.columns:
+                df_all[col] = None
 
-    # 2. Promedio y Cumplimiento de SLA 1ra Respuesta
-    prom_1ra = 0.0
-    pct_sla_1ra = 0.0
-    if not df_hoy.empty:
-        es_agente_valido_1ra = (
-            (df_hoy["por_agente_clean"] == "no excluido") &
-            (~df_hoy["agente_clean"].str.lower().isin(agentes_omitir))
-        )
-        df_1ra = df_hoy[es_agente_valido_1ra & df_hoy["es_horario_habil"]].copy()
-        df_1ra["p_1ra_num"] = pd.to_numeric(df_1ra["primera_respuesta_min"], errors="coerce")
-        s_1ra = df_1ra["p_1ra_num"].dropna()
-        if not s_1ra.empty:
-            prom_1ra = round(s_1ra.mean(), 2)
-
-        # Cumplimiento SLA 1ra Respuesta (excluidos, cumple, no cumple)
-        df_1ra_eval = df_hoy[es_agente_valido_1ra & df_hoy["es_horario_habil"]].copy()
-        if not df_1ra_eval.empty:
-            cumplen_1ra = (df_1ra_eval["primera_respuesta_min"] <= sla_1ra_th).sum()
-            pct_sla_1ra = round((cumplen_1ra / len(df_1ra_eval)) * 100, 1)
-
-    # 3. Promedio y Cumplimiento de SLA Gestión
-    prom_gest = 0.0
-    pct_sla_gest = 0.0
-    if not df_hoy.empty:
-        es_sin_respuesta = df_hoy["etiquetas_clean"].str.contains("sin respuesta", na=False)
-        es_agente_valido_gest = (
-            (df_hoy["por_agente_clean"] == "no excluido") &
-            (~df_hoy["agente_clean"].str.lower().isin(agentes_omitir))
-        )
-        df_gest = df_hoy[
-            es_agente_valido_gest & 
-            df_hoy["es_horario_habil"] & 
-            (~es_sin_respuesta) & 
-            df_hoy["es_cerrado"]
-        ].copy()
-        df_gest["p_gest_num"] = pd.to_numeric(df_gest["tiempo_res_min"], errors="coerce")
-        s_gest = df_gest["p_gest_num"].dropna()
-        if not s_gest.empty:
-            prom_gest = round(s_gest.mean(), 2)
-            cumplen_gest = (s_gest <= sla_gest_th).sum()
-            pct_sla_gest = round((cumplen_gest / len(s_gest)) * 100, 1)
-
-    # ==========================================
-    # DISTRIBUCIÓN POR AGENTE (BARRAS Y TABLA)
-    # ==========================================
-    if not df_all.empty:
-        df_all["es_cerrado_hoy_asig_hoy"] = cerrados_hoy_asig_hoy
-        df_all["es_abierto_actual"] = ~df_all["es_cerrado"]
-        for ag in df_all["agente_clean"].unique():
-            if ag.lower() not in agentes_omitir:
-                lista_agentes_maestra.add(ag)
-
-    resumen_agentes = []
-    for agente in sorted(list(lista_agentes_maestra)):
-        if agente.lower() in agentes_omitir:
-            continue
-
+        # 3. Normalización y cálculo de fechas
         if not df_all.empty:
-            grp = df_all[df_all["agente_clean"] == agente]
-            pendientes = int(grp["es_abierto_actual"].sum()) if not grp.empty else 0
-            cerrados = int(grp["es_cerrado_hoy_asig_hoy"].sum()) if not grp.empty else 0
-        else:
-            pendientes = 0
-            cerrados = 0
+            c_dt = pd.to_datetime(df_all["created_at"], errors="coerce", utc=True)
+            df_all["created_at_dt"] = c_dt.dt.tz_convert("America/Asuncion")
+            df_all["fecha_creado_py"] = df_all["created_at_dt"].dt.date
 
-        resumen_agentes.append({
-            "agente": agente,
-            "cerrados": cerrados,
-            "pendientes": pendientes,
-            "total": cerrados + pendientes
-        })
+            df_all["fecha_ref"] = df_all["fecha_cierre"].fillna(df_all["updated_at"])
+            ref_dt = pd.to_datetime(df_all["fecha_ref"], errors="coerce", utc=True)
+            df_all["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
+            df_all["fecha_cierre_py"] = df_all["fecha_cierre_dt"].dt.date
 
-    df_res = pd.DataFrame(resumen_agentes)
-    if not df_res.empty:
-        df_res = df_res.sort_values(by="total", ascending=False)
+            calif_dt = pd.to_datetime(df_all["fecha_calificacion"], errors="coerce", utc=True)
+            df_all["fecha_calif_py"] = calif_dt.dt.tz_convert("America/Asuncion").dt.date
 
-    max_total = df_res["total"].max() if (not df_res.empty and df_res["total"].max() > 0) else 1
-    barras_grafico_html = []
+            df_all["estado_clean"] = df_all["estado"].fillna("").astype(str).str.strip().str.lower()
+            df_all["es_cerrado"] = df_all["estado_clean"].isin([e.lower() for e in ESTADOS_CERRADOS])
+            df_all["agente_clean"] = df_all["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+            df_all["por_agente_clean"] = df_all["por_agente"].fillna("").astype(str).str.strip().str.lower()
+            df_all["etiquetas_clean"] = df_all["etiquetas"].fillna("").astype(str).str.strip().str.lower()
 
-    for _, r in df_res.iterrows():
-        nom = r["agente"]
-        c = r["cerrados"]
-        p = r["pendientes"]
-        tot = r["total"]
+            dias_sem = df_all["created_at_dt"].dt.dayofweek
+            horas_dec = df_all["created_at_dt"].dt.hour + (df_all["created_at_dt"].dt.minute / 60.0)
+            es_normal_lv = (dias_sem.isin([0, 1, 2, 3, 4])) & (horas_dec >= 8.0) & (horas_dec <= 17.5)
+            es_normal_sab = (dias_sem == 5) & (horas_dec >= 9.0) & (horas_dec <= 11.75)
+            df_all["es_horario_habil"] = (es_normal_lv | es_normal_sab) & (~df_all["created_at_dt"].dt.strftime("%Y-%m-%d").isin(FERIADOS))
 
-        pct_c = round((c / max_total) * 100, 1)
-        pct_p = round((p / max_total) * 100, 1)
+            df_all["tiempo_res_min"] = df_all.apply(
+                lambda r: calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"])
+                if r.get("es_horario_habil") and r.get("es_cerrado") else None,
+                axis=1
+            )
 
-        txt_c = f"{c}" if c > 0 else ""
-        txt_p = f"{p}" if p > 0 else ""
+        # 4. Cálculos principales
+        df_hoy = df_all[df_all["fecha_creado_py"] == hoy_date_py].copy() if not df_all.empty else pd.DataFrame()
+        total_recibidos_hoy = len(df_hoy)
+        total_abiertos_actuales = int((~df_all["es_cerrado"]).sum()) if not df_all.empty else 0
+        
+        cerrados_hoy_asig_hoy = (
+            (df_all["es_cerrado"]) & 
+            (df_all["fecha_cierre_py"] == hoy_date_py) & 
+            (df_all["fecha_creado_py"] == hoy_date_py)
+        ) if not df_all.empty else pd.Series(dtype=bool)
+        total_cerrados_hoy = int(cerrados_hoy_asig_hoy.sum()) if not df_all.empty else 0
 
-        barras_grafico_html.append(f"""
-        <div style="margin-bottom: 14px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 4px;">
-                <span><b>{nom}</b></span>
-                <span style="color: #f8fafc; font-weight: 700;">Total: {tot}</span>
-            </div>
-            <div style="background-color: #0f172a; border-radius: 6px; height: 26px; display: flex; overflow: hidden; width: 100%; border: 1px solid #334155;">
-                <div style="width: {pct_c}%; background-color: #10b981; color: white; font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: center;" title="Cerrados: {c}">
-                    {txt_c}
+        # CSAT
+        csat_pct = 0.0
+        csat_total = 0
+        if not df_all.empty:
+            df_csat = df_all[
+                (df_all["fecha_calif_py"] == hoy_date_py) & 
+                (df_all["rating"].notna()) &
+                (df_all["por_agente_clean"] != "excluido")
+            ].copy()
+            if not df_csat.empty:
+                df_csat["rating_num"] = pd.to_numeric(df_csat["rating"], errors="coerce")
+                df_csat = df_csat.dropna(subset=["rating_num"])
+                csat_total = len(df_csat)
+                if csat_total > 0:
+                    positivas = (df_csat["rating_num"] >= 4).sum()
+                    csat_pct = round((positivas / csat_total) * 100, 1)
+
+        # SLA 1ra Respuesta
+        prom_1ra = 0.0
+        pct_sla_1ra = 0.0
+        if not df_hoy.empty:
+            es_agente_valido_1ra = (
+                (df_hoy["por_agente_clean"] == "no excluido") &
+                (~df_hoy["agente_clean"].str.lower().isin(agentes_omitir))
+            )
+            df_1ra = df_hoy[es_agente_valido_1ra & df_hoy["es_horario_habil"]].copy()
+            df_1ra["p_1ra_num"] = pd.to_numeric(df_1ra["primera_respuesta_min"], errors="coerce")
+            s_1ra = df_1ra["p_1ra_num"].dropna()
+            if not s_1ra.empty:
+                prom_1ra = round(s_1ra.mean(), 2)
+
+            if not df_1ra.empty:
+                cumplen_1ra = (df_1ra["p_1ra_num"] <= sla_1ra_th).sum()
+                pct_sla_1ra = round((cumplen_1ra / len(df_1ra)) * 100, 1)
+
+        # SLA Gestión
+        prom_gest = 0.0
+        pct_sla_gest = 0.0
+        if not df_hoy.empty:
+            es_sin_respuesta = df_hoy["etiquetas_clean"].str.contains("sin respuesta", na=False)
+            es_agente_valido_gest = (
+                (df_hoy["por_agente_clean"] == "no excluido") &
+                (~df_hoy["agente_clean"].str.lower().isin(agentes_omitir))
+            )
+            df_gest = df_hoy[
+                es_agente_valido_gest & 
+                df_hoy["es_horario_habil"] & 
+                (~es_sin_respuesta) & 
+                df_hoy["es_cerrado"]
+            ].copy()
+            df_gest["p_gest_num"] = pd.to_numeric(df_gest["tiempo_res_min"], errors="coerce")
+            s_gest = df_gest["p_gest_num"].dropna()
+            if not s_gest.empty:
+                prom_gest = round(s_gest.mean(), 2)
+                cumplen_gest = (s_gest <= sla_gest_th).sum()
+                pct_sla_gest = round((cumplen_gest / len(s_gest)) * 100, 1)
+
+        # Distribución de agentes
+        if not df_all.empty:
+            df_all["es_cerrado_hoy_asig_hoy"] = cerrados_hoy_asig_hoy
+            df_all["es_abierto_actual"] = ~df_all["es_cerrado"]
+            for ag in df_all["agente_clean"].unique():
+                if ag.lower() not in agentes_omitir:
+                    lista_agentes_maestra.add(ag)
+
+        resumen_agentes = []
+        for agente in sorted(list(lista_agentes_maestra)):
+            if agente.lower() in agentes_omitir:
+                continue
+
+            if not df_all.empty:
+                grp = df_all[df_all["agente_clean"] == agente]
+                pendientes = int(grp["es_abierto_actual"].sum()) if not grp.empty else 0
+                cerrados = int(grp["es_cerrado_hoy_asig_hoy"].sum()) if not grp.empty else 0
+            else:
+                pendientes = 0
+                cerrados = 0
+
+            resumen_agentes.append({
+                "agente": agente,
+                "cerrados": cerrados,
+                "pendientes": pendientes,
+                "total": cerrados + pendientes
+            })
+
+        df_res = pd.DataFrame(resumen_agentes)
+        if not df_res.empty:
+            df_res = df_res.sort_values(by="total", ascending=False)
+
+        max_total = df_res["total"].max() if (not df_res.empty and df_res["total"].max() > 0) else 1
+        barras_grafico_html = []
+
+        for _, r in df_res.iterrows():
+            nom = r["agente"]
+            c = r["cerrados"]
+            p = r["pendientes"]
+            tot = r["total"]
+
+            pct_c = round((c / max_total) * 100, 1) if max_total > 0 else 0
+            pct_p = round((p / max_total) * 100, 1) if max_total > 0 else 0
+
+            txt_c = f"{c}" if c > 0 else ""
+            txt_p = f"{p}" if p > 0 else ""
+
+            barras_grafico_html.append(f"""
+            <div style="margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 4px;">
+                    <span><b>{nom}</b></span>
+                    <span style="color: #f8fafc; font-weight: 700;">Total: {tot}</span>
                 </div>
-                <div style="width: {pct_p}%; background-color: #f97316; color: white; font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: center;" title="Pendientes: {p}">
-                    {txt_p}
-                </div>
-            </div>
-        </div>
-        """)
-
-    filas_table = "".join([
-        f"<tr><td style='padding:9px;border:1px solid #334155;color:#f8fafc;'>{r['agente']}</td>"
-        f"<td style='padding:9px;border:1px solid #334155;text-align:center;font-weight:700;color:#f8fafc;'>{r['total']}</td>"
-        f"<td style='padding:9px;border:1px solid #334155;text-align:center;color:#10b981;font-weight:700;'>{r['cerrados']}</td>"
-        f"<td style='padding:9px;border:1px solid #334155;text-align:center;color:#f97316;font-weight:700;'>{r['pendientes']}</td></tr>"
-        for _, r in df_res.iterrows()
-    ]) if not df_res.empty else "<tr><td colspan='4' style='text-align:center;padding:12px;color:#94a3b8;'>Sin actividad registrada.</td></tr>"
-
-    color_sla_1ra = "#10b981" if pct_sla_1ra >= 90.0 else "#ef4444"
-    color_sla_gest = "#10b981" if pct_sla_gest >= 90.0 else "#ef4444"
-    color_csat = "#10b981" if csat_pct >= 90.0 else "#38bdf8"
-
-    # ==========================================
-    # PLANTILLA HTML DEL CORREO
-    # ==========================================
-    html_body = f"""
-    <div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 25px; color: #f8fafc;">
-        <div style="max-width: 660px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 24px;">
-            <h2 style="color: #38bdf8; margin-top: 0; font-size: 1.3rem;">Cierre Operativo Soporte BIMS - {hoy_str}</h2>
-            <p style="color: #94a3b8; font-size: 0.88rem; margin-bottom: 20px;">
-                Resumen ejecutivo de indicadores de servicio, SLA y distribución de carga de la jornada:
-            </p>
-
-            <!-- 1. BLOQUE DE RESUMEN DE VOLUMEN DEL DÍA -->
-            <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin-bottom: 16px;">
-                <tr>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #0284c7; text-align: center; width: 33%;">
-                        <div style="color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Ingresados Hoy</div>
-                        <div style="color: #f8fafc; font-size: 1.4rem; font-weight: 700; margin-top: 4px;">{total_recibidos_hoy}</div>
-                    </td>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; text-align: center; width: 33%;">
-                        <div style="color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Cerrados Hoy</div>
-                        <div style="color: #10b981; font-size: 1.4rem; font-weight: 700; margin-top: 4px;">{total_cerrados_hoy}</div>
-                        <div style="color: #64748b; font-size: 0.7rem;">(Asignados hoy)</div>
-                    </td>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #f97316; text-align: center; width: 33%;">
-                        <div style="color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Pendientes Actuales</div>
-                        <div style="color: #f97316; font-size: 1.4rem; font-weight: 700; margin-top: 4px;">{total_abiertos_actuales}</div>
-                    </td>
-                </tr>
-            </table>
-
-            <!-- 2. BLOQUE DE MÉTRICAS OPERATIVAS Y SLA -->
-            <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin-bottom: 24px;">
-                <tr>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid {color_csat}; text-align: center; width: 20%;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">CSAT Hoy</div>
-                        <div style="color: {color_csat}; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{csat_pct}%</div>
-                        <div style="color: #64748b; font-size: 0.7rem;">{csat_total} encuestas</div>
-                    </td>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #0284c7; text-align: center; width: 20%;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Prom. 1ra Resp.</div>
-                        <div style="color: #f8fafc; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{prom_1ra}m</div>
-                        <div style="color: #64748b; font-size: 0.7rem;">Meta ≤ {sla_1ra_th}m</div>
-                    </td>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid {color_sla_1ra}; text-align: center; width: 20%;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">% SLA 1ra</div>
-                        <div style="color: {color_sla_1ra}; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{pct_sla_1ra}%</div>
-                        <div style="color: #64748b; font-size: 0.7rem;">Meta ≥ 90%</div>
-                    </td>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #0284c7; text-align: center; width: 20%;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Prom. Gestión</div>
-                        <div style="color: #f8fafc; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{prom_gest}m</div>
-                        <div style="color: #64748b; font-size: 0.7rem;">Meta ≤ {sla_gest_th}m</div>
-                    </td>
-                    <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid {color_sla_gest}; text-align: center; width: 20%;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">% SLA Gest.</div>
-                        <div style="color: {color_sla_gest}; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{pct_sla_gest}%</div>
-                        <div style="color: #64748b; font-size: 0.7rem;">Meta ≥ 90%</div>
-                    </td>
-                </tr>
-            </table>
-
-            <!-- 3. CONTENEDOR DEL GRÁFICO VISUAL -->
-            <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <span style="font-weight: 700; font-size: 0.95rem; color: #38bdf8;">Carga por Agente (Asignados Hoy vs Abiertos)</span>
-                    <div style="font-size: 0.78rem;">
-                        <span style="color: #10b981; font-weight: 700; margin-right: 12px;">🟢 Cerrados Hoy</span>
-                        <span style="color: #f97316; font-weight: 700;">🔴 Pendientes</span>
+                <div style="background-color: #0f172a; border-radius: 6px; height: 26px; display: flex; overflow: hidden; width: 100%; border: 1px solid #334155;">
+                    <div style="width: {pct_c}%; background-color: #10b981; color: white; font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: center;" title="Cerrados: {c}">
+                        {txt_c}
+                    </div>
+                    <div style="width: {pct_p}%; background-color: #f97316; color: white; font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: center;" title="Pendientes: {p}">
+                        {txt_p}
                     </div>
                 </div>
-                {''.join(barras_grafico_html)}
             </div>
+            """)
 
-            <!-- 4. TABLA DE DETALLE -->
-            <table style='border-collapse:collapse;width:100%;font-size:0.85rem;background-color:#0f172a;border-radius:6px;overflow:hidden;'>
-                <thead>
-                    <tr style='background:#0284c7;color:white;'>
-                        <th style='padding:9px;border:1px solid #0284c7;text-align:left;'>Agente</th>
-                        <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Total</th>
-                        <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Cerrados (Hoy)</th>
-                        <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Pendientes</th>
+        filas_table = "".join([
+            f"<tr><td style='padding:9px;border:1px solid #334155;color:#f8fafc;'>{r['agente']}</td>"
+            f"<td style='padding:9px;border:1px solid #334155;text-align:center;font-weight:700;color:#f8fafc;'>{r['total']}</td>"
+            f"<td style='padding:9px;border:1px solid #334155;text-align:center;color:#10b981;font-weight:700;'>{r['cerrados']}</td>"
+            f"<td style='padding:9px;border:1px solid #334155;text-align:center;color:#f97316;font-weight:700;'>{r['pendientes']}</td></tr>"
+            for _, r in df_res.iterrows()
+        ]) if not df_res.empty else "<tr><td colspan='4' style='text-align:center;padding:12px;color:#94a3b8;'>Sin actividad registrada.</td></tr>"
+
+        color_sla_1ra = "#10b981" if pct_sla_1ra >= 90.0 else "#ef4444"
+        color_sla_gest = "#10b981" if pct_sla_gest >= 90.0 else "#ef4444"
+        color_csat = "#10b981" if csat_pct >= 90.0 else "#38bdf8"
+
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 25px; color: #f8fafc;">
+            <div style="max-width: 660px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 24px;">
+                <h2 style="color: #38bdf8; margin-top: 0; font-size: 1.3rem;">Cierre Operativo Soporte BIMS - {hoy_str}</h2>
+                <p style="color: #94a3b8; font-size: 0.88rem; margin-bottom: 20px;">
+                    Resumen ejecutivo de indicadores de servicio, SLA y distribución de carga de la jornada:
+                </p>
+
+                <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin-bottom: 16px;">
+                    <tr>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #0284c7; text-align: center; width: 33%;">
+                            <div style="color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Ingresados Hoy</div>
+                            <div style="color: #f8fafc; font-size: 1.4rem; font-weight: 700; margin-top: 4px;">{total_recibidos_hoy}</div>
+                        </td>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; text-align: center; width: 33%;">
+                            <div style="color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Cerrados Hoy</div>
+                            <div style="color: #10b981; font-size: 1.4rem; font-weight: 700; margin-top: 4px;">{total_cerrados_hoy}</div>
+                            <div style="color: #64748b; font-size: 0.7rem;">(Asignados hoy)</div>
+                        </td>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #f97316; text-align: center; width: 33%;">
+                            <div style="color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Pendientes Actuales</div>
+                            <div style="color: #f97316; font-size: 1.4rem; font-weight: 700; margin-top: 4px;">{total_abiertos_actuales}</div>
+                        </td>
                     </tr>
-                </thead>
-                <tbody>
-                    {filas_table}
-                </tbody>
-            </table>
+                </table>
 
-            <p style="font-size:0.75rem;color:#64748b;margin-top:22px;border-top:1px solid #334155;padding-top:12px;">
-                Reporte diario automatizado emitido por el sistema de monitoreo BIMS.
-            </p>
+                <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin-bottom: 24px;">
+                    <tr>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid {color_csat}; text-align: center; width: 20%;">
+                            <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">CSAT Hoy</div>
+                            <div style="color: {color_csat}; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{csat_pct}%</div>
+                            <div style="color: #64748b; font-size: 0.7rem;">{csat_total} encuestas</div>
+                        </td>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #0284c7; text-align: center; width: 20%;">
+                            <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Prom. 1ra Resp.</div>
+                            <div style="color: #f8fafc; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{prom_1ra}m</div>
+                            <div style="color: #64748b; font-size: 0.7rem;">Meta ≤ {sla_1ra_th}m</div>
+                        </td>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid {color_sla_1ra}; text-align: center; width: 20%;">
+                            <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">% SLA 1ra</div>
+                            <div style="color: {color_sla_1ra}; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{pct_sla_1ra}%</div>
+                            <div style="color: #64748b; font-size: 0.7rem;">Meta ≥ 90%</div>
+                        </td>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid #0284c7; text-align: center; width: 20%;">
+                            <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Prom. Gestión</div>
+                            <div style="color: #f8fafc; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{prom_gest}m</div>
+                            <div style="color: #64748b; font-size: 0.7rem;">Meta ≤ {sla_gest_th}m</div>
+                        </td>
+                        <td style="background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; border-left: 4px solid {color_sla_gest}; text-align: center; width: 20%;">
+                            <div style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">% SLA Gest.</div>
+                            <div style="color: {color_sla_gest}; font-size: 1.3rem; font-weight: 700; margin-top: 4px;">{pct_sla_gest}%</div>
+                            <div style="color: #64748b; font-size: 0.7rem;">Meta ≥ 90%</div>
+                        </td>
+                    </tr>
+                </table>
+
+                <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <span style="font-weight: 700; font-size: 0.95rem; color: #38bdf8;">Carga por Agente (Asignados Hoy vs Abiertos)</span>
+                        <div style="font-size: 0.78rem;">
+                            <span style="color: #10b981; font-weight: 700; margin-right: 12px;">🟢 Cerrados Hoy</span>
+                            <span style="color: #f97316; font-weight: 700;">🔴 Pendientes</span>
+                        </div>
+                    </div>
+                    {''.join(barras_grafico_html)}
+                </div>
+
+                <table style='border-collapse:collapse;width:100%;font-size:0.85rem;background-color:#0f172a;border-radius:6px;overflow:hidden;'>
+                    <thead>
+                        <tr style='background:#0284c7;color:white;'>
+                            <th style='padding:9px;border:1px solid #0284c7;text-align:left;'>Agente</th>
+                            <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Total</th>
+                            <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Cerrados (Hoy)</th>
+                            <th style='padding:9px;border:1px solid #0284c7;text-align:center;'>Pendientes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filas_table}
+                    </tbody>
+                </table>
+
+                <p style="font-size:0.75rem;color:#64748b;margin-top:22px;border-top:1px solid #334155;padding-top:12px;">
+                    Reporte diario automatizado emitido por el sistema de monitoreo BIMS.
+                </p>
+            </div>
         </div>
-    </div>
-    """
+        """
 
-    asunto_mail = f"Cierre Operativo Soporte BIMS - {hoy_str}"
+        asunto_mail = f"Cierre Operativo Soporte BIMS - {hoy_str}"
+        res_mail = enviar_correo_gmail_api(EMAIL_EMISOR, email_dest, asunto_mail, html_body)[cite: 1]
+        print(f"📧 [Reporte Email] Resultado: {res_mail}")
 
-    try:
-        res_envio = enviar_correo_gmail_api(
-            email_emisor=EMAIL_EMISOR,
-            email_dest=email_dest,
-            asunto=asunto_mail,
-            html_body=html_body
-        )
-        print(f"📧 Resultado envío de correo: {res_envio.get('status') if isinstance(res_envio, dict) else res_envio}")
-    except Exception as ex_mail:
-        print(f"❌ Error ejecutando envío de correo: {ex_mail}")
+        return PlainTextResponse("OK", status_code=200)
 
-    # Retorno ultra-ligero que evita el error de cron-job.org
-    return PlainTextResponse("OK", status_code=200)
+    except Exception as ex_general:
+        print(f"❌ [Reporte Email] ERROR INESPERADO:\n{traceback.format_exc()}")
+        return PlainTextResponse(f"ERROR: {str(ex_general)}", status_code=200)
