@@ -729,7 +729,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
             <div style="margin-bottom: 14px;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 4px;">
                     <span><b>{nom}</b></span>
-                    <span style="color: #f8fafc; font-weight: 700;">Total: {tot}</span>
+                    <span style="color: #f8fafc; font-weight: 700;">: {tot}</span>
                 </div>
                 <div style="background-color: #0f172a; border-radius: 6px; height: 26px; display: flex; overflow: hidden; width: 100%; border: 1px solid #334155;">
                     <div style="width: {pct_c}%; background-color: #10b981; color: white; font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: center;" title="Cerrados: {c}">
@@ -812,7 +812,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
 
                 <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <span style="font-weight: 700; font-size: 0.95rem; color: #38bdf8;">Carga por Agente (Asignados Hoy vs Abiertos)</span>
+                        <span style="font-weight: 700; font-size: 0.95rem; color: #38bdf8;">Carga por Agente</span>
                         <div style="font-size: 0.78rem;">
                             <span style="color: #10b981; font-weight: 700; margin-right: 12px;">🟢 Cerrados Hoy</span>
                             <span style="color: #f97316; font-weight: 700;">🔴 Pendientes</span>
@@ -836,7 +836,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
                 </table>
 
                 <p style="font-size:0.75rem;color:#64748b;margin-top:22px;border-top:1px solid #334155;padding-top:12px;">
-                    Reporte diario automatizado emitido por el sistema de monitoreo BIMS.
+                    Reporte diario automatizado emitido por el sistema de monitoreo.
                 </p>
             </div>
         </div>
