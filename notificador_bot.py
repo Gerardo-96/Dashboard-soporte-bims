@@ -882,9 +882,16 @@ def trigger_reporte_email(authorization: str = Header(None)):
 
     asunto_mail = f"Cierre Operativo Soporte BIMS - {hoy_str}"
 
-    return enviar_correo_gmail_api(
-        email_emisor=EMAIL_EMISOR,
-        email_dest=email_dest,
-        asunto=asunto_mail,
-        html_body=html_body
-    )
+    try:
+        res_envio = enviar_correo_gmail_api(
+            email_emisor=EMAIL_EMISOR,
+            email_dest=email_dest,
+            asunto=asunto_mail,
+            html_body=html_body
+        )
+        print(f"📧 Resultado envío de correo: {res_envio.get('status') if isinstance(res_envio, dict) else res_envio}")
+    except Exception as ex_mail:
+        print(f"❌ Error ejecutando envío de correo: {ex_mail}")
+
+    # Retorno ultra-ligero que evita el error de cron-job.org
+    return PlainTextResponse("OK", status_code=200)
