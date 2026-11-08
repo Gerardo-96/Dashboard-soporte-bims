@@ -3868,26 +3868,38 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
+            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO (PERFECCIONADO)
             # =========================================================================
             st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
 
-            # Filtrar chats ingresados en horario extendido o fuera de jornada
             df_ext = df_target[df_target["horario_evaluado"] == "extendido"].copy()
             tot_ext = len(df_ext)
-            
-            # Conteo de domingos
+            tot_ext_cerrados = int(df_ext["es_cerrado"].sum())
+            pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
+
             dias_num = df_ext["created_at_dt"].dt.dayofweek
             tot_domingo = int((dias_num == 6).sum())
+            derivados_l3_ext = int((df_ext["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
 
-            col_ext_pie, col_ext_dias = st.columns([1, 1.2])
+            # Dos columnas con proporción visual 1:1.2
+            col_ext_pie, col_ext_dias = st.columns([1.1, 1.2])
 
             with col_ext_pie:
-                st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; margin-bottom: 12px; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 6px 12px; overflow: hidden;">
-                    <div class="metric-card-title" style="justify-content: center; margin: 0 0 2px 0; font-size: 0.72rem; line-height: 1.1; letter-spacing: 0.5px;">CHATS EN HORARIO EXTENDIDO</div>
-                    <div class="metric-card-value" style="font-size: 2.1rem; color: #38bdf8; margin: 0; line-height: 1.0;">{tot_ext}</div>
-                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.76rem; margin: 2px 0 0 0; line-height: 1.1;">Domingo ingresaron {tot_domingo} chats</div>
+                # Doble tarjeta métrica para llenar armoniosamente la cabecera
+                c_kpi_ext1, c_kpi_ext2 = st.columns(2)
+                c_kpi_ext1.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px;">
+                    <div class="metric-card-title" style="justify-content: center; font-size: 0.68rem; margin: 0;">TOTAL EXTENDIDO</div>
+                    <div class="metric-card-value" style="font-size: 1.9rem; color: #38bdf8; margin: 1px 0; line-height: 1.1;">{tot_ext}</div>
+                    <div class="metric-card-sub" style="font-size: 0.72rem; margin: 0; color: #94a3b8;">Domingo: {tot_domingo} chats</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                c_kpi_ext2.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px;">
+                    <div class="metric-card-title" style="justify-content: center; font-size: 0.68rem; margin: 0;">EFECTIVIDAD CIERRE</div>
+                    <div class="metric-card-value" style="font-size: 1.9rem; color: #34d399; margin: 1px 0; line-height: 1.1;">{pct_ext_cerrados}%</div>
+                    <div class="metric-card-sub" style="font-size: 0.72rem; margin: 0; color: #94a3b8;">{tot_ext_cerrados} de {tot_ext} cerrados</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -3898,31 +3910,35 @@ with tab_wbr:
                     fig_pie_ext = go.Figure(data=[go.Pie(
                         labels=df_ext_ag["Agente"],
                         values=df_ext_ag["Cantidad"],
-                        hole=0.45,
+                        hole=0.48,
                         textinfo="label+value+percent",
                         texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
                         textposition="outside",
+                        insidetextorientation="horizontal",
                         marker=dict(colors=palette_donut, line=dict(color="#1e293b", width=2)),
                         showlegend=False
                     )])
+                    # Margen inferior aumentado (b=50) para que nunca se corte el nombre de abajo
                     fig_pie_ext.update_layout(
                         paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
                         font=dict(color="#cbd5e1", size=10),
-                        margin=dict(t=20, b=20, l=20, r=20), height=320
+                        margin=dict(t=20, b=50, l=35, r=35),
+                        height=330
                     )
                     st.plotly_chart(fig_pie_ext, use_container_width=True)
 
                     cerrados_ia_ext = int(df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
                     cerrados_hum_ext = tot_ext - cerrados_ia_ext
                     st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 10px 14px; font-size: 0.8rem; color: #94a3b8;">
-                        <b>Obs:</b> {cerrados_ia_ext} chats gestionados por IA, {cerrados_hum_ext} asignados a agentes.
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 10px 14px; font-size: 0.8rem; color: #94a3b8; height: 50px; box-sizing: border-box; display: flex; align-items: center;">
+                        <span>🤖 <b>{cerrados_ia_ext} chats gestionados por IA</b>, {cerrados_hum_ext} asignados a agentes.</span>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.info("Sin chats registrados en horario extendido para esta semana.")
 
             with col_ext_dias:
+                st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
                 st.markdown("##### Q. de chats ingresados por Día (Horario Extendido)")
 
                 mapa_dias_nom = {
@@ -3945,23 +3961,27 @@ with tab_wbr:
                         text="Cantidad",
                         color_discrete_sequence=["#0284c7"]
                     )
-                    fig_bar_dias_ext.update_traces(textposition="outside", marker=dict(cornerradius=6))
+                    # Oculta el número si es 0 para no ensuciar el eje
+                    fig_bar_dias_ext.update_traces(
+                        texttemplate="%{text}",
+                        textposition="outside",
+                        cliponaxis=False,
+                        marker=dict(cornerradius=6)
+                    )
                     fig_bar_dias_ext.update_layout(
                         paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
                         font=dict(color="#cbd5e1"),
                         xaxis=dict(gridcolor="#334155", title="Cantidad"),
                         yaxis=dict(autorange="reversed", title=None),
-                        margin=dict(t=30, b=20, l=20, r=20), height=360
+                        margin=dict(t=20, b=20, l=20, r=20),
+                        height=355
                     )
                     st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
 
-                    tot_ext_cerrados = int(df_ext["es_cerrado"].sum())
-                    derivados_l3_ext = int((df_ext["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
-
                     st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.5; color: #cbd5e1;">
-                        • <b>Cierre:</b> De los {tot_ext} chats ingresados en horario extendido, <b>{tot_ext_cerrados} lograron cerrarse</b>.<br>
-                        • <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 10px 14px; font-size: 0.8rem; line-height: 1.4; color: #cbd5e1; height: 50px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <div>• <b>Cierres:</b> {tot_ext_cerrados} de los {tot_ext} chats ingresados lograron cerrarse.</div>
+                        <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
