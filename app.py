@@ -3019,7 +3019,7 @@ with tab_wbr:
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1"),
                 xaxis=dict(gridcolor="#1e293b"),
-                yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats"),
+                yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(t=50, b=20, l=30, r=20),
                 height=380
@@ -3130,7 +3130,7 @@ with tab_wbr:
                     font=dict(color="#cbd5e1"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     xaxis=dict(gridcolor="#1e293b"),
-                    yaxis=dict(gridcolor="#1e293b"),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
@@ -3327,7 +3327,7 @@ with tab_wbr:
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
                     xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(gridcolor="#1e293b", title="Minutos"),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
@@ -3359,7 +3359,7 @@ with tab_wbr:
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
                     xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(gridcolor="#1e293b", title="Minutos"),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
@@ -3816,7 +3816,7 @@ with tab_wbr:
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
                     xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(gridcolor="#1e293b", range=[0, 105], title="CSAT (%)"),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
@@ -3846,7 +3846,7 @@ with tab_wbr:
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
                     xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(gridcolor="#1e293b", title="Prom. Contactos"),
+                    yaxis=dict( showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
