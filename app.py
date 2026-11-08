@@ -3752,6 +3752,220 @@ with tab_wbr:
                 st.markdown(html_tabla_l3, unsafe_allow_html=True)
             else:
                 st.caption("Sin casos L3 registrados.")
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 7: EVOLUTIVO CSAT (5 SEMANAS) & CONTACTOS POR EMPRESA
+            # =========================================================================
+            st.markdown(f"#### 7. WBR | {semana_seleccionada_str} — Evolutivo de Satisfacción & Frecuencia por Empresa")
+
+            evol_csat = []
+            for _, s_row in df_5_semanas_info.iterrows():
+                # Universo de chats evaluados por CSAT en cada una de las 5 semanas
+                if "fecha_calificacion_dt" in df_wbr_base.columns:
+                    sub_csat = df_wbr_base[
+                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                        (df_wbr_base["rating"].notna()) &
+                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == s_row["iso_year"]) &
+                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == s_row["iso_week"])
+                    ].copy()
+                else:
+                    sub_csat = df_wbr_base[
+                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                        (df_wbr_base["rating"].notna()) &
+                        (df_wbr_base["iso_year"] == s_row["iso_year"]) &
+                        (df_wbr_base["iso_week"] == s_row["iso_week"])
+                    ].copy()
+
+                sub_csat["r_num"] = pd.to_numeric(sub_csat["rating"], errors="coerce")
+                sub_csat = sub_csat.dropna(subset=["r_num"])
+                tot_c = len(sub_csat)
+                pos_c = int((sub_csat["r_num"] >= 4).sum())
+                pct_c = round((pos_c / tot_c * 100), 1) if tot_c > 0 else 0.0
+
+                # Chats totales creados para ratio de contactos por empresa
+                sub_vol = df_wbr_base[
+                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["iso_week"] == s_row["iso_week"])
+                ]
+                tot_chats_w = len(sub_vol)
+                empresas_w = sub_vol["company"].nunique() if "company" in sub_vol.columns else 0
+                ratio_empresa = round(tot_chats_w / empresas_w, 2) if empresas_w > 0 else 0.0
+
+                evol_csat.append({
+                    "Semana": s_row["etiqueta_semana"],
+                    "CSAT": pct_c,
+                    "Ratio_Empresa": ratio_empresa
+                })
+
+            df_evol_csat = pd.DataFrame(evol_csat)
+
+            # Métricas comparativas WoW CSAT
+            foco_csat = df_evol_csat.iloc[-1]["CSAT"]
+            prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
+            diff_csat = round(foco_csat - prev_csat, 2)
+            foco_ratio = df_evol_csat.iloc[-1]["Ratio_Empresa"]
+
+            col_g_csat, col_g_ratio = st.columns(2)
+
+            with col_g_csat:
+                st.markdown("##### Satisfacción del Cliente (CSAT %)")
+                fig_bar_csat = go.Figure()
+                fig_bar_csat.add_trace(go.Bar(
+                    x=df_evol_csat["Semana"],
+                    y=df_evol_csat["CSAT"],
+                    marker=dict(color="#0284c7", cornerradius=8),
+                    text=df_evol_csat["CSAT"].apply(lambda v: f"{v}%"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_csat.update_layout(
+                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#334155", title=None),
+                    yaxis=dict(gridcolor="#334155", range=[0, 105], title="CSAT (%)"),
+                    margin=dict(t=30, b=20, l=20, r=20), height=360
+                )
+                st.plotly_chart(fig_bar_csat, use_container_width=True)
+
+                color_diff_csat = "#34d399" if diff_csat >= 0 else "#f43f5e"
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <b style="color: {color_diff_csat}; font-size: 1.1rem;">{diff_csat:+.2f}% CSAT</b>
+                    <span style="color: #cbd5e1; font-size: 0.85rem;">{semana_seleccionada_str.split(' ')[0]} {target_week} ({foco_csat}%) vs Semana {sem_prev_num} ({prev_csat}%)</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_g_ratio:
+                st.markdown("##### Evolución Semana a Semana (Promedio Contactos por Empresa)")
+                fig_bar_ratio = go.Figure()
+                fig_bar_ratio.add_trace(go.Bar(
+                    x=df_evol_csat["Semana"],
+                    y=df_evol_csat["Ratio_Empresa"],
+                    marker=dict(color="#0369a1", cornerradius=8),
+                    text=df_evol_csat["Ratio_Empresa"].apply(lambda v: f"{v:.2f}"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_ratio.update_layout(
+                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#334155", title=None),
+                    yaxis=dict(gridcolor="#334155", title="Prom. Contactos"),
+                    margin=dict(t=30, b=20, l=20, r=20), height=360
+                )
+                st.plotly_chart(fig_bar_ratio, use_container_width=True)
+
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                    <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Empresa</div>
+                    <div class="metric-card-value" style="color: #38bdf8; font-size: 1.9rem; margin: 2px 0;">{foco_ratio:.2f}</div>
+                    <div style="font-size: 0.8rem; color: #34d399; font-weight: 600;">{pct_sem_cer}% Conversaciones Cerradas</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
+            # =========================================================================
+            st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
+
+            # Filtrar chats ingresados en horario extendido o fuera de jornada
+            df_ext = df_target[df_target["horario_evaluado"] == "extendido"].copy()
+            tot_ext = len(df_ext)
+            
+            # Conteo de domingos
+            dias_num = df_ext["created_at_dt"].dt.dayofweek
+            tot_domingo = int((dias_num == 6).sum())
+
+            col_ext_pie, col_ext_dias = st.columns([1, 1.2])
+
+            with col_ext_pie:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; margin-bottom: 12px; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">CHATS EN HORARIO EXTENDIDO</div>
+                    <div class="metric-card-value" style="font-size: 2.1rem; color: #38bdf8;">{tot_ext}</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.78rem;">Domingo ingresaron {tot_domingo} chats</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if not df_ext.empty:
+                    df_ext_ag = df_ext[~df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(agentes_excluir_pie)]["agente_asignado"].value_counts().reset_index()
+                    df_ext_ag.columns = ["Agente", "Cantidad"]
+
+                    fig_pie_ext = go.Figure(data=[go.Pie(
+                        labels=df_ext_ag["Agente"],
+                        values=df_ext_ag["Cantidad"],
+                        hole=0.45,
+                        textinfo="label+value+percent",
+                        texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                        textposition="outside",
+                        marker=dict(colors=palette_donut, line=dict(color="#1e293b", width=2)),
+                        showlegend=False
+                    )])
+                    fig_pie_ext.update_layout(
+                        paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                        font=dict(color="#cbd5e1", size=10),
+                        margin=dict(t=20, b=20, l=20, r=20), height=320
+                    )
+                    st.plotly_chart(fig_pie_ext, use_container_width=True)
+
+                    cerrados_ia_ext = int(df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
+                    cerrados_hum_ext = tot_ext - cerrados_ia_ext
+                    st.markdown(f"""
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 10px 14px; font-size: 0.8rem; color: #94a3b8;">
+                        <b>Obs:</b> {cerrados_ia_ext} chats gestionados por IA, {cerrados_hum_ext} asignados a agentes.
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.info("Sin chats registrados en horario extendido para esta semana.")
+
+            with col_ext_dias:
+                st.markdown("##### Q. de chats ingresados por Día (Horario Extendido)")
+
+                mapa_dias_nom = {
+                    0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
+                    4: "viernes", 5: "sábado", 6: "domingo"
+                }
+
+                if not df_ext.empty:
+                    df_ext["dia_nombre"] = df_ext["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
+                    orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+                    
+                    df_dias_ext_cnt = df_ext["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
+                    df_dias_ext_cnt.columns = ["Día", "Cantidad"]
+
+                    fig_bar_dias_ext = px.bar(
+                        df_dias_ext_cnt,
+                        x="Cantidad",
+                        y="Día",
+                        orientation="h",
+                        text="Cantidad",
+                        color_discrete_sequence=["#0284c7"]
+                    )
+                    fig_bar_dias_ext.update_traces(textposition="outside", marker=dict(cornerradius=6))
+                    fig_bar_dias_ext.update_layout(
+                        paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                        font=dict(color="#cbd5e1"),
+                        xaxis=dict(gridcolor="#334155", title="Cantidad"),
+                        yaxis=dict(autorange="reversed", title=None),
+                        margin=dict(t=30, b=20, l=20, r=20), height=360
+                    )
+                    st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
+
+                    tot_ext_cerrados = int(df_ext["es_cerrado"].sum())
+                    derivados_l3_ext = int((df_ext["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
+
+                    st.markdown(f"""
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.5; color: #cbd5e1;">
+                        • <b>Cierre:</b> De los {tot_ext} chats ingresados en horario extendido, <b>{tot_ext_cerrados} lograron cerrarse</b>.<br>
+                        • <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.info("Sin registros diarios de horario extendido.")
     else:
         st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
 
