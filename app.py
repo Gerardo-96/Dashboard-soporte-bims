@@ -1641,7 +1641,7 @@ titulos_tabs = [
 ]
 
 if puede_ver_wbr:
-    titulos_tabs.append("📊 Informe WBR Gerencial")
+    titulos_tabs.append("Informe WBR Gerencial")
 
 if puede_ver_admin:
     titulos_tabs.append("Administración & Configuracion")
@@ -2945,9 +2945,6 @@ if tab_wbr is not None:
     with tab_wbr:
         # 1. Encabezado Ejecutivo con diseño estilizado
         st.markdown("""
-        <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%); 
-                    border-radius: 14px; border: 1px solid rgba(56, 189, 248, 0.2); 
-                    padding: 18px 24px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
@@ -2955,7 +2952,6 @@ if tab_wbr is not None:
                     </h3>
                 </div>
             </div>
-        </div>
         """, unsafe_allow_html=True)
     
         if not df_all.empty and "created_at_dt" in df_all.columns:
