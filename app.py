@@ -3491,7 +3491,7 @@ with tab_wbr:
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1", size=11),
                     xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(gridcolor="#1e293b", title="Cantidad"),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
