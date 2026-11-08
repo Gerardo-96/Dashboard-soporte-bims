@@ -7,4 +7,4 @@ supabase
 websockets
 extra-streamlit-components
 python-pptx
-kaleido
+kaleido==0.2.1
