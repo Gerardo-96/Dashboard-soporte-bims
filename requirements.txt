@@ -6,3 +6,5 @@ requests
 supabase
 websockets
 extra-streamlit-components
+python-pptx
+kaleido
