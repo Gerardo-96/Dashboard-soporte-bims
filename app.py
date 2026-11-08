@@ -896,7 +896,7 @@ def obtener_datos():
 
 st.markdown("""
 <style>
-    .stApp { background-color: #0f172a; color: #f8fafc; }
+    .stApp { background-color: #0b1120; color: #f8fafc; }
     
     .block-container {
         padding-top: 1.5rem !important;
@@ -904,7 +904,7 @@ st.markdown("""
     }
 
     header[data-testid="stHeader"] {
-        background-color: #0f172a !important;
+        background-color: #0b1120 !important;
     }
 
     [data-testid="stSidebarHeader"] {
@@ -925,50 +925,94 @@ st.markdown("""
         margin: 0 !important;
     }
 
+    /* Metric Cards con mejor jerarquía, borde sutil e iluminación */
     .metric-card {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
         color: #f8fafc;
-        padding: 16px;
-        border-radius: 10px;
+        padding: 18px 20px;
+        border-radius: 12px;
         border: 1px solid #334155;
-        border-left: 4px solid #0284c7;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px -3px rgba(0, 0, 0, 0.45);
     }
     .metric-card-title {
-        font-size: 0.78rem;
+        font-size: 0.74rem;
         color: #94a3b8;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
     .metric-card-value {
-        font-size: 1.5rem;
-        font-weight: 700;
+        font-size: 1.65rem;
+        font-weight: 800;
         color: #f8fafc;
-        margin-top: 4px;
+        margin-top: 6px;
+        letter-spacing: -0.5px;
     }
     .metric-card-sub {
-        font-size: 0.75rem;
+        font-size: 0.76rem;
         color: #38bdf8;
-        margin-top: 2px;
+        margin-top: 4px;
+        font-weight: 500;
     }
 
     .db-info-box {
-        background-color: #1e293b; color: #94a3b8; padding: 12px;
-        border-radius: 8px; border: 1px solid #334155; font-size: 0.85rem; margin-bottom: 12px;
+        background-color: #1e293b; color: #94a3b8; padding: 12px 14px;
+        border-radius: 10px; border: 1px solid #334155; font-size: 0.84rem; margin-bottom: 12px;
     }
+
+    /* Alerta Crítica con animación de pulso luminoso continuo */
+    @keyframes pulsoCritico {
+        0% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+            border-color: #ef4444;
+        }
+        70% {
+            box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+            border-color: #dc2626;
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            border-color: #ef4444;
+        }
+    }
+
     .alert-card-critical {
-        background-color: #451a03; color: #fef3c7; padding: 16px;
-        border-radius: 8px; border-left: 6px solid #d97706; margin-bottom: 15px;
+        background: linear-gradient(90deg, #451a03 0%, #1e1b4b 100%);
+        color: #fef3c7;
+        padding: 16px 20px;
+        border-radius: 10px;
+        border: 1px solid #ef4444;
+        border-left: 6px solid #ef4444;
+        margin-bottom: 15px;
+        animation: pulsoCritico 2.2s infinite;
     }
+
     .admin-card {
         background-color: #1e293b;
         border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 18px;
+        border-radius: 12px;
+        padding: 20px;
         margin-bottom: 15px;
     }
-    .stButton>button { background-color: #0284c7; color: white; font-weight: bold; border-radius: 8px; border: none; }
+    .stButton>button { 
+        background-color: #0284c7; 
+        color: white; 
+        font-weight: bold; 
+        border-radius: 8px; 
+        border: none; 
+        transition: background-color 0.2s ease;
+    }
+    .stButton>button:hover {
+        background-color: #0369a1;
+    }
 </style>
 """, unsafe_allow_html=True)
 
