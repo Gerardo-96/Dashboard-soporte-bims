@@ -2199,24 +2199,24 @@ with tab_operativo:
         color_gest_val = "#34d399" if es_cumplido_gest else "#f43f5e"
         border_gest_card = "#10b981" if es_cumplido_gest else "#ef4444"
 
-        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
+        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7", icono="⚡"):
             return f"""
-            <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 105px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
-                    <div class="metric-card-title">{title}</div>
+                    <div class="metric-card-title"><span>{icono}</span> {title}</div>
                     <div class="metric-card-value" style="color: {val_color};">{value}</div>
                 </div>
-                <div class="metric-card-sub">{sub_text}</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{sub_text}</div>
             </div>
             """
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
-        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
-        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card), unsafe_allow_html=True)
-        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card), unsafe_allow_html=True)
-        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
-        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
+        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min", icono="⚡"), unsafe_allow_html=True)
+        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min", icono="⏱️"), unsafe_allow_html=True)
+        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card, icono="🎯"), unsafe_allow_html=True)
+        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card, icono="🏆"), unsafe_allow_html=True)
+        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}", icono="📥"), unsafe_allow_html=True)
+        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}", icono="✅"), unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -2590,7 +2590,7 @@ with tab_resumen:
 
             if not df_abiertos_filtro.empty:
                 now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
-                # ✅ Código nuevo (Días HÁBILES basados en jornadas de ~8 hs hábiles):
+                # Días HÁBILES basados en jornadas de ~8 hs hábiles
                 df_abiertos_filtro["dias_antiguedad_num"] = df_abiertos_filtro.apply(
                     lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_resumen) / 60.0 / 8.0),
                     axis=1
@@ -2609,24 +2609,15 @@ with tab_resumen:
                         return ">3 días hábiles"
 
                 df_abiertos_filtro["Rango_Antiguedad"] = df_abiertos_filtro["dias_antiguedad_num"].apply(clasificar_antiguedad)
-
-                def clasificar_antiguedad(dias):
-                    if dias < 1.0: return "0 días (Hoy)"
-                    elif dias < 2.0: return "1 día"
-                    elif dias < 3.0: return "2 días"
-                    elif dias <= 4.0: return "3 días"
-                    else: return ">3 días"
-
-                df_abiertos_filtro["Rango_Antiguedad"] = df_abiertos_filtro["dias_antiguedad_num"].apply(clasificar_antiguedad)
                 df_antiguedad_grp = df_abiertos_filtro.groupby(["agente_asignado", "Rango_Antiguedad"]).size().reset_index(name="Cantidad")
 
-                orden_rangos = ["0 días (Hoy)", "1 día", "2 días", "3 días", ">3 días"]
+                orden_rangos = ["0 días (Hoy)", "1 día hábil", "2 días hábiles", "3 días hábiles", ">3 días hábiles"]
                 color_map_antiguedad = {
                     "0 días (Hoy)": "#34d399",
-                    "1 día": "#38bdf8",
-                    "2 días": "#fbbf24",
-                    "3 días": "#f97316",
-                    ">3 días": "#f43f5e"
+                    "1 día hábil": "#38bdf8",
+                    "2 días hábiles": "#fbbf24",
+                    "3 días hábiles": "#f97316",
+                    ">3 días hábiles": "#f43f5e"
                 }
 
                 fig_antiguedad = px.bar(
