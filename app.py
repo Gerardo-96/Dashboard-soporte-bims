@@ -1032,6 +1032,45 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #0369a1;
     }
+
+    /* Estilizar el encabezado del expander para que sea el propio Banner de Alerta */
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) {
+        border: none !important;
+        background: transparent !important;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details {
+        border: 1px solid #ef4444 !important;
+        border-left: 6px solid #ef4444 !important;
+        border-radius: 10px !important;
+        background: linear-gradient(90deg, #451a03 0%, #1e1b4b 100%) !important;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
+        animation: pulsoCritico 2.2s infinite;
+        overflow: hidden;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > summary {
+        padding: 14px 18px !important;
+        color: #fef3c7 !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > summary:hover {
+        background: rgba(239, 68, 68, 0.15) !important;
+        color: #ffffff !important;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > summary svg {
+        fill: #fca5a5 !important;
+    }
+
+    /* Fondo oscuro limpio para el contenido interno cuando se despliega */
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > div[data-testid="stExpanderDetails"] {
+        background-color: #0b1120 !important;
+        border-top: 1px solid rgba(239, 68, 68, 0.3) !important;
+        padding: 16px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1654,28 +1693,13 @@ def renderizar_alertas_en_vivo():
                 cant = len(df_criticos_sla)
                 palabra_chat = "chat" if cant == 1 else "chats"
 
-                # El expander actúa directamente como el contenedor desplegable de la alerta
-                with st.expander(f"🚨 ALERTA CRÍTICA: {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Clic para gestionar", expanded=True):
-                    
-                    st.markdown(f"""
-                    <div class="alert-card-critical" style="margin-bottom: 12px;">
-                        <div class="alert-card-critical-content">
-                            <div>
-                                <div style="font-weight: 700; font-size: 0.92rem; color: #fef3c7;">
-                                    ⚠️ ATENCIÓN INMEDIATA REQUERIDA
-                                </div>
-                                <div style="color: #cbd5e1; font-size: 0.84rem; margin-top: 3px;">
-                                    <b>Hora Actual:</b> {now_dt.strftime('%H:%M:%S')} hs | Umbral configurado: <b>{alerta_nuevo_th} min</b>
-                                </div>
-                            </div>
-                            <div style="background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #fca5a5; font-size: 1.1rem; font-weight: 800; padding: 4px 14px; border-radius: 8px;">
-                                {cant} {palabra_chat} sin asignar
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                # Título que se mostrará integrado en el banner
+                titulo_banner = f"🚨 ALERTA CRÍTICA: Hay {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Haz clic para desplegar y gestionar"
 
-                    # Disparo de alarma sonora
+                with st.expander(titulo_banner, expanded=False):
+                    # Marcador invisible que activa las reglas CSS del banner sobre este expander
+                    st.markdown('<div class="alerta-ancla-activa" style="display:none;"></div>', unsafe_allow_html=True)
+
                     if act_sonido:
                         html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
                         st.components.v1.html(html_con_ts, height=0)
@@ -1730,15 +1754,7 @@ def renderizar_alertas_en_vivo():
                             st.cache_data.clear()
                             st.rerun()
 
-            else:
-                with st.expander("🟢 Monitor de Alertas en Vivo (Sin chats en espera)", expanded=False):
-                    st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats sin asignar pendientes.")
-        else:
-            with st.expander("🛠️ Monitor de Alertas en Vivo", expanded=False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats sin asignar pendientes.")
-    else:
-        with st.expander("🛠️ Monitor de Alertas en Vivo", expanded=False):
-            st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
+            
             
 # ==========================================
 # RENDERIZADO DE PESTAÑAS
