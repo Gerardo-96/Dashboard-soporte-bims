@@ -3884,10 +3884,10 @@ with tab_wbr:
 
             with col_ext_pie:
                 st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; margin-bottom: 12px; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">CHATS EN HORARIO EXTENDIDO</div>
-                    <div class="metric-card-value" style="font-size: 2.1rem; color: #38bdf8;">{tot_ext}</div>
-                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.78rem;">Domingo ingresaron {tot_domingo} chats</div>
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; margin-bottom: 12px; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 6px 12px; overflow: hidden;">
+                    <div class="metric-card-title" style="justify-content: center; margin: 0 0 2px 0; font-size: 0.72rem; line-height: 1.1; letter-spacing: 0.5px;">CHATS EN HORARIO EXTENDIDO</div>
+                    <div class="metric-card-value" style="font-size: 2.1rem; color: #38bdf8; margin: 0; line-height: 1.0;">{tot_ext}</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.76rem; margin: 2px 0 0 0; line-height: 1.1;">Domingo ingresaron {tot_domingo} chats</div>
                 </div>
                 """, unsafe_allow_html=True)
 
