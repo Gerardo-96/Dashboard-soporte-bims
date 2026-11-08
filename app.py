@@ -984,6 +984,15 @@ st.markdown("""
         }
     }
 
+    /* Ocultar botones nativos de desarrollo de Streamlit (Share, GitHub, etc.) */
+    .stAppDeployButton, 
+    header[data-testid="stHeader"] [data-testid="stToolbarActions"],
+    #MainMenu, 
+    footer {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
     .alert-card-critical {
         background: linear-gradient(90deg, #451a03 0%, #1e1b4b 100%);
         color: #fef3c7;
@@ -995,6 +1004,16 @@ st.markdown("""
         animation: pulsoCritico 2.2s infinite;
     }
 
+    /* Mejora para distribuir el texto a la izquierda y el contador a la derecha */
+    .alert-card-critical-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        width: 100%;
+    }
+    
     .admin-card {
         background-color: #1e293b;
         border: 1px solid #334155;
@@ -1635,8 +1654,19 @@ def renderizar_alertas_en_vivo():
                 cant = len(df_criticos_sla)
                 st.markdown(f"""
                 <div class="alert-card-critical">
-                    <b>🚨 ALERTA CRÍTICA DE SLA EN VIVO</b><br>
-                    Hay <b>{cant} chat(s) en espera de asignación humana</b> superando el límite configurado ({alerta_nuevo_th} min).
+                    <div class="alert-card-critical-content">
+                        <div>
+                            <div style="font-weight: 700; font-size: 0.92rem; color: #fef3c7; display: flex; align-items: center; gap: 8px;">
+                                🚨 ALERTA CRÍTICA DE SLA EN VIVO
+                            </div>
+                            <div style="color: #cbd5e1; font-size: 0.85rem; margin-top: 4px;">
+                                Hay chats en espera de asignación humana superando el límite de <b>{alerta_nuevo_th} min</b>.
+                            </div>
+                        </div>
+                        <div style="background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #fca5a5; font-size: 1.15rem; font-weight: 800; padding: 6px 16px; border-radius: 8px;">
+                            {cant} chat(s) en espera
+                        </div>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
 
