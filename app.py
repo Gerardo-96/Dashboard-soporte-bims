@@ -2891,19 +2891,29 @@ with tab_wbr:
     if not df_all.empty and "created_at_dt" in df_all.columns:
         df_wbr_base = df_all.copy()
 
-        # 1. Asegurar normalización de semana ISO y año
+        # 1. Asegurar normalización de fechas de cierre y creación en hora local (PY)
+        if "fecha_cierre_dt" not in df_wbr_base.columns:
+            df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
+            ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
+            df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
+
+        # Semanas ISO (Lunes a Domingo por defecto)
         df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
         df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
         df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
 
-        # Generar opciones de selector de semanas ordenadas de la más reciente a la más antigua
+        # Semanas de cierre
+        df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
+        df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
+
+        # Opciones ordenadas para el selector
         semanas_disponibles = (
             df_wbr_base[["iso_year", "iso_week", "semana_str"]]
             .drop_duplicates()
             .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
         )
 
-        col_sel_sem, col_vacio = st.columns([2, 3])
+        col_sel_sem, _ = st.columns([2, 3])
         opciones_semanas = semanas_disponibles["semana_str"].tolist()
         
         semana_seleccionada_str = col_sel_sem.selectbox(
@@ -2917,8 +2927,7 @@ with tab_wbr:
             target_year = int(fila_sem["iso_year"])
             target_week = int(fila_sem["iso_week"])
 
-            # 2. Calcular las últimas 5 semanas consecutivas para los gráficos evolutivos
-            # Generamos las tuplas (año, semana) de las 5 semanas
+            # 2. Generar las últimas 5 semanas consecutivas (Lunes a Domingo)
             from datetime import datetime as dt_calc
             fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
             
@@ -2930,31 +2939,45 @@ with tab_wbr:
 
             df_5_semanas_info = pd.DataFrame(semanas_5, columns=["iso_year", "iso_week", "etiqueta_semana"])
 
-            # Datos filtrados exclusivamente de la semana foco seleccionada
-            df_target = df_wbr_base[
-                (df_wbr_base["iso_year"] == target_year) & 
-                (df_wbr_base["iso_week"] == target_week)
-            ].copy()
+            # Fotografía evolutiva de 5 semanas
+            res_5w = []
+            tot_5w_recibidos = 0
+            tot_5w_cerrados = 0
 
-            # Datos acumulados de las 5 semanas para los evolutivos
-            keys_5 = list(zip(df_5_semanas_info["iso_year"], df_5_semanas_info["iso_week"]))
-            df_5w = df_wbr_base[
-                df_wbr_base.apply(lambda r: (r["iso_year"], r["iso_week"]) in keys_5, axis=1)
-            ].copy()
+            for _, s_row in df_5_semanas_info.iterrows():
+                # Recibidos en la semana
+                sub_rec = df_wbr_base[
+                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["iso_week"] == s_row["iso_week"])
+                ]
+                rec = len(sub_rec)
 
-            df_5w = df_5w.merge(df_5_semanas_info, on=["iso_year", "iso_week"], how="left")
+                # Cerrados dentro de esa semana (fotografía real)
+                sub_cer = df_wbr_base[
+                    (df_wbr_base["es_cerrado"] == True) &
+                    (df_wbr_base["close_iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["close_iso_week"] == s_row["iso_week"])
+                ]
+                cer = len(sub_cer)
+
+                tot_5w_recibidos += rec
+                tot_5w_cerrados += cer
+
+                res_5w.append({
+                    "Semana": s_row["etiqueta_semana"],
+                    "Recibidos": rec,
+                    "Cerrados": cer
+                })
+
+            df_res_5w = pd.DataFrame(res_5w)
+            pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
 
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS) & TIPO DE CLIENTE
+            # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
             # =========================================================================
             st.markdown("#### 1. WBR | Soporte & Experiencia — Evolutivo de Volumen")
-
-            # Cálculo de métricas principales del evolutivo de 5 semanas
-            tot_5w_recibidos = len(df_5w)
-            tot_5w_cerrados = int(df_5w["es_cerrado"].sum())
-            pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
 
             s1_col1, s1_col2 = st.columns(2)
             s1_col1.markdown(f"""
@@ -2966,109 +2989,85 @@ with tab_wbr:
 
             s1_col2.markdown(f"""
             <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center;">
-                <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS</div>
-                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">{pct_5w_cerrados}%</div>
+                <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
+                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+                    {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            g_evol_col, g_tipo_col = st.columns([1.2, 1])
-
-            with g_evol_col:
-                st.markdown("##### Q. de chats recibidos y Q. de chats cerrados")
-                
-                # Agrupación por semana
-                res_5w = []
-                for _, s_row in df_5_semanas_info.iterrows():
-                    sub = df_5w[
-                        (df_5w["iso_year"] == s_row["iso_year"]) & 
-                        (df_5w["iso_week"] == s_row["iso_week"])
-                    ]
-                    rec = len(sub)
-                    cer = int(sub["es_cerrado"].sum())
-                    res_5w.append({
-                        "Semana": s_row["etiqueta_semana"],
-                        "Recibidos": rec,
-                        "Cerrados": cer
-                    })
-                df_res_5w = pd.DataFrame(res_5w)
-
-                fig_5w = go.Figure()
-                fig_5w.add_trace(go.Bar(
-                    x=df_res_5w["Semana"],
-                    y=df_res_5w["Recibidos"],
-                    name="Q. de chats recibidos",
-                    marker_color="#0369a1",
-                    text=df_res_5w["Recibidos"],
-                    textposition="inside"
-                ))
-                fig_5w.add_trace(go.Bar(
-                    x=df_res_5w["Semana"],
-                    y=df_res_5w["Cerrados"],
-                    name="Q. de chats cerrados",
-                    marker_color="#38bdf8",
-                    text=df_res_5w["Cerrados"],
-                    textposition="inside"
-                ))
-                fig_5w.update_layout(
-                    barmode="group",
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
-                    font=dict(color="#cbd5e1"),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
-                )
-                st.plotly_chart(fig_5w, use_container_width=True)
-
-            with g_tipo_col:
-                st.markdown("##### Clasificación por Tipo de Cliente (Semana Foco)")
-                
-                # Clasificación basada en cliente o tipo_contacto
-                col_tipo = "cliente" if "cliente" in df_target.columns else "tipo_contacto"
-                df_target["tipo_cli_clean"] = df_target[col_tipo].fillna("Vacíos").replace(["", "None", "nan"], "Vacíos")
-                
-                df_tipo_cnt = df_target["tipo_cli_clean"].value_counts().reset_index()
-                df_tipo_cnt.columns = ["Tipo de Cliente", "Cantidad"]
-
-                fig_tipo = px.bar(
-                    df_tipo_cnt,
-                    x="Tipo de Cliente",
-                    y="Cantidad",
-                    text="Cantidad",
-                    color_discrete_sequence=["#0369a1"]
-                )
-                fig_tipo.update_traces(textposition="outside")
-                fig_tipo.update_layout(
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
-                    font=dict(color="#cbd5e1"),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
-                )
-                st.plotly_chart(fig_tipo, use_container_width=True)
+            # Gráfico de 5 semanas a ancho completo con esquinas redondeadas
+            fig_5w = go.Figure()
+            fig_5w.add_trace(go.Bar(
+                x=df_res_5w["Semana"],
+                y=df_res_5w["Recibidos"],
+                name="Q. de chats recibidos",
+                marker=dict(color="#0284c7", cornerradius=8),
+                text=df_res_5w["Recibidos"],
+                textposition="inside",
+                insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+            ))
+            fig_5w.add_trace(go.Bar(
+                x=df_res_5w["Semana"],
+                y=df_res_5w["Cerrados"],
+                name="Q. de chats cerrados",
+                marker=dict(color="#38bdf8", cornerradius=8),
+                text=df_res_5w["Cerrados"],
+                textposition="inside",
+                insidetextfont=dict(color="#0f172a", size=13, family="Arial Black")
+            ))
+            fig_5w.update_layout(
+                barmode="group",
+                title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
+                paper_bgcolor="#1e293b",
+                plot_bgcolor="#1e293b",
+                font=dict(color="#cbd5e1"),
+                xaxis=dict(gridcolor="#334155"),
+                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(t=50, b=20, l=30, r=20),
+                height=380
+            )
+            st.plotly_chart(fig_5w, use_container_width=True)
 
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 3: CHATS RECIBIDOS VS CERRADOS (SEMANA FOCO) & DISTRIBUCIÓN AGENTES
+            # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
             # =========================================================================
             st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
 
+            # Chats creados/recibidos en la semana foco
+            df_target = df_wbr_base[
+                (df_wbr_base["iso_year"] == target_year) & 
+                (df_wbr_base["iso_week"] == target_week)
+            ].copy()
             tot_sem_rec = len(df_target)
-            tot_sem_cer = int(df_target["es_cerrado"].sum())
+
+            # Chats cerrados en la semana foco (fotografía)
+            df_target_cerrados = df_wbr_base[
+                (df_wbr_base["es_cerrado"] == True) &
+                (df_wbr_base["close_iso_year"] == target_year) & 
+                (df_wbr_base["close_iso_week"] == target_week)
+            ].copy()
+            tot_sem_cer = len(df_target_cerrados)
             pct_sem_cer = round((tot_sem_cer / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
 
             # Cálculos WoW contra la semana inmediatamente anterior
             sem_prev_num = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[1]
             sem_prev_year = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[0]
-            df_prev = df_wbr_base[
+            
+            tot_prev_rec = len(df_wbr_base[
                 (df_wbr_base["iso_year"] == sem_prev_year) & 
                 (df_wbr_base["iso_week"] == sem_prev_num)
-            ]
-            tot_prev_rec = len(df_prev)
-            tot_prev_cer = int(df_prev["es_cerrado"].sum())
+            ])
+            tot_prev_cer = len(df_wbr_base[
+                (df_wbr_base["es_cerrado"] == True) &
+                (df_wbr_base["close_iso_year"] == sem_prev_year) & 
+                (df_wbr_base["close_iso_week"] == sem_prev_num)
+            ])
 
             diff_rec_pct = round(((tot_sem_rec - tot_prev_rec) / tot_prev_rec * 100), 2) if tot_prev_rec > 0 else 0.0
             diff_cer_pct = round(((tot_sem_cer - tot_prev_cer) / tot_prev_cer * 100), 2) if tot_prev_cer > 0 else 0.0
@@ -3077,14 +3076,16 @@ with tab_wbr:
             s3_m1.markdown(f"""
             <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center;">
                 <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS</div>
-                <div class="metric-card-value" style="font-size: 2.1rem;">{tot_sem_rec}</div>
+                <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_sem_rec:,}</div>
             </div>
             """, unsafe_allow_html=True)
 
             s3_m2.markdown(f"""
             <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center;">
-                <div class="metric-card-title" style="justify-content: center;">% DE CHATS CERRADOS</div>
-                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">{pct_sem_cer}%</div>
+                <div class="metric-card-title" style="justify-content: center;">CHATS CERRADOS Y EFECTIVIDAD</div>
+                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+                    {tot_sem_cer:,} <span style="font-size: 1.25rem; font-weight: 600; color: #38bdf8;">({pct_sem_cer}%)</span>
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -3094,32 +3095,60 @@ with tab_wbr:
 
             with col_dia_bar:
                 st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
-                df_target["Dia_Fecha"] = df_target["created_at_dt"].dt.strftime("%Y-%m-%d")
-                df_dias = df_target.groupby("Dia_Fecha").agg(
-                    Recibidos=("id", "count"),
-                    Cerrados=("es_cerrado", "sum")
-                ).reset_index().sort_values("Dia_Fecha")
+
+                # Días del Lunes al Domingo de la semana seleccionada
+                dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
+                
+                # Fechas de creación y cierre a nivel solo fecha
+                df_target["creado_dia"] = df_target["created_at_dt"].dt.date
+                df_target_cerrados["cerrado_dia"] = df_target_cerrados["fecha_cierre_dt"].dt.date
+
+                filas_dias = []
+                for f_dia in dias_semana_l_d:
+                    str_dia = f_dia.strftime("%Y-%m-%d")
+                    cnt_rec = len(df_target[df_target["creado_dia"] == f_dia])
+                    cnt_cer = len(df_target_cerrados[df_target_cerrados["cerrado_dia"] == f_dia])
+                    filas_dias.append({
+                        "Fecha": str_dia,
+                        "Recibidos": cnt_rec,
+                        "Cerrados": cnt_cer
+                    })
+
+                df_dias_agg = pd.DataFrame(filas_dias)
 
                 fig_dias = go.Figure()
                 fig_dias.add_trace(go.Bar(
-                    x=df_dias["Dia_Fecha"], y=df_dias["Recibidos"],
-                    name="Q. de chats recibidos", marker_color="#0369a1",
-                    text=df_dias["Recibidos"], textposition="inside"
+                    x=df_dias_agg["Fecha"],
+                    y=df_dias_agg["Recibidos"],
+                    name="Q. de chats recibidos",
+                    marker=dict(color="#0284c7", cornerradius=8),
+                    text=df_dias_agg["Recibidos"],
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=12, family="Arial Black")
                 ))
                 fig_dias.add_trace(go.Bar(
-                    x=df_dias["Dia_Fecha"], y=df_dias["Cerrados"],
-                    name="Q. de chats cerrados", marker_color="#38bdf8",
-                    text=df_dias["Cerrados"], textposition="inside"
+                    x=df_dias_agg["Fecha"],
+                    y=df_dias_agg["Cerrados"],
+                    name="Q. de chats cerrados",
+                    marker=dict(color="#38bdf8", cornerradius=8),
+                    text=df_dias_agg["Cerrados"],
+                    textposition="inside",
+                    insidetextfont=dict(color="#0f172a", size=12, family="Arial Black")
                 ))
                 fig_dias.update_layout(
-                    barmode="group", paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    barmode="group",
+                    paper_bgcolor="#1e293b",
+                    plot_bgcolor="#1e293b",
                     font=dict(color="#cbd5e1"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    margin=dict(t=30, b=20, l=20, r=20), height=360
+                    xaxis=dict(gridcolor="#334155"),
+                    yaxis=dict(gridcolor="#334155"),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
                 )
                 st.plotly_chart(fig_dias, use_container_width=True)
 
-                # Tarjeta de Insights WoW
+                # Insights WoW
                 color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
                 color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
                 sin_resp_count = int(df_target["etiquetas"].fillna("").astype(str).str.lower().str.contains("sin respuesta").sum())
@@ -3128,34 +3157,45 @@ with tab_wbr:
                 <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6;">
                     • <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})<br>
                     • <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})<br>
-                    • <b>Obs:</b> De los {tot_sem_cer} chats cerrados, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".
+                    • <b>Obs:</b> De los {tot_sem_rec} chats ingresados, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".
                 </div>
                 """, unsafe_allow_html=True)
 
             with col_pie_ag:
-                st.markdown("##### Q. de chats cerrados por Agentes")
+                st.markdown("##### Q. de chats cerrados por Agentes (Detalle Integrado)")
                 
-                df_cerrados_target = df_target[df_target["es_cerrado"]].copy()
-                df_ag_pie = df_cerrados_target["agente_asignado"].fillna("Sin asignar").value_counts().reset_index()
+                # Distribución de agentes sobre los chats efectivamente cerrados en esa semana
+                df_ag_pie = df_target_cerrados["agente_asignado"].fillna("Sin asignar").value_counts().reset_index()
                 df_ag_pie.columns = ["Agente", "Cerrados"]
 
-                palette_pie = ["#0369a1", "#0284c7", "#38bdf8", "#7dd3fc", "#bae6fd", "#e0f2fe", "#94a3b8", "#cbd5e1"]
+                palette_pie = ["#0284c7", "#38bdf8", "#0ea5e9", "#7dd3fc", "#0369a1", "#bae6fd", "#94a3b8", "#cbd5e1", "#64748b"]
+                
                 fig_pie_w = px.pie(
-                    df_ag_pie, values="Cerrados", names="Agente",
+                    df_ag_pie,
+                    values="Cerrados",
+                    names="Agente",
                     color_discrete_sequence=palette_pie
                 )
-                fig_pie_w.update_traces(textposition='inside', textinfo='value+percent')
+                # Detalle completo por porción: Agente, Cantidad y Porcentaje sin referencias externas
+                fig_pie_w.update_traces(
+                    textposition='inside',
+                    textinfo='label+value+percent',
+                    insidetextfont=dict(size=11, family="Arial")
+                )
                 fig_pie_w.update_layout(
-                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
-                    font=dict(color="#cbd5e1", size=11),
-                    margin=dict(t=20, b=20, l=20, r=20), height=360
+                    showlegend=False,
+                    paper_bgcolor="#1e293b",
+                    plot_bgcolor="#1e293b",
+                    font=dict(color="#f8fafc", size=11),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=360
                 )
                 st.plotly_chart(fig_pie_w, use_container_width=True)
 
                 # Métricas de cobertura (Cuentas y Empresas únicas)
                 cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
                 empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
-                num_agentes_activos = df_cerrados_target["agente_asignado"].nunique()
+                num_agentes_activos = df_ag_pie["Agente"].nunique()
                 prom_por_agente = round(tot_sem_cer / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
 
                 st.markdown(f"""
