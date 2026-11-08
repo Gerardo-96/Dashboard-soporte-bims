@@ -4075,44 +4075,47 @@ if tab_wbr is not None:
                         st.info("Sin registros diarios de horario extendido.")
 
                 # =========================================================================
-            # EXPORTACIÓN SUPERIOR A POWERPOINT (WBR_EXPORTER)
-            # =========================================================================
-            try:
-                from wbr_exporter import exportar_wbr_pptx
-                
-                figuras_reporte = {
-                    "fig_5w": fig_5w,
-                    "fig_dias": fig_dias,
-                    "fig_pie_ag": fig_pie_w,
-                    "fig_bar_gest": fig_bar_gest,
-                    "fig_bar_1ra": fig_bar_1ra,
-                    "fig_niv": fig_niv,
-                    "fig_sent": fig_sent,
-                    "fig_pie_ext": fig_pie_ext,
-                    "fig_bar_dias_ext": fig_bar_dias_ext
-                }
-
-                datos_reporte = {
-                    "semana_label": semana_seleccionada_str
-                }
-
-                pptx_io = exportar_wbr_pptx(datos_reporte, figuras_reporte)
-
-                # Renderizar el botón en el contenedor superior alineado con el selectbox
-                with contenedor_descarga.container():
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    st.download_button(
-                        label="📥 Descargar Informe WBR (.pptx)",
-                        data=pptx_io.getvalue(),
-                        file_name=f"WBR_{semana_seleccionada_str.replace(' ', '_').replace('(', '').replace(')', '')}.pptx",
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        use_container_width=True,
-                        key="btn_descarga_wbr_top"
-                    )
-            except Exception as e_pptx:
-                with contenedor_descarga.container():
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    st.caption(f"⚠️ Exportación PPTX disponible (Detalle: {e_pptx})")
+                # EXPORTACIÓN NATIVA A POWERPOINT
+                # =========================================================================
+                try:
+                    from wbr_exporter import exportar_wbr_pptx
+                    
+                    paquete_datos_wbr = {
+                        "semana_label": semana_seleccionada_str,
+                        "tot_5w_rec": tot_5w_recibidos,
+                        "pct_5w_cer": pct_5w_cerrados,
+                        "tot_5w_cer": tot_5w_cerrados,
+                        "df_5w": df_res_5w,
+                        "tot_sem_rec": tot_sem_rec,
+                        "tot_sem_cer": tot_sem_cer,
+                        "pct_sem_cer": pct_sem_cer,
+                        "df_dias": df_dias_agg,
+                        "df_agentes": df_ag_pie,
+                        "foco_gest": foco_gest,
+                        "foco_1ra": foco_1ra,
+                        "df_tiempos": df_evol_tiempos,
+                        "tot_ext": tot_ext,
+                        "tot_domingo": tot_domingo,
+                        "pct_ext_cerrados": pct_ext_cerrados,
+                        "tot_ext_cerrados": tot_ext_cerrados,
+                        "df_dias_ext": df_dias_ext_cnt if not df_ext.empty else None
+                    }
+    
+                    pptx_io = exportar_wbr_pptx(paquete_datos_wbr)
+    
+                    with contenedor_descarga.container():
+                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                        st.download_button(
+                            label="📥 Descargar Informe WBR (.pptx)",
+                            data=pptx_io.getvalue(),
+                            file_name=f"WBR_{semana_seleccionada_str.replace(' ', '_').replace('(', '').replace(')', '')}.pptx",
+                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            key="btn_descarga_wbr_top"
+                        )
+                except Exception as e_pptx:
+                    with contenedor_descarga.container():
+                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                        st.caption(f"⚠️ Error generando PPTX: {e_pptx}")
         else:
             st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
         pass
