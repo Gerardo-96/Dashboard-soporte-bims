@@ -1599,7 +1599,7 @@ if bot_online:
             align-items: center; 
             gap: 6px;" 
             title="Conexión de WhatsApp Activa ({bot_state})">
-            🟢 Bot Operativo
+            Bot Operativo
         </span>
     </div>
     """
@@ -1619,7 +1619,7 @@ else:
             align-items: center; 
             gap: 6px;" 
             title="Conexión de WhatsApp Caída ({bot_state})">
-            🔴 Bot Desconectado
+            Bot Desconectado
         </span>
     </div>
     """
@@ -2949,10 +2949,9 @@ if tab_wbr is not None:
                     border-radius: 14px; border: 1px solid rgba(56, 189, 248, 0.2); 
                     padding: 18px 24px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);">
             <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="font-size: 1.8rem;">📊</div>
                 <div>
                     <h3 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
-                        Informe Ejecutivo Semanal — WBR (Weekly Business Review)
+                        Informe Ejecutivo Semanal
                     </h3>
                     <p style="margin: 2px 0 0 0; font-size: 0.85rem; color: #94a3b8;">
                         Consolidado analítico y comparativo WoW de 5 semanas para gerencia de Soporte & Experiencia BIMS.
