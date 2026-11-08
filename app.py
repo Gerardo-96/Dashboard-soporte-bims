@@ -1838,26 +1838,27 @@ with tab_operativo:
         c_rango, pos_rango, k_rango, diff_rango = 0.0, 0, 0, 0.0
         df_filtered_csat = pd.DataFrame()
 
-    def render_metric_card(title, value, diff, comp_texto, sub_text):
+    def render_metric_card(title, value, diff, comp_texto, sub_text, icono="⭐"):
         diff_color = "#34d399" if diff >= 0 else "#f43f5e"
+        diff_bg = "rgba(52, 211, 153, 0.12)" if diff >= 0 else "rgba(244, 63, 94, 0.12)"
         diff_symbol = "▲" if diff >= 0 else "▼"
         return f"""
-        <div class="metric-card">
-            <div class="metric-card-title">{title}</div>
+        <div class="metric-card" style="border-left: 4px solid #38bdf8;">
+            <div class="metric-card-title"><span>{icono}</span> {title}</div>
             <div class="metric-card-value">{value}</div>
-            <div style="color: {diff_color}; font-size: 0.8rem; font-weight: 600; margin-top: 2px;">
+            <div style="display: inline-block; background: {diff_bg}; color: {diff_color}; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; margin-top: 4px;">
                 {diff_symbol} {abs(diff)}% {comp_texto}
             </div>
-            <div class="metric-card-sub">{sub_text}</div>
+            <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem; margin-top: 6px;">{sub_text}</div>
         </div>
         """
 
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas"), unsafe_allow_html=True)
-    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas"), unsafe_allow_html=True)
-    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas"), unsafe_allow_html=True)
-    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas"), unsafe_allow_html=True)
-    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas"), unsafe_allow_html=True)
+    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas", icono="🎯"), unsafe_allow_html=True)
+    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas", icono="📅"), unsafe_allow_html=True)
+    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas", icono="📊"), unsafe_allow_html=True)
+    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas", icono="📈"), unsafe_allow_html=True)
+    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas", icono="🔍"), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
