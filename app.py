@@ -2943,19 +2943,34 @@ with tab_resumen:
 
 if tab_wbr is not None:
     with tab_wbr:
-        st.markdown("### 📊 Informe Ejecutivo Semanal (WBR - Weekly Business Review)")
-        st.caption("Consolidado evolutivo de 5 semanas para presentación a gerencia de Soporte & Experiencia.")
+        # 1. Encabezado Ejecutivo con diseño estilizado
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%); 
+                    border-radius: 14px; border: 1px solid rgba(56, 189, 248, 0.2); 
+                    padding: 18px 24px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="font-size: 1.8rem;">📊</div>
+                <div>
+                    <h3 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
+                        Informe Ejecutivo Semanal — WBR (Weekly Business Review)
+                    </h3>
+                    <p style="margin: 2px 0 0 0; font-size: 0.85rem; color: #94a3b8;">
+                        Consolidado analítico y comparativo WoW de 5 semanas para gerencia de Soporte & Experiencia BIMS.
+                    </p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
         if not df_all.empty and "created_at_dt" in df_all.columns:
             df_wbr_base = df_all.copy()
     
-            # 1. Normalización de fechas de cierre y creación en hora local (PY)
+            # Normalizaciones de fechas de cierre y creación
             if "fecha_cierre_dt" not in df_wbr_base.columns:
                 df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
                 ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
                 df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
     
-            # Semanas ISO (Lunes a Domingo)
             df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
             df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
             df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
@@ -2969,14 +2984,21 @@ if tab_wbr is not None:
                 .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
             )
     
-            col_sel_sem, _ = st.columns([2, 3])
             opciones_semanas = semanas_disponibles["semana_str"].tolist()
+    
+            # Fila de Control Superior: Selector a la izquierda + Botón de Descarga a la derecha
+            col_selector, col_separador, col_boton_slot = st.columns([2.2, 0.8, 1.8])
             
-            semana_seleccionada_str = col_sel_sem.selectbox(
-                "Seleccionar Semana del Reporte WBR:",
-                options=opciones_semanas,
-                index=0 if len(opciones_semanas) > 0 else 0
-            )
+            with col_selector:
+                semana_seleccionada_str = st.selectbox(
+                    "Seleccionar Semana del Reporte WBR:",
+                    options=opciones_semanas,
+                    index=0 if len(opciones_semanas) > 0 else 0,
+                    key="sel_wbr_week"
+                )
+    
+            # Contenedor dinámico reservado arriba para el botón de descarga
+            contenedor_descarga = col_boton_slot.empty()
     
             if semana_seleccionada_str:
                 fila_sem = semanas_disponibles[semanas_disponibles["semana_str"] == semana_seleccionada_str].iloc[0]
@@ -2994,7 +3016,7 @@ if tab_wbr is not None:
     
                 df_5_semanas_info = pd.DataFrame(semanas_5, columns=["iso_year", "iso_week", "etiqueta_semana"])
     
-                # Fotografía evolutiva de 5 semanas
+                # Evolutivo de 5 semanas
                 res_5w = []
                 tot_5w_recibidos = 0
                 tot_5w_cerrados = 0
@@ -3025,7 +3047,7 @@ if tab_wbr is not None:
                 df_res_5w = pd.DataFrame(res_5w)
                 pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
     
-                st.markdown("---")
+                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
     
                 # =========================================================================
                 # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
@@ -4051,6 +4073,46 @@ if tab_wbr is not None:
                         """, unsafe_allow_html=True)
                     else:
                         st.info("Sin registros diarios de horario extendido.")
+
+                # =========================================================================
+            # EXPORTACIÓN SUPERIOR A POWERPOINT (WBR_EXPORTER)
+            # =========================================================================
+            try:
+                from wbr_exporter import exportar_wbr_pptx
+                
+                figuras_reporte = {
+                    "fig_5w": fig_5w,
+                    "fig_dias": fig_dias,
+                    "fig_pie_ag": fig_pie_w,
+                    "fig_bar_gest": fig_bar_gest,
+                    "fig_bar_1ra": fig_bar_1ra,
+                    "fig_niv": fig_niv,
+                    "fig_sent": fig_sent,
+                    "fig_pie_ext": fig_pie_ext,
+                    "fig_bar_dias_ext": fig_bar_dias_ext
+                }
+
+                datos_reporte = {
+                    "semana_label": semana_seleccionada_str
+                }
+
+                pptx_io = exportar_wbr_pptx(datos_reporte, figuras_reporte)
+
+                # Renderizar el botón en el contenedor superior alineado con el selectbox
+                with contenedor_descarga.container():
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    st.download_button(
+                        label="📥 Descargar Informe WBR (.pptx)",
+                        data=pptx_io.getvalue(),
+                        file_name=f"WBR_{semana_seleccionada_str.replace(' ', '_').replace('(', '').replace(')', '')}.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        use_container_width=True,
+                        key="btn_descarga_wbr_top"
+                    )
+            except Exception as e_pptx:
+                with contenedor_descarga.container():
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    st.caption(f"⚠️ Exportación PPTX disponible (Detalle: {e_pptx})")
         else:
             st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
         pass
