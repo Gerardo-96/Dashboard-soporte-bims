@@ -3164,7 +3164,7 @@ with tab_wbr:
                 st.markdown("##### Q. de chats cerrados por Agentes")
                 
                 # 1. Separar chats de IA (Monica) y chats de soporte humano
-                agentes_bot_ia = ["monica", "mónica", "monica (bot)"]
+                agentes_bot_ia = ["monica", "mónica", "monica (bot)", "sin asignar"]
                 
                 df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
                 es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(agentes_bot_ia)
@@ -3396,6 +3396,309 @@ with tab_wbr:
                     SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b>
                 </div>
                 """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO (SEMANA FOCO)
+            # =========================================================================
+            st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
+
+            # Universo de CSAT de la semana foco:
+            # Se evalúa por fecha_calificacion_dt si existe, o en su defecto por la semana de creación
+            if "fecha_calificacion_dt" in df_target.columns:
+                df_target_csat = df_wbr_base[
+                    (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                    (df_wbr_base["rating"].notna()) &
+                    (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == target_year) &
+                    (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == target_week)
+                ].copy()
+            else:
+                df_target_csat = df_target[
+                    (df_target["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                    (df_target["rating"].notna())
+                ].copy()
+
+            df_target_csat["rating_num"] = pd.to_numeric(df_target_csat["rating"], errors="coerce")
+            df_target_csat = df_target_csat.dropna(subset=["rating_num"])
+
+            tot_evaluados = len(df_target_csat)
+            tot_sin_calificar = max(0, tot_sem_rec - tot_evaluados)
+            pct_calificados = round((tot_evaluados / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+            pct_sin_calificar = round((tot_sin_calificar / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+
+            # Desglose de estrellas
+            cnt_5 = int((df_target_csat["rating_num"] == 5).sum())
+            cnt_4 = int((df_target_csat["rating_num"] == 4).sum())
+            cnt_3 = int((df_target_csat["rating_num"] == 3).sum())
+            cnt_2 = int((df_target_csat["rating_num"] == 2).sum())
+            cnt_1 = int((df_target_csat["rating_num"] == 1).sum())
+
+            tot_positivas = cnt_5 + cnt_4
+            tot_negativas = cnt_3 + cnt_2 + cnt_1
+            pct_positivas = round((tot_positivas / tot_evaluados * 100), 1) if tot_evaluados > 0 else 0.0
+            pct_negativas = round((tot_negativas / tot_evaluados * 100), 1) if tot_evaluados > 0 else 0.0
+
+            # Tarjetas superiores de CSAT
+            c_c1, c_c2, c_c3, c_c4 = st.columns([1, 1, 1, 1.4])
+
+            c_c1.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center;">
+                <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS</div>
+                <div class="metric-card-value">{tot_sem_rec:,}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            c_c2.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center;">
+                <div class="metric-card-title" style="justify-content: center;">SIN CALIFICAR</div>
+                <div class="metric-card-value" style="color: #38bdf8;">{pct_sin_calificar}%</div>
+                <div class="metric-card-sub" style="color: #94a3b8;">{tot_sin_calificar:,} chats</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            c_c3.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center;">
+                <div class="metric-card-title" style="justify-content: center;">CALIFICADOS</div>
+                <div class="metric-card-value" style="color: #34d399;">{pct_calificados}%</div>
+                <div class="metric-card-sub" style="color: #94a3b8;">{tot_evaluados:,} encuestas</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            def f_pct(c, t):
+                return f"{round((c / t * 100), 2)}%" if t > 0 else "0.0%"
+
+            c_c4.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #818cf8; font-size: 0.82rem; padding: 14px 16px;">
+                <div class="metric-card-title" style="margin-bottom: 6px;">TOP CALIFICACIONES</div>
+                <div style="line-height: 1.5; color: #cbd5e1;">
+                    • <b>Excelente (5★):</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)})<br>
+                    • <b>Muy bueno (4★):</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
+                    • <b>Regular (3★):</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)})<br>
+                    • <b>Malo (2★):</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
+                    • <b>Muy malo (1★):</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Gráficos: Puntuación por nivel y Sentimiento Donut
+            col_p_niv, col_p_sent = st.columns([1.3, 1])
+
+            with col_p_niv:
+                st.markdown("##### Q. de Puntuaciones por Nivel")
+
+                # Asignación estándar de etiquetas de escala
+                mapa_escala = {
+                    5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
+                }
+                
+                df_target["nivel_norm"] = (
+                    df_target["nivel"].fillna("Niv-L1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+                )
+                df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
+                df_target["puntuacion_str"] = df_target["rating_int"].map(mapa_escala).fillna("Sin calificación")
+
+                orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo", "Sin calificación"]
+                df_niv_grp = df_target.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
+
+                fig_niv = px.bar(
+                    df_niv_grp,
+                    x="puntuacion_str",
+                    y="Cantidad",
+                    color="nivel_norm",
+                    barmode="group",
+                    category_orders={"puntuacion_str": orden_puntuacion},
+                    color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#0369a1"},
+                    text="Cantidad"
+                )
+                fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
+                fig_niv.update_layout(
+                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1", size=11),
+                    xaxis=dict(gridcolor="#334155", title=None),
+                    yaxis=dict(gridcolor="#334155", title="Cantidad"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_niv, use_container_width=True)
+
+            with col_p_sent:
+                st.markdown("##### Sentimiento de Usuarios (CSAT Positivo vs Negativo)")
+
+                df_sent = pd.DataFrame([
+                    {"Sentimiento": "Positivas (≥4★)", "Cantidad": tot_positivas},
+                    {"Sentimiento": "Negativas (≤3★)", "Cantidad": tot_negativas}
+                ])
+                df_sent = df_sent[df_sent["Cantidad"] > 0]
+
+                fig_sent = go.Figure(data=[go.Pie(
+                    labels=df_sent["Sentimiento"],
+                    values=df_sent["Cantidad"],
+                    hole=0.45,
+                    textinfo="label+value+percent",
+                    texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                    textposition="outside",
+                    marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#1e293b", width=2)),
+                    showlegend=False
+                )])
+                fig_sent.update_layout(
+                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1", size=11),
+                    margin=dict(t=30, b=30, l=30, r=30),
+                    height=360
+                )
+                st.plotly_chart(fig_sent, use_container_width=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1 (FRICCIÓN)
+            # =========================================================================
+            st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
+
+            # Filtro de casos negativos (1, 2 y 3★) en Nivel 1
+            df_l1_neg = df_target[
+                (df_target["nivel_norm"] == "Niv-L1") &
+                (df_target["rating_int"].isin([1, 2, 3]))
+            ].copy()
+
+            tot_l1_neg = len(df_l1_neg)
+            pct_l1_del_total = round((tot_l1_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+
+            col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
+
+            with col_card_l1:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">CASOS NIVEL L1</div>
+                    <div class="metric-card-value" style="font-size: 3.2rem; color: #f59e0b;">{tot_l1_neg}</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                        <b>{pct_l1_del_total}%</b> del total de reclamos ({tot_negativas} casos)
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_matriz_l1:
+                st.markdown("##### Matriz de fricción por agente asignado (Nivel 1)")
+                if not df_l1_neg.empty:
+                    df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                    
+                    pivot_l1 = df_l1_neg.pivot_table(
+                        index="agente_nom",
+                        columns="rating_int",
+                        values="id",
+                        aggfunc="count",
+                        fill_value=0
+                    ).reset_index()
+
+                    # Asegurar presencia de columnas 1, 2, 3
+                    for col_star in [3, 2, 1]:
+                        if col_star not in pivot_l1.columns:
+                            pivot_l1[col_star] = 0
+
+                    pivot_l1["Todos los casos"] = pivot_l1[3] + pivot_l1[2] + pivot_l1[1]
+                    pivot_l1["% del Total a L1"] = pivot_l1["Todos los casos"].apply(
+                        lambda c: f"{round((c / tot_l1_neg * 100), 1)}%" if tot_l1_neg > 0 else "0%"
+                    )
+
+                    pivot_l1 = pivot_l1.rename(columns={
+                        "agente_nom": "Agente Asignado",
+                        3: "Regular (3★)",
+                        2: "Malo (2★)",
+                        1: "Muy malo (1★)"
+                    })
+
+                    cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
+                    st.dataframe(pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
+                else:
+                    st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
+
+            # Desglose de comentarios y motivos normalizados en L1
+            st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
+            if not df_l1_neg.empty:
+                df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
+                df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].map(mapa_escala)
+                df_l1_motivos = df_l1_motivos.rename(columns={"motivo_normalizado": "Motivo Normalizado"}).sort_values(["rating_int", "Cantidad"], ascending=[False, False])
+                st.dataframe(df_l1_motivos[["Calificación", "Motivo Normalizado", "Cantidad"]], hide_index=True, use_container_width=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA (DESARROLLO)
+            # =========================================================================
+            st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Casos Escalados a L3 / Jira")
+
+            df_l3_neg = df_target[
+                (df_target["nivel_norm"] == "Niv-L3") |
+                (df_target["ticket_relacionado"].fillna("").astype(str).str.strip().str.len() > 0)
+            ].copy()
+
+            tot_l3 = len(df_l3_neg)
+            pct_l3_total = round((tot_l3 / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+
+            col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
+
+            with col_card_l3:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">CASOS ESCALADOS L3 / JIRA</div>
+                    <div class="metric-card-value" style="font-size: 3.2rem; color: #ef4444;">{tot_l3}</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                        <b>{pct_l3_total}%</b> del volumen total de reclamos
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_matriz_l3:
+                st.markdown("##### Casos Vinculados con Tickets de Jira / Desarrollo")
+                if not df_l3_neg.empty:
+                    df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                    pivot_l3 = df_l3_neg.pivot_table(
+                        index="agente_nom",
+                        columns="rating_int",
+                        values="id",
+                        aggfunc="count",
+                        fill_value=0
+                    ).reset_index()
+
+                    for col_star in [3, 2, 1]:
+                        if col_star not in pivot_l3.columns:
+                            pivot_l3[col_star] = 0
+
+                    pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
+                    pivot_l3["% del Total L3"] = pivot_l3["Todos los casos"].apply(
+                        lambda c: f"{round((c / tot_l3 * 100), 1)}%" if tot_l3 > 0 else "0%"
+                    )
+
+                    pivot_l3 = pivot_l3.rename(columns={
+                        "agente_nom": "Agente Asignado",
+                        3: "Regular (3★)",
+                        2: "Malo (2★)",
+                        1: "Muy malo (1★)"
+                    })
+
+                    cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total L3"]
+                    st.dataframe(pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
+                else:
+                    st.info("🟢 No hay casos escalados a L3 ni tareas Jira vinculadas a reclamos de esta semana.")
+
+            # Tabla de seguimiento a Jira
+            if not df_l3_neg.empty:
+                st.markdown("##### Detalle de Tickets Jira Relacionados")
+                df_l3_neg["Calificación"] = df_l3_neg["rating_int"].map(mapa_escala).fillna("Negativo")
+                cols_jira = ["Calificación", "motivo_normalizado", "ticket_relacionado", "tenant", "agente_asignado"]
+                
+                df_jira_table = df_l3_neg.reindex(columns=cols_jira).rename(columns={
+                    "motivo_normalizado": "Motivo",
+                    "ticket_relacionado": "Ticket Jira / Tarea",
+                    "tenant": "Tenant",
+                    "agente_asignado": "Agente"
+                })
+                st.dataframe(df_jira_table, hide_index=True, use_container_width=True)
     else:
         st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
 
