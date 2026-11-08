@@ -2953,9 +2953,6 @@ if tab_wbr is not None:
                     <h3 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
                         Informe Ejecutivo Semanal
                     </h3>
-                    <p style="margin: 2px 0 0 0; font-size: 0.85rem; color: #94a3b8;">
-                        Consolidado analítico y comparativo WoW de 5 semanas para gerencia de Soporte & Experiencia BIMS.
-                    </p>
                 </div>
             </div>
         </div>
