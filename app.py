@@ -122,6 +122,31 @@ def verificar_credenciales_supabase(email_val, pass_val):
     except Exception:
         return False, None
 
+@st.cache_data(ttl=300)
+def obtener_permisos_usuario(identificador_usuario):
+    """
+    Consulta en Supabase las banderas de permisos del usuario.
+    identificador_usuario puede ser el email o el nombre según tu autenticación.
+    """
+    if not identificador_usuario:
+        return {"acceso_wbr": False, "acceso_admin": False}
+    try:
+        res = (
+            supabase.table("usuarios_autorizados")
+            .select("acceso_wbr, acceso_admin")
+            .or_(f"email.eq.{identificador_usuario},nombre.eq.{identificador_usuario}")
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return {
+                "acceso_wbr": bool(res.data[0].get("acceso_wbr", False)),
+                "acceso_admin": bool(res.data[0].get("acceso_admin", False))
+            }
+    except Exception as e:
+        print(f"Error consultando permisos: {e}")
+    return {"acceso_wbr": False, "acceso_admin": False}
+
 # ==========================================
 # PANTALLA DE LOGIN CENTRADA Y ACOTADA
 # ==========================================
@@ -1601,14 +1626,46 @@ else:
 
 st.markdown(badge_html, unsafe_allow_html=True)
 
-tab_operativo, tab_carga_vivo, tab_resumen, tab_wbr, tab_admin, tab_faq = st.tabs([
+# 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
+usuario_actual = st.session_state.get("usuario_conectado") or st.session_state.get("user_email", "")
+permisos = obtener_permisos_usuario(usuario_actual)
+
+puede_ver_wbr = permisos["acceso_wbr"]
+puede_ver_admin = permisos["acceso_admin"]
+
+# 2. Construir lista dinámica de pestañas
+titulos_tabs = [
     "Control Operativo & SLA", 
     "Distribución de Carga",
-    "Resumen de Chats & Agentes", 
-    "Informe WBR Gerencial",
-    "Administración & Configuracion",
-    "FAQ"
-])
+    "Resumen de Chats & Agentes"
+]
+
+if puede_ver_wbr:
+    titulos_tabs.append("📊 Informe WBR Gerencial")
+
+if puede_ver_admin:
+    titulos_tabs.append("Administración & Configuracion")
+
+titulos_tabs.append("FAQ")
+
+# 3. Crear las pestañas
+tabs_creadas = st.tabs(titulos_tabs)
+
+# Mapear las pestañas a variables de forma segura
+idx = 0
+tab_operativo = tabs_creadas[idx]; idx += 1
+tab_carga_vivo = tabs_creadas[idx]; idx += 1
+tab_resumen = tabs_creadas[idx]; idx += 1
+
+tab_wbr = None
+if puede_ver_wbr:
+    tab_wbr = tabs_creadas[idx]; idx += 1
+
+tab_admin = None
+if puede_ver_admin:
+    tab_admin = tabs_creadas[idx]; idx += 1
+
+tab_faq = tabs_creadas[idx]
 
 # ==========================================
 # FRAGMENTO DE ALERTAS EN VIVO (CADA 10s)
@@ -2884,1641 +2941,1645 @@ with tab_resumen:
 
         st.markdown("---")
 
-with tab_wbr:
-    st.markdown("### 📊 Informe Ejecutivo Semanal (WBR - Weekly Business Review)")
-    st.caption("Consolidado evolutivo de 5 semanas para presentación a gerencia de Soporte & Experiencia.")
-
-    if not df_all.empty and "created_at_dt" in df_all.columns:
-        df_wbr_base = df_all.copy()
-
-        # 1. Normalización de fechas de cierre y creación en hora local (PY)
-        if "fecha_cierre_dt" not in df_wbr_base.columns:
-            df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
-            ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
-            df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
-
-        # Semanas ISO (Lunes a Domingo)
-        df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
-        df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
-        df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
-
-        df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
-        df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
-
-        semanas_disponibles = (
-            df_wbr_base[["iso_year", "iso_week", "semana_str"]]
-            .drop_duplicates()
-            .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
-        )
-
-        col_sel_sem, _ = st.columns([2, 3])
-        opciones_semanas = semanas_disponibles["semana_str"].tolist()
-        
-        semana_seleccionada_str = col_sel_sem.selectbox(
-            "Seleccionar Semana del Reporte WBR:",
-            options=opciones_semanas,
-            index=0 if len(opciones_semanas) > 0 else 0
-        )
-
-        if semana_seleccionada_str:
-            fila_sem = semanas_disponibles[semanas_disponibles["semana_str"] == semana_seleccionada_str].iloc[0]
-            target_year = int(fila_sem["iso_year"])
-            target_week = int(fila_sem["iso_week"])
-
-            from datetime import datetime as dt_calc
-            fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
-            
-            semanas_5 = []
-            for i in range(4, -1, -1):
-                f_s = fecha_ref_sem - timedelta(weeks=i)
-                iso_y, iso_w, _ = f_s.isocalendar()
-                semanas_5.append((iso_y, iso_w, f"Semana {iso_w}"))
-
-            df_5_semanas_info = pd.DataFrame(semanas_5, columns=["iso_year", "iso_week", "etiqueta_semana"])
-
-            # Fotografía evolutiva de 5 semanas
-            res_5w = []
-            tot_5w_recibidos = 0
-            tot_5w_cerrados = 0
-
-            for _, s_row in df_5_semanas_info.iterrows():
-                sub_rec = df_wbr_base[
-                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
-                    (df_wbr_base["iso_week"] == s_row["iso_week"])
-                ]
-                rec = len(sub_rec)
-
-                sub_cer = df_wbr_base[
-                    (df_wbr_base["es_cerrado"] == True) &
-                    (df_wbr_base["close_iso_year"] == s_row["iso_year"]) & 
-                    (df_wbr_base["close_iso_week"] == s_row["iso_week"])
-                ]
-                cer = len(sub_cer)
-
-                tot_5w_recibidos += rec
-                tot_5w_cerrados += cer
-
-                res_5w.append({
-                    "Semana": s_row["etiqueta_semana"],
-                    "Recibidos": rec,
-                    "Cerrados": cer
-                })
-
-            df_res_5w = pd.DataFrame(res_5w)
-            pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
-            # =========================================================================
-            st.markdown("#### 1. WBR | Soporte & Experiencia — Evolutivo de Volumen")
-
-            s1_col1, s1_col2 = st.columns(2)
-            s1_col1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS (5 SEMANAS)</div>
-                <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_5w_recibidos:,}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            s1_col2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
-                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
-                    {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            fig_5w = go.Figure()
-            fig_5w.add_trace(go.Bar(
-                x=df_res_5w["Semana"],
-                y=df_res_5w["Recibidos"],
-                name="Q. de chats recibidos",
-                marker=dict(color="#0284c7", cornerradius=8),
-                text=df_res_5w["Recibidos"],
-                textposition="inside",
-                insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-            ))
-            fig_5w.add_trace(go.Bar(
-                x=df_res_5w["Semana"],
-                y=df_res_5w["Cerrados"],
-                name="Q. de chats cerrados",
-                marker=dict(color="#38bdf8", cornerradius=8),
-                text=df_res_5w["Cerrados"],
-                textposition="inside",
-                insidetextfont=dict(color="#0f172a", size=13, family="Arial Black")
-            ))
-            fig_5w.update_layout(
-                barmode="group",
-                title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#cbd5e1"),
-                xaxis=dict(gridcolor="#1e293b"),
-                yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(t=50, b=20, l=30, r=20),
-                height=380
+if tab_wbr is not None:
+    with tab_wbr:
+        st.markdown("### 📊 Informe Ejecutivo Semanal (WBR - Weekly Business Review)")
+        st.caption("Consolidado evolutivo de 5 semanas para presentación a gerencia de Soporte & Experiencia.")
+    
+        if not df_all.empty and "created_at_dt" in df_all.columns:
+            df_wbr_base = df_all.copy()
+    
+            # 1. Normalización de fechas de cierre y creación en hora local (PY)
+            if "fecha_cierre_dt" not in df_wbr_base.columns:
+                df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
+                ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
+                df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
+    
+            # Semanas ISO (Lunes a Domingo)
+            df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
+            df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
+            df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
+    
+            df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
+            df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
+    
+            semanas_disponibles = (
+                df_wbr_base[["iso_year", "iso_week", "semana_str"]]
+                .drop_duplicates()
+                .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
             )
-            st.plotly_chart(fig_5w, use_container_width=True)
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
-            # =========================================================================
-            st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
-
-            df_target = df_wbr_base[
-                (df_wbr_base["iso_year"] == target_year) & 
-                (df_wbr_base["iso_week"] == target_week)
-            ].copy()
-            tot_sem_rec = len(df_target)
-
-            df_target_cerrados = df_wbr_base[
-                (df_wbr_base["es_cerrado"] == True) &
-                (df_wbr_base["close_iso_year"] == target_year) & 
-                (df_wbr_base["close_iso_week"] == target_week)
-            ].copy()
-            tot_sem_cer = len(df_target_cerrados)
-            pct_sem_cer = round((tot_sem_cer / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
-
-            sem_prev_num = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[1]
-            sem_prev_year = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[0]
+    
+            col_sel_sem, _ = st.columns([2, 3])
+            opciones_semanas = semanas_disponibles["semana_str"].tolist()
             
-            tot_prev_rec = len(df_wbr_base[
-                (df_wbr_base["iso_year"] == sem_prev_year) & 
-                (df_wbr_base["iso_week"] == sem_prev_num)
-            ])
-            tot_prev_cer = len(df_wbr_base[
-                (df_wbr_base["es_cerrado"] == True) &
-                (df_wbr_base["close_iso_year"] == sem_prev_year) & 
-                (df_wbr_base["close_iso_week"] == sem_prev_num)
-            ])
-
-            diff_rec_pct = round(((tot_sem_rec - tot_prev_rec) / tot_prev_rec * 100), 2) if tot_prev_rec > 0 else 0.0
-            diff_cer_pct = round(((tot_sem_cer - tot_prev_cer) / tot_prev_cer * 100), 2) if tot_prev_cer > 0 else 0.0
-
-            s3_m1, s3_m2 = st.columns(2)
-            s3_m1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS</div>
-                <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_sem_rec:,}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            s3_m2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">CHATS CERRADOS Y EFECTIVIDAD</div>
-                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
-                    {tot_sem_cer:,} <span style="font-size: 1.25rem; font-weight: 600; color: #38bdf8;">({pct_sem_cer}%)</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            col_dia_bar, col_pie_ag = st.columns([1.2, 1])
-
-            with col_dia_bar:
-                st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
-
-                dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
-                df_target["creado_dia"] = df_target["created_at_dt"].dt.date
-                df_target_cerrados["cerrado_dia"] = df_target_cerrados["fecha_cierre_dt"].dt.date
-
-                filas_dias = []
-                for f_dia in dias_semana_l_d:
-                    str_dia = f_dia.strftime("%Y-%m-%d")
-                    cnt_rec = len(df_target[df_target["creado_dia"] == f_dia])
-                    cnt_cer = len(df_target_cerrados[df_target_cerrados["cerrado_dia"] == f_dia])
-                    filas_dias.append({
-                        "Fecha": str_dia,
-                        "Recibidos": cnt_rec,
-                        "Cerrados": cnt_cer
+            semana_seleccionada_str = col_sel_sem.selectbox(
+                "Seleccionar Semana del Reporte WBR:",
+                options=opciones_semanas,
+                index=0 if len(opciones_semanas) > 0 else 0
+            )
+    
+            if semana_seleccionada_str:
+                fila_sem = semanas_disponibles[semanas_disponibles["semana_str"] == semana_seleccionada_str].iloc[0]
+                target_year = int(fila_sem["iso_year"])
+                target_week = int(fila_sem["iso_week"])
+    
+                from datetime import datetime as dt_calc
+                fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
+                
+                semanas_5 = []
+                for i in range(4, -1, -1):
+                    f_s = fecha_ref_sem - timedelta(weeks=i)
+                    iso_y, iso_w, _ = f_s.isocalendar()
+                    semanas_5.append((iso_y, iso_w, f"Semana {iso_w}"))
+    
+                df_5_semanas_info = pd.DataFrame(semanas_5, columns=["iso_year", "iso_week", "etiqueta_semana"])
+    
+                # Fotografía evolutiva de 5 semanas
+                res_5w = []
+                tot_5w_recibidos = 0
+                tot_5w_cerrados = 0
+    
+                for _, s_row in df_5_semanas_info.iterrows():
+                    sub_rec = df_wbr_base[
+                        (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                        (df_wbr_base["iso_week"] == s_row["iso_week"])
+                    ]
+                    rec = len(sub_rec)
+    
+                    sub_cer = df_wbr_base[
+                        (df_wbr_base["es_cerrado"] == True) &
+                        (df_wbr_base["close_iso_year"] == s_row["iso_year"]) & 
+                        (df_wbr_base["close_iso_week"] == s_row["iso_week"])
+                    ]
+                    cer = len(sub_cer)
+    
+                    tot_5w_recibidos += rec
+                    tot_5w_cerrados += cer
+    
+                    res_5w.append({
+                        "Semana": s_row["etiqueta_semana"],
+                        "Recibidos": rec,
+                        "Cerrados": cer
                     })
-
-                df_dias_agg = pd.DataFrame(filas_dias)
-
-                fig_dias = go.Figure()
-                fig_dias.add_trace(go.Bar(
-                    x=df_dias_agg["Fecha"],
-                    y=df_dias_agg["Recibidos"],
+    
+                df_res_5w = pd.DataFrame(res_5w)
+                pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
+                # =========================================================================
+                st.markdown("#### 1. WBR | Soporte & Experiencia — Evolutivo de Volumen")
+    
+                s1_col1, s1_col2 = st.columns(2)
+                s1_col1.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS (5 SEMANAS)</div>
+                    <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_5w_recibidos:,}</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                s1_col2.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
+                    <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+                        {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+    
+                fig_5w = go.Figure()
+                fig_5w.add_trace(go.Bar(
+                    x=df_res_5w["Semana"],
+                    y=df_res_5w["Recibidos"],
                     name="Q. de chats recibidos",
                     marker=dict(color="#0284c7", cornerradius=8),
-                    text=df_dias_agg["Recibidos"],
+                    text=df_res_5w["Recibidos"],
                     textposition="inside",
-                    insidetextfont=dict(color="#ffffff", size=12, family="Arial Black")
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                 ))
-                fig_dias.add_trace(go.Bar(
-                    x=df_dias_agg["Fecha"],
-                    y=df_dias_agg["Cerrados"],
+                fig_5w.add_trace(go.Bar(
+                    x=df_res_5w["Semana"],
+                    y=df_res_5w["Cerrados"],
                     name="Q. de chats cerrados",
                     marker=dict(color="#38bdf8", cornerradius=8),
-                    text=df_dias_agg["Cerrados"],
+                    text=df_res_5w["Cerrados"],
                     textposition="inside",
-                    insidetextfont=dict(color="#0f172a", size=12, family="Arial Black")
+                    insidetextfont=dict(color="#0f172a", size=13, family="Arial Black")
                 ))
-                fig_dias.update_layout(
+                fig_5w.update_layout(
                     barmode="group",
+                    title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     xaxis=dict(gridcolor="#1e293b"),
                     yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    margin=dict(t=50, b=20, l=30, r=20),
+                    height=380
                 )
-                st.plotly_chart(fig_dias, use_container_width=True)
-
-                color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
-                color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
-                sin_resp_count = int(df_target["etiquetas"].fillna("").astype(str).str.lower().str.contains("sin respuesta").sum())
-
-                st.markdown(f"""
-                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
-                    <div>• <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})</div>
-                    <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_rec} chats ingresados, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col_pie_ag:
-                st.markdown("##### Q. de chats cerrados por Agentes")
-                
-                agentes_excluir_pie = [
-                    "monica", "mónica", "monica (bot)", 
-                    "sin asignar", "none", "nan", ""
-                ]
-                
-                df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-                es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
-                es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
-                
-                cnt_cerrados_ia = int(es_cerrado_ia.sum())
-                cnt_cerrados_humanos = int((~es_omitido_torta).sum())
-                pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
-
-                df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
-                df_ag_pie.columns = ["Agente", "Cerrados"]
-
-                palette_donut = [
-                    "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
-                    "#7dd3fc", "#bae6fd", "#94a3b8", "#cbd5e1"
-                ]
-
-                fig_pie_w = go.Figure(data=[go.Pie(
-                    labels=df_ag_pie["Agente"],
-                    values=df_ag_pie["Cerrados"],
-                    hole=0.45,
-                    textinfo="label+value+percent",
-                    texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
-                    textposition="outside",
-                    insidetextorientation="horizontal",
-                    marker=dict(colors=palette_donut, line=dict(color="#0b1120", width=2)),
-                    showlegend=False
-                )])
-
-                fig_pie_w.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1", size=11),
-                    margin=dict(t=30, b=30, l=40, r=40),
-                    height=360
-                )
-                st.plotly_chart(fig_pie_w, use_container_width=True)
-
-                cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
-                empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
-                num_agentes_activos = df_ag_pie["Agente"].nunique()
-                prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
-
-                st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
-                    <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Agente: <span style="color:#38bdf8; font-size:1.1rem; font-weight:700; margin-left:6px;">{prom_por_agente}</span></div>
-                    <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">
-                        <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
-                    </div>
-                    <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
-                        🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA (Mónica).
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA
-            # =========================================================================
-            st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
-
-            def calcular_metricas_tiempos_semana(df_sub):
-                if df_sub.empty:
-                    return 0.0, 0.0, 0.0, 0.0
-
-                agentes_omitir_t = ["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"]
-                
-                dt_col = df_sub["created_at_dt"]
-                dias_col = dt_col.dt.dayofweek
-                horas_col = dt_col.dt.time
-                fechas_col = dt_col.dt.strftime("%Y-%m-%d")
-
-                es_horario_1ra = (
-                    ((dias_col.isin([0, 1, 2, 3, 4])) & (horas_col >= time(8, 0)) & (horas_col <= time(17, 30))) |
-                    ((dias_col == 5) & (horas_col >= time(9, 0)) & (horas_col <= time(11, 45)))
-                ) & (~fechas_col.isin(FERIADOS))
-
-                es_agente_1ra = (
-                    (df_sub["por_agente"].fillna("").astype(str).str.lower() == "no excluido") &
-                    (~df_sub["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitir_t))
-                )
-
-                sub_1ra = df_sub[es_horario_1ra & es_agente_1ra].copy()
-                sub_1ra["p1_num"] = pd.to_numeric(sub_1ra["primera_respuesta_min"], errors="coerce")
-                s_1ra = sub_1ra["p1_num"].dropna()
-
-                prom_1ra_val = round(s_1ra.mean(), 2) if not s_1ra.empty else 0.0
-                pct_sla_1ra_val = round(((s_1ra <= 2.0).sum() / len(s_1ra) * 100), 1) if not s_1ra.empty else 0.0
-
-                etiquetas_s = df_sub["etiquetas"].fillna("").astype(str).str.lower()
-                es_sin_resp = etiquetas_s.str.contains("sin respuesta", na=False)
-                es_horario_gest = df_sub["horario_evaluado"] != "fuera de horario"
-                
-                sub_gest = df_sub[
-                    es_agente_1ra & 
-                    es_horario_gest & 
-                    (~es_sin_resp) & 
-                    (df_sub["es_cerrado"] == True)
+                st.plotly_chart(fig_5w, use_container_width=True)
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
+                # =========================================================================
+                st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
+    
+                df_target = df_wbr_base[
+                    (df_wbr_base["iso_year"] == target_year) & 
+                    (df_wbr_base["iso_week"] == target_week)
                 ].copy()
-                
-                sub_gest["pg_num"] = pd.to_numeric(sub_gest["tiempo_resolucion_minutos"], errors="coerce")
-                s_gest = sub_gest["pg_num"].dropna()
-
-                prom_gest_val = round(s_gest.mean(), 1) if not s_gest.empty else 0.0
-                pct_sla_gest_val = round(((s_gest <= 60.0).sum() / len(s_gest) * 100), 1) if not s_gest.empty else 0.0
-
-                return prom_gest_val, prom_1ra_val, pct_sla_gest_val, pct_sla_1ra_val
-
-            evol_tiempos = []
-            for _, s_row in df_5_semanas_info.iterrows():
-                sub_w = df_wbr_base[
-                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
-                    (df_wbr_base["iso_week"] == s_row["iso_week"])
-                ]
-                p_gest_w, p_1ra_w, sla_g_w, sla_1_w = calcular_metricas_tiempos_semana(sub_w)
-                evol_tiempos.append({
-                    "Semana": s_row["etiqueta_semana"],
-                    "Prom_Gestion": p_gest_w,
-                    "Prom_1ra": p_1ra_w,
-                    "SLA_Gestion": sla_g_w,
-                    "SLA_1ra": sla_1_w
-                })
-
-            df_evol_tiempos = pd.DataFrame(evol_tiempos)
-
-            foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
-            foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
-            foco_sla_gest = df_evol_tiempos.iloc[-1]["SLA_Gestion"]
-            foco_sla_1ra = df_evol_tiempos.iloc[-1]["SLA_1ra"]
-
-            prev_gest = df_evol_tiempos.iloc[-2]["Prom_Gestion"] if len(df_evol_tiempos) >= 2 else 0.0
-            prev_1ra = df_evol_tiempos.iloc[-2]["Prom_1ra"] if len(df_evol_tiempos) >= 2 else 0.0
-
-            wow_gest_pct = round(((foco_gest - prev_gest) / prev_gest * 100), 2) if prev_gest > 0 else 0.0
-            wow_1ra_pct = round(((foco_1ra - prev_1ra) / prev_1ra * 100), 2) if prev_1ra > 0 else 0.0
-
-            col_t1, col_t2 = st.columns(2)
-            col_t1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">TIEMPO PROMEDIO TOTAL DE GESTIÓN</div>
-                <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_gest} min</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            col_t2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">TIEMPO PROM. DE 1RA RESPUESTA</div>
-                <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_1ra} min</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            col_g_gest, col_g_1ra = st.columns(2)
-
-            with col_g_gest:
-                st.markdown("##### Tiempo promedio total de gestión (min)")
-                fig_bar_gest = go.Figure()
-                fig_bar_gest.add_trace(go.Bar(
-                    x=df_evol_tiempos["Semana"],
-                    y=df_evol_tiempos["Prom_Gestion"],
-                    marker=dict(color="#0284c7", cornerradius=8),
-                    text=df_evol_tiempos["Prom_Gestion"].apply(lambda v: f"{v}"),
-                    textposition="inside",
-                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                ))
-                fig_bar_gest.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
-                )
-                st.plotly_chart(fig_bar_gest, use_container_width=True)
-
-                color_wow_g = "#34d399" if wow_gest_pct <= 0 else "#f43f5e"
-                color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
-
-                st.markdown(f"""
-                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div><b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)</div>
-                    <div>SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b></div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col_g_1ra:
-                st.markdown("##### Tiempo promedio primera respuesta")
-                fig_bar_1ra = go.Figure()
-                fig_bar_1ra.add_trace(go.Bar(
-                    x=df_evol_tiempos["Semana"],
-                    y=df_evol_tiempos["Prom_1ra"],
-                    marker=dict(color="#0369a1", cornerradius=8),
-                    text=df_evol_tiempos["Prom_1ra"].apply(lambda v: f"{v}"),
-                    textposition="inside",
-                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                ))
-                fig_bar_1ra.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
-                )
-                st.plotly_chart(fig_bar_1ra, use_container_width=True)
-
-                color_wow_1 = "#34d399" if wow_1ra_pct <= 0 else "#f43f5e"
-                color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
-
-                st.markdown(f"""
-                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div><b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)</div>
-                    <div>SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b> <span style="font-size: 0.74rem; color: #94a3b8;">(Sin horario extendido)</span></div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO
-            # =========================================================================
-            st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
-
-            if "fecha_calificacion_dt" in df_target.columns:
-                df_target_csat = df_wbr_base[
-                    (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                    (df_wbr_base["rating"].notna()) &
-                    (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == target_year) &
-                    (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == target_week)
+                tot_sem_rec = len(df_target)
+    
+                df_target_cerrados = df_wbr_base[
+                    (df_wbr_base["es_cerrado"] == True) &
+                    (df_wbr_base["close_iso_year"] == target_year) & 
+                    (df_wbr_base["close_iso_week"] == target_week)
                 ].copy()
-            else:
-                df_target_csat = df_target[
-                    (df_target["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                    (df_target["rating"].notna())
-                ].copy()
-
-            df_target_csat["rating_num"] = pd.to_numeric(df_target_csat["rating"], errors="coerce")
-            df_target_csat = df_target_csat.dropna(subset=["rating_num"])
-
-            tot_evaluados = len(df_target_csat)
-            tot_sin_calificar = max(0, tot_sem_rec - tot_evaluados)
-            pct_calificados = round((tot_evaluados / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
-            pct_sin_calificar = round((tot_sin_calificar / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
-
-            cnt_5 = int((df_target_csat["rating_num"] == 5).sum())
-            cnt_4 = int((df_target_csat["rating_num"] == 4).sum())
-            cnt_3 = int((df_target_csat["rating_num"] == 3).sum())
-            cnt_2 = int((df_target_csat["rating_num"] == 2).sum())
-            cnt_1 = int((df_target_csat["rating_num"] == 1).sum())
-
-            tot_positivas = cnt_5 + cnt_4
-            tot_negativas = cnt_3 + cnt_2 + cnt_1
-
-            def f_pct(c, t):
-                return f"{round((c / t * 100), 1)}%" if t > 0 else "0.0%"
-
-            c_c1, c_c2, c_c3, c_c4 = st.columns(4)
-
-            c_c1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
-                <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
-                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            c_c2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">SIN CALIFICAR</div>
-                <div class="metric-card-value" style="color: #38bdf8; font-size: 2.2rem;">{pct_sin_calificar}%</div>
-                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_sin_calificar:,} conversaciones</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            c_c3.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                <div class="metric-card-title" style="justify-content: center;">CALIFICADOS</div>
-                <div class="metric-card-value" style="color: #34d399; font-size: 2.2rem;">{pct_calificados}%</div>
-                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_evaluados:,} encuestas recibidas</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            c_c4.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #818cf8; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
-                <div class="metric-card-title" style="font-size: 0.7rem; margin-bottom: 3px;">TOP CALIFICACIONES</div>
-                <div style="font-size: 0.75rem; line-height: 1.35; color: #cbd5e1;">
-                    • <b>5★:</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)}) | <b>4★:</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
-                    • <b>3★:</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)}) | <b>2★:</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
-                    • <b>1★:</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            col_p_niv, col_p_sent = st.columns([1.3, 1])
-
-            with col_p_niv:
-                st.markdown("##### Q. de Puntuaciones por Nivel (Solo Calificados)")
-
-                mapa_escala = {
-                    5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
-                }
+                tot_sem_cer = len(df_target_cerrados)
+                pct_sem_cer = round((tot_sem_cer / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+    
+                sem_prev_num = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[1]
+                sem_prev_year = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[0]
                 
-                df_target["nivel_norm"] = (
-                    df_target["nivel"].fillna("Niv-L1")
-                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
-                )
-                df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
-
-                df_target_calificados = df_target[df_target["rating_int"] > 0].copy()
-                df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
-
-                orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo"]
-                df_niv_grp = df_target_calificados.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
-
-                fig_niv = px.bar(
-                    df_niv_grp,
-                    x="puntuacion_str",
-                    y="Cantidad",
-                    color="nivel_norm",
-                    barmode="group",
-                    category_orders={"puntuacion_str": orden_puntuacion},
-                    color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#0369a1"},
-                    text="Cantidad"
-                )
-                fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
-                fig_niv.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1", size=11),
-                    xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
-                )
-                st.plotly_chart(fig_niv, use_container_width=True)
-
-            with col_p_sent:
-                st.markdown("##### Sentimiento de Usuarios (CSAT Positivo vs Negativo)")
-
-                df_sent = pd.DataFrame([
-                    {"Sentimiento": "Positivas (≥4★)", "Cantidad": tot_positivas},
-                    {"Sentimiento": "Negativas (≤3★)", "Cantidad": tot_negativas}
+                tot_prev_rec = len(df_wbr_base[
+                    (df_wbr_base["iso_year"] == sem_prev_year) & 
+                    (df_wbr_base["iso_week"] == sem_prev_num)
                 ])
-                df_sent = df_sent[df_sent["Cantidad"] > 0]
-
-                fig_sent = go.Figure(data=[go.Pie(
-                    labels=df_sent["Sentimiento"],
-                    values=df_sent["Cantidad"],
-                    hole=0.45,
-                    textinfo="label+value+percent",
-                    texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
-                    textposition="outside",
-                    marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#0b1120", width=2)),
-                    showlegend=False
-                )])
-                fig_sent.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1", size=11),
-                    margin=dict(t=30, b=30, l=30, r=30),
-                    height=360
-                )
-                st.plotly_chart(fig_sent, use_container_width=True)
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1
-            # =========================================================================
-            st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
-
-            df_l1_neg = df_target[
-                (df_target["nivel_norm"] == "Niv-L1") &
-                (df_target["rating_int"].isin([1, 2, 3]))
-            ].copy()
-
-            tot_l1_neg = len(df_l1_neg)
-            pct_l1_del_total = round((tot_l1_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
-
-            col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
-
-            with col_card_l1:
-                st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L1</div>
-                    <div class="metric-card-value" style="font-size: 3.4rem; color: #f59e0b; margin: 8px 0;">{tot_l1_neg}</div>
-                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
-                        <b>{pct_l1_del_total}%</b> del total de reclamos ({tot_negativas} casos)
+                tot_prev_cer = len(df_wbr_base[
+                    (df_wbr_base["es_cerrado"] == True) &
+                    (df_wbr_base["close_iso_year"] == sem_prev_year) & 
+                    (df_wbr_base["close_iso_week"] == sem_prev_num)
+                ])
+    
+                diff_rec_pct = round(((tot_sem_rec - tot_prev_rec) / tot_prev_rec * 100), 2) if tot_prev_rec > 0 else 0.0
+                diff_cer_pct = round(((tot_sem_cer - tot_prev_cer) / tot_prev_cer * 100), 2) if tot_prev_cer > 0 else 0.0
+    
+                s3_m1, s3_m2 = st.columns(2)
+                s3_m1.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS</div>
+                    <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                s3_m2.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">CHATS CERRADOS Y EFECTIVIDAD</div>
+                    <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+                        {tot_sem_cer:,} <span style="font-size: 1.25rem; font-weight: 600; color: #38bdf8;">({pct_sem_cer}%)</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-
-            with col_matriz_l1:
-                if not df_l1_neg.empty:
-                    df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+    
+                col_dia_bar, col_pie_ag = st.columns([1.2, 1])
+    
+                with col_dia_bar:
+                    st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
+    
+                    dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
+                    df_target["creado_dia"] = df_target["created_at_dt"].dt.date
+                    df_target_cerrados["cerrado_dia"] = df_target_cerrados["fecha_cierre_dt"].dt.date
+    
+                    filas_dias = []
+                    for f_dia in dias_semana_l_d:
+                        str_dia = f_dia.strftime("%Y-%m-%d")
+                        cnt_rec = len(df_target[df_target["creado_dia"] == f_dia])
+                        cnt_cer = len(df_target_cerrados[df_target_cerrados["cerrado_dia"] == f_dia])
+                        filas_dias.append({
+                            "Fecha": str_dia,
+                            "Recibidos": cnt_rec,
+                            "Cerrados": cnt_cer
+                        })
+    
+                    df_dias_agg = pd.DataFrame(filas_dias)
+    
+                    fig_dias = go.Figure()
+                    fig_dias.add_trace(go.Bar(
+                        x=df_dias_agg["Fecha"],
+                        y=df_dias_agg["Recibidos"],
+                        name="Q. de chats recibidos",
+                        marker=dict(color="#0284c7", cornerradius=8),
+                        text=df_dias_agg["Recibidos"],
+                        textposition="inside",
+                        insidetextfont=dict(color="#ffffff", size=12, family="Arial Black")
+                    ))
+                    fig_dias.add_trace(go.Bar(
+                        x=df_dias_agg["Fecha"],
+                        y=df_dias_agg["Cerrados"],
+                        name="Q. de chats cerrados",
+                        marker=dict(color="#38bdf8", cornerradius=8),
+                        text=df_dias_agg["Cerrados"],
+                        textposition="inside",
+                        insidetextfont=dict(color="#0f172a", size=12, family="Arial Black")
+                    ))
+                    fig_dias.update_layout(
+                        barmode="group",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1"),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        xaxis=dict(gridcolor="#1e293b"),
+                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                        margin=dict(t=30, b=20, l=20, r=20),
+                        height=360
+                    )
+                    st.plotly_chart(fig_dias, use_container_width=True)
+    
+                    color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
+                    color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
+                    sin_resp_count = int(df_target["etiquetas"].fillna("").astype(str).str.lower().str.contains("sin respuesta").sum())
+    
+                    st.markdown(f"""
+                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
+                        <div>• <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})</div>
+                        <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_rec} chats ingresados, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                with col_pie_ag:
+                    st.markdown("##### Q. de chats cerrados por Agentes")
                     
-                    pivot_l1 = df_l1_neg.pivot_table(
-                        index="agente_nom",
-                        columns="rating_int",
-                        values="id",
-                        aggfunc="count",
-                        fill_value=0
-                    ).reset_index()
-
-                    for col_star in [3, 2, 1]:
-                        if col_star not in pivot_l1.columns:
-                            pivot_l1[col_star] = 0
-
-                    pivot_l1["Todos los casos"] = pivot_l1[3] + pivot_l1[2] + pivot_l1[1]
-                    pivot_l1["% del Total a L1"] = pivot_l1["Todos los casos"].apply(
-                        lambda c: f"{round((c / tot_l1_neg * 100), 1)}%" if tot_l1_neg > 0 else "0%"
-                    )
-
-                    pivot_l1 = pivot_l1.rename(columns={
-                        "agente_nom": "Agente Asignado",
-                        3: "Regular (3★)",
-                        2: "Malo (2★)",
-                        1: "Muy malo (1★)"
-                    })
-
-                    cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
-                    st.dataframe(pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
-                else:
-                    st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
-
-            if not df_l1_neg.empty:
-                df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
-                df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
-                    lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
-                )
-                df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
-
-                filas_html_l1 = []
-                for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
-                    filas = grp.to_dict("records")
-                    rowspan_cnt = len(filas)
-                    for idx, row_item in enumerate(filas):
-                        if idx == 0:
-                            td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>"
-                        else:
-                            td_calif = ""
-                        filas_html_l1.append(
-                            f"<tr>{td_calif}<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_normalizado']}</td>"
-                            f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center; font-weight:700; color:#38bdf8;'>{row_item['Cantidad']}</td></tr>"
-                        )
-
-                html_tabla_l1 = f"""
-                <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
-                    <thead>
-                        <tr style='background-color:#0284c7; color:white;'>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:28%;'>Calificación</th>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo Normalizado</th>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:15%;'>Cantidad</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {''.join(filas_html_l1)}
-                    </tbody>
-                </table>
-                """
-                st.markdown(html_tabla_l1, unsafe_allow_html=True)
-            else:
-                st.caption("Sin motivos registrados en L1.")
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
-            # =========================================================================
-            st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Casos Escalados a L3 / Jira")
-
-            df_l3_neg = df_target[
-                (df_target["nivel_norm"] == "Niv-L3") &
-                (df_target["rating_int"].isin([1, 2, 3]))
-            ].copy()
-
-            tot_l3_neg = len(df_l3_neg)
-            pct_l3_sobre_total_neg = round((tot_l3_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
-
-            col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
-
-            with col_card_l3:
-                st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS ESCALADOS L3 / JIRA</div>
-                    <div class="metric-card-value" style="font-size: 3.4rem; color: #ef4444; margin: 8px 0;">{tot_l3_neg}</div>
-                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
-                        <b>{pct_l3_sobre_total_neg}%</b> del total de reclamos ({tot_negativas} casos)
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col_matriz_l3:
-                if not df_l3_neg.empty:
-                    df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-                    pivot_l3 = df_l3_neg.pivot_table(
-                        index="agente_nom",
-                        columns="rating_int",
-                        values="id",
-                        aggfunc="count",
-                        fill_value=0
-                    ).reset_index()
-
-                    for col_star in [3, 2, 1]:
-                        if col_star not in pivot_l3.columns:
-                            pivot_l3[col_star] = 0
-
-                    pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
-                    pivot_l3["% del Total L3"] = pivot_l3["Todos los casos"].apply(
-                        lambda c: f"{round((c / tot_l3_neg * 100), 1)}%" if tot_l3_neg > 0 else "0%"
-                    )
-
-                    pivot_l3 = pivot_l3.rename(columns={
-                        "agente_nom": "Agente Asignado",
-                        3: "Regular (3★)",
-                        2: "Malo (2★)",
-                        1: "Muy malo (1★)"
-                    })
-
-                    cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total L3"]
-                    st.dataframe(pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
-                else:
-                    st.info("🟢 No hay evaluaciones negativas registradas en Nivel 3 para esta semana.")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("##### Detalle de Casos L3 & Tickets Jira Relacionados")
-
-            if not df_l3_neg.empty:
-                df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
-                    lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
-                )
-                df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
-                df_l3_neg["jira_clean"] = df_l3_neg["ticket_relacionado"].fillna("").replace(["", "None", "nan"], "Sin ticket vinculado")
-                df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
-                df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
-
-                df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
-
-                filas_html_l3 = []
-                for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
-                    filas = grp.to_dict("records")
-                    rowspan_cnt = len(filas)
-                    for idx, row_item in enumerate(filas):
-                        if idx == 0:
-                            td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación_HTML']}</td>"
-                        else:
-                            td_calif = ""
-                        
-                        ticket_badge = (
-                            f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600;'>{row_item['jira_clean']}</span>"
-                            if row_item['jira_clean'] != "Sin ticket vinculado"
-                            else f"<span style='color:#64748b;'>{row_item['jira_clean']}</span>"
-                        )
-
-                        filas_html_l3.append(
-                            f"<tr>{td_calif}"
-                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_clean']}</td>"
-                            f"<td style='padding:10px 14px; border:1px solid #334155;'>{ticket_badge}</td>"
-                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{row_item['tenant_clean']}</td>"
-                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{row_item['agente_clean']}</td></tr>"
-                        )
-
-                html_tabla_l3 = f"""
-                <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
-                    <thead>
-                        <tr style='background-color:#0284c7; color:white;'>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Calificación</th>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Ticket Jira / Tarea</th>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:18%;'>Tenant</th>
-                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:16%;'>Agente</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {''.join(filas_html_l3)}
-                    </tbody>
-                </table>
-                """
-                st.markdown(html_tabla_l3, unsafe_allow_html=True)
-            else:
-                st.caption("Sin casos L3 registrados.")
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 7: EVOLUTIVO CSAT & RATIO CONTACTOS POR EMPRESA
-            # =========================================================================
-            st.markdown(f"#### 7. WBR | {semana_seleccionada_str} — Evolutivo de Satisfacción & Frecuencia por Empresa")
-
-            evol_csat = []
-            for _, s_row in df_5_semanas_info.iterrows():
-                if "fecha_calificacion_dt" in df_wbr_base.columns:
-                    sub_csat = df_wbr_base[
-                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                        (df_wbr_base["rating"].notna()) &
-                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == s_row["iso_year"]) &
-                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == s_row["iso_week"])
-                    ].copy()
-                else:
-                    sub_csat = df_wbr_base[
-                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                        (df_wbr_base["rating"].notna()) &
-                        (df_wbr_base["iso_year"] == s_row["iso_year"]) &
-                        (df_wbr_base["iso_week"] == s_row["iso_week"])
-                    ].copy()
-
-                sub_csat["r_num"] = pd.to_numeric(sub_csat["rating"], errors="coerce")
-                sub_csat = sub_csat.dropna(subset=["r_num"])
-                tot_c = len(sub_csat)
-                pos_c = int((sub_csat["r_num"] >= 4).sum())
-                pct_c = round((pos_c / tot_c * 100), 1) if tot_c > 0 else 0.0
-
-                sub_vol = df_wbr_base[
-                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
-                    (df_wbr_base["iso_week"] == s_row["iso_week"])
-                ]
-                tot_chats_w = len(sub_vol)
-                empresas_w = sub_vol["company"].nunique() if "company" in sub_vol.columns else 0
-                ratio_empresa = round(tot_chats_w / empresas_w, 2) if empresas_w > 0 else 0.0
-
-                evol_csat.append({
-                    "Semana": s_row["etiqueta_semana"],
-                    "CSAT": pct_c,
-                    "Ratio_Empresa": ratio_empresa
-                })
-
-            df_evol_csat = pd.DataFrame(evol_csat)
-
-            foco_csat = df_evol_csat.iloc[-1]["CSAT"]
-            prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
-            diff_csat = round(foco_csat - prev_csat, 2)
-            foco_ratio = df_evol_csat.iloc[-1]["Ratio_Empresa"]
-
-            col_g_csat, col_g_ratio = st.columns(2)
-
-            with col_g_csat:
-                st.markdown("##### Satisfacción del Cliente (CSAT %)")
-                fig_bar_csat = go.Figure()
-                fig_bar_csat.add_trace(go.Bar(
-                    x=df_evol_csat["Semana"],
-                    y=df_evol_csat["CSAT"],
-                    marker=dict(color="#0284c7", cornerradius=8),
-                    text=df_evol_csat["CSAT"].apply(lambda v: f"{v}%"),
-                    textposition="inside",
-                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                ))
-                fig_bar_csat.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
-                )
-                st.plotly_chart(fig_bar_csat, use_container_width=True)
-
-                color_diff_csat = "#34d399" if diff_csat >= 0 else "#f43f5e"
-                st.markdown(f"""
-                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <b style="color: {color_diff_csat}; font-size: 1.1rem;">{diff_csat:+.2f}% CSAT</b>
-                    <span style="color: #cbd5e1; font-size: 0.85rem;">{semana_seleccionada_str.split(' ')[0]} {target_week} ({foco_csat}%) vs Semana {sem_prev_num} ({prev_csat}%)</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col_g_ratio:
-                st.markdown("##### Evolución Semana a Semana (Promedio Contactos por Empresa)")
-                fig_bar_ratio = go.Figure()
-                fig_bar_ratio.add_trace(go.Bar(
-                    x=df_evol_csat["Semana"],
-                    y=df_evol_csat["Ratio_Empresa"],
-                    marker=dict(color="#0369a1", cornerradius=8),
-                    text=df_evol_csat["Ratio_Empresa"].apply(lambda v: f"{v:.2f}"),
-                    textposition="inside",
-                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                ))
-                fig_bar_ratio.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict( showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                    margin=dict(t=30, b=20, l=20, r=20),
-                    height=360
-                )
-                st.plotly_chart(fig_bar_ratio, use_container_width=True)
-
-                st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
-                    <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Empresa</div>
-                    <div class="metric-card-value" style="color: #38bdf8; font-size: 1.9rem; margin: 2px 0;">{foco_ratio:.2f}</div>
-                    <div style="font-size: 0.8rem; color: #34d399; font-weight: 600;">{pct_sem_cer}% Conversaciones Cerradas</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown("---")
-
-            # =========================================================================
-            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
-            # =========================================================================
-            st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
-
-            df_ext = df_target[df_target["horario_evaluado"] == "extendido"].copy()
-            tot_ext = len(df_ext)
-            tot_ext_cerrados = int(df_ext["es_cerrado"].sum())
-            pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
-
-            dias_num = df_ext["created_at_dt"].dt.dayofweek
-            tot_domingo = int((dias_num == 6).sum())
-            derivados_l3_ext = int((df_ext["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
-            cerrados_ia_ext = int(df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
-            cerrados_hum_ext = tot_ext - cerrados_ia_ext
-
-            col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
-
-            with col_ext_pie:
-                st.markdown(f"""
-                <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS EN HORARIO EXTENDIDO</div>
-                    <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
-                    <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b></div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                if not df_ext.empty:
-                    df_ext_ag = df_ext[~df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(agentes_excluir_pie)]["agente_asignado"].value_counts().reset_index()
-                    df_ext_ag.columns = ["Agente", "Cantidad"]
-
-                    palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
-
-                    fig_pie_ext = go.Figure(data=[go.Pie(
-                        labels=df_ext_ag["Agente"],
-                        values=df_ext_ag["Cantidad"],
-                        hole=0.35,
-                        textinfo="label+percent",
-                        texttemplate="<b>%{label}</b><br>%{percent}",
+                    agentes_excluir_pie = [
+                        "monica", "mónica", "monica (bot)", 
+                        "sin asignar", "none", "nan", ""
+                    ]
+                    
+                    df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                    es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
+                    es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
+                    
+                    cnt_cerrados_ia = int(es_cerrado_ia.sum())
+                    cnt_cerrados_humanos = int((~es_omitido_torta).sum())
+                    pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
+    
+                    df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
+                    df_ag_pie.columns = ["Agente", "Cerrados"]
+    
+                    palette_donut = [
+                        "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
+                        "#7dd3fc", "#bae6fd", "#94a3b8", "#cbd5e1"
+                    ]
+    
+                    fig_pie_w = go.Figure(data=[go.Pie(
+                        labels=df_ag_pie["Agente"],
+                        values=df_ag_pie["Cerrados"],
+                        hole=0.45,
+                        textinfo="label+value+percent",
+                        texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
                         textposition="outside",
                         insidetextorientation="horizontal",
-                        pull=[0.02] * len(df_ext_ag),
-                        marker=dict(colors=palette_pie_wbr, line=dict(color="#0b1120", width=2)),
+                        marker=dict(colors=palette_donut, line=dict(color="#0b1120", width=2)),
                         showlegend=False
                     )])
-                    
-                    fig_pie_ext.update_layout(
+    
+                    fig_pie_w.update_layout(
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
-                        margin=dict(t=25, b=25, l=40, r=40),
-                        height=310
+                        font=dict(color="#cbd5e1", size=11),
+                        margin=dict(t=30, b=30, l=40, r=40),
+                        height=360
                     )
-                    st.plotly_chart(fig_pie_ext, use_container_width=True)
-
+                    st.plotly_chart(fig_pie_w, use_container_width=True)
+    
+                    cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
+                    empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
+                    num_agentes_activos = df_ag_pie["Agente"].nunique()
+                    prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
+    
                     st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
-                        <span><b style="color: #38bdf8;">Obs:</b> {cerrados_ia_ext} chats cerrados por IA, {cerrados_hum_ext} cerrados por agentes asignados.</span>
+                    <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                        <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Agente: <span style="color:#38bdf8; font-size:1.1rem; font-weight:700; margin-left:6px;">{prom_por_agente}</span></div>
+                        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">
+                            <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
+                        </div>
+                        <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
+                            🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA (Mónica).
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
-                else:
-                    st.info("Sin chats registrados en horario extendido para esta semana.")
-
-            with col_ext_dias:
-                st.markdown(f"""
-                <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">EFECTIVIDAD DE GESTIÓN EXTENDIDA</div>
-                    <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{pct_ext_cerrados}%</div>
-                    <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{tot_ext_cerrados}</b> cerrados de <b>{tot_ext}</b> recibidos</div>
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA
+                # =========================================================================
+                st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
+    
+                def calcular_metricas_tiempos_semana(df_sub):
+                    if df_sub.empty:
+                        return 0.0, 0.0, 0.0, 0.0
+    
+                    agentes_omitir_t = ["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"]
+                    
+                    dt_col = df_sub["created_at_dt"]
+                    dias_col = dt_col.dt.dayofweek
+                    horas_col = dt_col.dt.time
+                    fechas_col = dt_col.dt.strftime("%Y-%m-%d")
+    
+                    es_horario_1ra = (
+                        ((dias_col.isin([0, 1, 2, 3, 4])) & (horas_col >= time(8, 0)) & (horas_col <= time(17, 30))) |
+                        ((dias_col == 5) & (horas_col >= time(9, 0)) & (horas_col <= time(11, 45)))
+                    ) & (~fechas_col.isin(FERIADOS))
+    
+                    es_agente_1ra = (
+                        (df_sub["por_agente"].fillna("").astype(str).str.lower() == "no excluido") &
+                        (~df_sub["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitir_t))
+                    )
+    
+                    sub_1ra = df_sub[es_horario_1ra & es_agente_1ra].copy()
+                    sub_1ra["p1_num"] = pd.to_numeric(sub_1ra["primera_respuesta_min"], errors="coerce")
+                    s_1ra = sub_1ra["p1_num"].dropna()
+    
+                    prom_1ra_val = round(s_1ra.mean(), 2) if not s_1ra.empty else 0.0
+                    pct_sla_1ra_val = round(((s_1ra <= 2.0).sum() / len(s_1ra) * 100), 1) if not s_1ra.empty else 0.0
+    
+                    etiquetas_s = df_sub["etiquetas"].fillna("").astype(str).str.lower()
+                    es_sin_resp = etiquetas_s.str.contains("sin respuesta", na=False)
+                    es_horario_gest = df_sub["horario_evaluado"] != "fuera de horario"
+                    
+                    sub_gest = df_sub[
+                        es_agente_1ra & 
+                        es_horario_gest & 
+                        (~es_sin_resp) & 
+                        (df_sub["es_cerrado"] == True)
+                    ].copy()
+                    
+                    sub_gest["pg_num"] = pd.to_numeric(sub_gest["tiempo_resolucion_minutos"], errors="coerce")
+                    s_gest = sub_gest["pg_num"].dropna()
+    
+                    prom_gest_val = round(s_gest.mean(), 1) if not s_gest.empty else 0.0
+                    pct_sla_gest_val = round(((s_gest <= 60.0).sum() / len(s_gest) * 100), 1) if not s_gest.empty else 0.0
+    
+                    return prom_gest_val, prom_1ra_val, pct_sla_gest_val, pct_sla_1ra_val
+    
+                evol_tiempos = []
+                for _, s_row in df_5_semanas_info.iterrows():
+                    sub_w = df_wbr_base[
+                        (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                        (df_wbr_base["iso_week"] == s_row["iso_week"])
+                    ]
+                    p_gest_w, p_1ra_w, sla_g_w, sla_1_w = calcular_metricas_tiempos_semana(sub_w)
+                    evol_tiempos.append({
+                        "Semana": s_row["etiqueta_semana"],
+                        "Prom_Gestion": p_gest_w,
+                        "Prom_1ra": p_1ra_w,
+                        "SLA_Gestion": sla_g_w,
+                        "SLA_1ra": sla_1_w
+                    })
+    
+                df_evol_tiempos = pd.DataFrame(evol_tiempos)
+    
+                foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
+                foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
+                foco_sla_gest = df_evol_tiempos.iloc[-1]["SLA_Gestion"]
+                foco_sla_1ra = df_evol_tiempos.iloc[-1]["SLA_1ra"]
+    
+                prev_gest = df_evol_tiempos.iloc[-2]["Prom_Gestion"] if len(df_evol_tiempos) >= 2 else 0.0
+                prev_1ra = df_evol_tiempos.iloc[-2]["Prom_1ra"] if len(df_evol_tiempos) >= 2 else 0.0
+    
+                wow_gest_pct = round(((foco_gest - prev_gest) / prev_gest * 100), 2) if prev_gest > 0 else 0.0
+                wow_1ra_pct = round(((foco_1ra - prev_1ra) / prev_1ra * 100), 2) if prev_1ra > 0 else 0.0
+    
+                col_t1, col_t2 = st.columns(2)
+                col_t1.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">TIEMPO PROMEDIO TOTAL DE GESTIÓN</div>
+                    <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_gest} min</div>
                 </div>
                 """, unsafe_allow_html=True)
-
-                if not df_ext.empty:
-                    mapa_dias_nom = {
-                        0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
-                        4: "viernes", 5: "sábado", 6: "domingo"
-                    }
-                    df_ext["dia_nombre"] = df_ext["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
-                    orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
-                    
-                    df_dias_ext_cnt = df_ext["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
-                    df_dias_ext_cnt.columns = ["Día", "Cantidad"]
-
-                    df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
-
-                    fig_bar_dias_ext = go.Figure(go.Bar(
-                        x=df_dias_ext_cnt["Cantidad"],
-                        y=df_dias_ext_cnt["Día"],
-                        orientation="h",
-                        text=df_dias_ext_cnt["texto_barra"],
-                        textposition="outside",
-                        cliponaxis=False,
-                        marker=dict(
-                            color="#0284c7",
-                            cornerradius=5
-                        ),
-                        textfont=dict(color="#f8fafc", size=11, family="Segoe UI, sans-serif")
+    
+                col_t2.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">TIEMPO PROM. DE 1RA RESPUESTA</div>
+                    <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_1ra} min</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+    
+                col_g_gest, col_g_1ra = st.columns(2)
+    
+                with col_g_gest:
+                    st.markdown("##### Tiempo promedio total de gestión (min)")
+                    fig_bar_gest = go.Figure()
+                    fig_bar_gest.add_trace(go.Bar(
+                        x=df_evol_tiempos["Semana"],
+                        y=df_evol_tiempos["Prom_Gestion"],
+                        marker=dict(color="#0284c7", cornerradius=8),
+                        text=df_evol_tiempos["Prom_Gestion"].apply(lambda v: f"{v}"),
+                        textposition="inside",
+                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                     ))
-
-                    fig_bar_dias_ext.update_layout(
-                        title=dict(
-                            text="<b>Q. de chats ingresados por Día</b>",
-                            font=dict(color="#f8fafc", size=13),
-                            x=0.02, y=0.96
-                        ),
+                    fig_bar_gest.update_layout(
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#94a3b8", size=11),
-                        xaxis=dict(
-                            showgrid=False,
-                            showticklabels=False,
-                            zeroline=False
-                        ),
-                        yaxis=dict(
-                            autorange="reversed",
-                            tickfont=dict(color="#cbd5e1", size=11),
-                            showgrid=False
-                        ),
-                        margin=dict(t=35, b=10, l=10, r=25),
-                        height=310
+                        font=dict(color="#cbd5e1"),
+                        xaxis=dict(gridcolor="#1e293b", title=None),
+                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                        margin=dict(t=30, b=20, l=20, r=20),
+                        height=360
                     )
-                    st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
-
+                    st.plotly_chart(fig_bar_gest, use_container_width=True)
+    
+                    color_wow_g = "#34d399" if wow_gest_pct <= 0 else "#f43f5e"
+                    color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
+    
                     st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div>• <b>Cierres:</b> {tot_ext_cerrados} de los {tot_ext} chats ingresados lograron cerrarse.</div>
-                        <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
+                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <div><b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)</div>
+                        <div>SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b></div>
                     </div>
                     """, unsafe_allow_html=True)
+    
+                with col_g_1ra:
+                    st.markdown("##### Tiempo promedio primera respuesta")
+                    fig_bar_1ra = go.Figure()
+                    fig_bar_1ra.add_trace(go.Bar(
+                        x=df_evol_tiempos["Semana"],
+                        y=df_evol_tiempos["Prom_1ra"],
+                        marker=dict(color="#0369a1", cornerradius=8),
+                        text=df_evol_tiempos["Prom_1ra"].apply(lambda v: f"{v}"),
+                        textposition="inside",
+                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                    ))
+                    fig_bar_1ra.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1"),
+                        xaxis=dict(gridcolor="#1e293b", title=None),
+                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                        margin=dict(t=30, b=20, l=20, r=20),
+                        height=360
+                    )
+                    st.plotly_chart(fig_bar_1ra, use_container_width=True)
+    
+                    color_wow_1 = "#34d399" if wow_1ra_pct <= 0 else "#f43f5e"
+                    color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
+    
+                    st.markdown(f"""
+                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <div><b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)</div>
+                        <div>SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b> <span style="font-size: 0.74rem; color: #94a3b8;">(Sin horario extendido)</span></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO
+                # =========================================================================
+                st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
+    
+                if "fecha_calificacion_dt" in df_target.columns:
+                    df_target_csat = df_wbr_base[
+                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                        (df_wbr_base["rating"].notna()) &
+                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == target_year) &
+                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == target_week)
+                    ].copy()
                 else:
-                    st.info("Sin registros diarios de horario extendido.")
-    else:
-        st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
-
-with tab_admin:
-    st.markdown("### Panel de Administración y Configuración")
-
-    if not st.session_state["admin_authenticated"]:
-        col_pass1, col_pass2 = st.columns([2, 1])
-        with col_pass1:
-            with st.form("form_login_admin"):
-                input_pass = st.text_input("Contraseña de Administrador", type="password")
-                btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
-                
-                if btn_login:
-                    if input_pass == ADMIN_PASSWORD:
-                        st.session_state["admin_authenticated"] = True
-                        st.success("Acceso concedido.")
-                        st.rerun()
+                    df_target_csat = df_target[
+                        (df_target["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                        (df_target["rating"].notna())
+                    ].copy()
+    
+                df_target_csat["rating_num"] = pd.to_numeric(df_target_csat["rating"], errors="coerce")
+                df_target_csat = df_target_csat.dropna(subset=["rating_num"])
+    
+                tot_evaluados = len(df_target_csat)
+                tot_sin_calificar = max(0, tot_sem_rec - tot_evaluados)
+                pct_calificados = round((tot_evaluados / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+                pct_sin_calificar = round((tot_sin_calificar / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+    
+                cnt_5 = int((df_target_csat["rating_num"] == 5).sum())
+                cnt_4 = int((df_target_csat["rating_num"] == 4).sum())
+                cnt_3 = int((df_target_csat["rating_num"] == 3).sum())
+                cnt_2 = int((df_target_csat["rating_num"] == 2).sum())
+                cnt_1 = int((df_target_csat["rating_num"] == 1).sum())
+    
+                tot_positivas = cnt_5 + cnt_4
+                tot_negativas = cnt_3 + cnt_2 + cnt_1
+    
+                def f_pct(c, t):
+                    return f"{round((c / t * 100), 1)}%" if t > 0 else "0.0%"
+    
+                c_c1, c_c2, c_c3, c_c4 = st.columns(4)
+    
+                c_c1.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
+                    <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                c_c2.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">SIN CALIFICAR</div>
+                    <div class="metric-card-value" style="color: #38bdf8; font-size: 2.2rem;">{pct_sin_calificar}%</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_sin_calificar:,} conversaciones</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                c_c3.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="metric-card-title" style="justify-content: center;">CALIFICADOS</div>
+                    <div class="metric-card-value" style="color: #34d399; font-size: 2.2rem;">{pct_calificados}%</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_evaluados:,} encuestas recibidas</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                c_c4.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #818cf8; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                    <div class="metric-card-title" style="font-size: 0.7rem; margin-bottom: 3px;">TOP CALIFICACIONES</div>
+                    <div style="font-size: 0.75rem; line-height: 1.35; color: #cbd5e1;">
+                        • <b>5★:</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)}) | <b>4★:</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
+                        • <b>3★:</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)}) | <b>2★:</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
+                        • <b>1★:</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+    
+                col_p_niv, col_p_sent = st.columns([1.3, 1])
+    
+                with col_p_niv:
+                    st.markdown("##### Q. de Puntuaciones por Nivel (Solo Calificados)")
+    
+                    mapa_escala = {
+                        5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
+                    }
+                    
+                    df_target["nivel_norm"] = (
+                        df_target["nivel"].fillna("Niv-L1")
+                        .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+                    )
+                    df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
+    
+                    df_target_calificados = df_target[df_target["rating_int"] > 0].copy()
+                    df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
+    
+                    orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo"]
+                    df_niv_grp = df_target_calificados.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
+    
+                    fig_niv = px.bar(
+                        df_niv_grp,
+                        x="puntuacion_str",
+                        y="Cantidad",
+                        color="nivel_norm",
+                        barmode="group",
+                        category_orders={"puntuacion_str": orden_puntuacion},
+                        color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#0369a1"},
+                        text="Cantidad"
+                    )
+                    fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
+                    fig_niv.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1", size=11),
+                        xaxis=dict(gridcolor="#1e293b", title=None),
+                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
+                        margin=dict(t=30, b=20, l=20, r=20),
+                        height=360
+                    )
+                    st.plotly_chart(fig_niv, use_container_width=True)
+    
+                with col_p_sent:
+                    st.markdown("##### Sentimiento de Usuarios (CSAT Positivo vs Negativo)")
+    
+                    df_sent = pd.DataFrame([
+                        {"Sentimiento": "Positivas (≥4★)", "Cantidad": tot_positivas},
+                        {"Sentimiento": "Negativas (≤3★)", "Cantidad": tot_negativas}
+                    ])
+                    df_sent = df_sent[df_sent["Cantidad"] > 0]
+    
+                    fig_sent = go.Figure(data=[go.Pie(
+                        labels=df_sent["Sentimiento"],
+                        values=df_sent["Cantidad"],
+                        hole=0.45,
+                        textinfo="label+value+percent",
+                        texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                        textposition="outside",
+                        marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#0b1120", width=2)),
+                        showlegend=False
+                    )])
+                    fig_sent.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1", size=11),
+                        margin=dict(t=30, b=30, l=30, r=30),
+                        height=360
+                    )
+                    st.plotly_chart(fig_sent, use_container_width=True)
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1
+                # =========================================================================
+                st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
+    
+                df_l1_neg = df_target[
+                    (df_target["nivel_norm"] == "Niv-L1") &
+                    (df_target["rating_int"].isin([1, 2, 3]))
+                ].copy()
+    
+                tot_l1_neg = len(df_l1_neg)
+                pct_l1_del_total = round((tot_l1_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+    
+                col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
+    
+                with col_card_l1:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L1</div>
+                        <div class="metric-card-value" style="font-size: 3.4rem; color: #f59e0b; margin: 8px 0;">{tot_l1_neg}</div>
+                        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                            <b>{pct_l1_del_total}%</b> del total de reclamos ({tot_negativas} casos)
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                with col_matriz_l1:
+                    if not df_l1_neg.empty:
+                        df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                        
+                        pivot_l1 = df_l1_neg.pivot_table(
+                            index="agente_nom",
+                            columns="rating_int",
+                            values="id",
+                            aggfunc="count",
+                            fill_value=0
+                        ).reset_index()
+    
+                        for col_star in [3, 2, 1]:
+                            if col_star not in pivot_l1.columns:
+                                pivot_l1[col_star] = 0
+    
+                        pivot_l1["Todos los casos"] = pivot_l1[3] + pivot_l1[2] + pivot_l1[1]
+                        pivot_l1["% del Total a L1"] = pivot_l1["Todos los casos"].apply(
+                            lambda c: f"{round((c / tot_l1_neg * 100), 1)}%" if tot_l1_neg > 0 else "0%"
+                        )
+    
+                        pivot_l1 = pivot_l1.rename(columns={
+                            "agente_nom": "Agente Asignado",
+                            3: "Regular (3★)",
+                            2: "Malo (2★)",
+                            1: "Muy malo (1★)"
+                        })
+    
+                        cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
+                        st.dataframe(pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
                     else:
-                        st.error("Contraseña incorrecta.")
-    else:
-        st.success("Sesión de administración activa.")
-        if st.button("Cerrar Sesión Admin"):
-            st.session_state["admin_authenticated"] = False
-            st.rerun()
+                        st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
+    
+                if not df_l1_neg.empty:
+                    df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
+                    df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
+                        lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+                    )
+                    df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
+    
+                    filas_html_l1 = []
+                    for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
+                        filas = grp.to_dict("records")
+                        rowspan_cnt = len(filas)
+                        for idx, row_item in enumerate(filas):
+                            if idx == 0:
+                                td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>"
+                            else:
+                                td_calif = ""
+                            filas_html_l1.append(
+                                f"<tr>{td_calif}<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_normalizado']}</td>"
+                                f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center; font-weight:700; color:#38bdf8;'>{row_item['Cantidad']}</td></tr>"
+                            )
+    
+                    html_tabla_l1 = f"""
+                    <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
+                        <thead>
+                            <tr style='background-color:#0284c7; color:white;'>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:28%;'>Calificación</th>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo Normalizado</th>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:15%;'>Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(filas_html_l1)}
+                        </tbody>
+                    </table>
+                    """
+                    st.markdown(html_tabla_l1, unsafe_allow_html=True)
+                else:
+                    st.caption("Sin motivos registrados en L1.")
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
+                # =========================================================================
+                st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Casos Escalados a L3 / Jira")
+    
+                df_l3_neg = df_target[
+                    (df_target["nivel_norm"] == "Niv-L3") &
+                    (df_target["rating_int"].isin([1, 2, 3]))
+                ].copy()
+    
+                tot_l3_neg = len(df_l3_neg)
+                pct_l3_sobre_total_neg = round((tot_l3_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+    
+                col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
+    
+                with col_card_l3:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS ESCALADOS L3 / JIRA</div>
+                        <div class="metric-card-value" style="font-size: 3.4rem; color: #ef4444; margin: 8px 0;">{tot_l3_neg}</div>
+                        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                            <b>{pct_l3_sobre_total_neg}%</b> del total de reclamos ({tot_negativas} casos)
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                with col_matriz_l3:
+                    if not df_l3_neg.empty:
+                        df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                        pivot_l3 = df_l3_neg.pivot_table(
+                            index="agente_nom",
+                            columns="rating_int",
+                            values="id",
+                            aggfunc="count",
+                            fill_value=0
+                        ).reset_index()
+    
+                        for col_star in [3, 2, 1]:
+                            if col_star not in pivot_l3.columns:
+                                pivot_l3[col_star] = 0
+    
+                        pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
+                        pivot_l3["% del Total L3"] = pivot_l3["Todos los casos"].apply(
+                            lambda c: f"{round((c / tot_l3_neg * 100), 1)}%" if tot_l3_neg > 0 else "0%"
+                        )
+    
+                        pivot_l3 = pivot_l3.rename(columns={
+                            "agente_nom": "Agente Asignado",
+                            3: "Regular (3★)",
+                            2: "Malo (2★)",
+                            1: "Muy malo (1★)"
+                        })
+    
+                        cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total L3"]
+                        st.dataframe(pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
+                    else:
+                        st.info("🟢 No hay evaluaciones negativas registradas en Nivel 3 para esta semana.")
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("##### Detalle de Casos L3 & Tickets Jira Relacionados")
+    
+                if not df_l3_neg.empty:
+                    df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
+                        lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+                    )
+                    df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
+                    df_l3_neg["jira_clean"] = df_l3_neg["ticket_relacionado"].fillna("").replace(["", "None", "nan"], "Sin ticket vinculado")
+                    df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
+                    df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
+    
+                    df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
+    
+                    filas_html_l3 = []
+                    for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
+                        filas = grp.to_dict("records")
+                        rowspan_cnt = len(filas)
+                        for idx, row_item in enumerate(filas):
+                            if idx == 0:
+                                td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación_HTML']}</td>"
+                            else:
+                                td_calif = ""
+                            
+                            ticket_badge = (
+                                f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600;'>{row_item['jira_clean']}</span>"
+                                if row_item['jira_clean'] != "Sin ticket vinculado"
+                                else f"<span style='color:#64748b;'>{row_item['jira_clean']}</span>"
+                            )
+    
+                            filas_html_l3.append(
+                                f"<tr>{td_calif}"
+                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_clean']}</td>"
+                                f"<td style='padding:10px 14px; border:1px solid #334155;'>{ticket_badge}</td>"
+                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{row_item['tenant_clean']}</td>"
+                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{row_item['agente_clean']}</td></tr>"
+                            )
+    
+                    html_tabla_l3 = f"""
+                    <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
+                        <thead>
+                            <tr style='background-color:#0284c7; color:white;'>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Calificación</th>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Ticket Jira / Tarea</th>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:18%;'>Tenant</th>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:16%;'>Agente</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(filas_html_l3)}
+                        </tbody>
+                    </table>
+                    """
+                    st.markdown(html_tabla_l3, unsafe_allow_html=True)
+                else:
+                    st.caption("Sin casos L3 registrados.")
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 7: EVOLUTIVO CSAT & RATIO CONTACTOS POR EMPRESA
+                # =========================================================================
+                st.markdown(f"#### 7. WBR | {semana_seleccionada_str} — Evolutivo de Satisfacción & Frecuencia por Empresa")
+    
+                evol_csat = []
+                for _, s_row in df_5_semanas_info.iterrows():
+                    if "fecha_calificacion_dt" in df_wbr_base.columns:
+                        sub_csat = df_wbr_base[
+                            (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                            (df_wbr_base["rating"].notna()) &
+                            (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == s_row["iso_year"]) &
+                            (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == s_row["iso_week"])
+                        ].copy()
+                    else:
+                        sub_csat = df_wbr_base[
+                            (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                            (df_wbr_base["rating"].notna()) &
+                            (df_wbr_base["iso_year"] == s_row["iso_year"]) &
+                            (df_wbr_base["iso_week"] == s_row["iso_week"])
+                        ].copy()
+    
+                    sub_csat["r_num"] = pd.to_numeric(sub_csat["rating"], errors="coerce")
+                    sub_csat = sub_csat.dropna(subset=["r_num"])
+                    tot_c = len(sub_csat)
+                    pos_c = int((sub_csat["r_num"] >= 4).sum())
+                    pct_c = round((pos_c / tot_c * 100), 1) if tot_c > 0 else 0.0
+    
+                    sub_vol = df_wbr_base[
+                        (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                        (df_wbr_base["iso_week"] == s_row["iso_week"])
+                    ]
+                    tot_chats_w = len(sub_vol)
+                    empresas_w = sub_vol["company"].nunique() if "company" in sub_vol.columns else 0
+                    ratio_empresa = round(tot_chats_w / empresas_w, 2) if empresas_w > 0 else 0.0
+    
+                    evol_csat.append({
+                        "Semana": s_row["etiqueta_semana"],
+                        "CSAT": pct_c,
+                        "Ratio_Empresa": ratio_empresa
+                    })
+    
+                df_evol_csat = pd.DataFrame(evol_csat)
+    
+                foco_csat = df_evol_csat.iloc[-1]["CSAT"]
+                prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
+                diff_csat = round(foco_csat - prev_csat, 2)
+                foco_ratio = df_evol_csat.iloc[-1]["Ratio_Empresa"]
+    
+                col_g_csat, col_g_ratio = st.columns(2)
+    
+                with col_g_csat:
+                    st.markdown("##### Satisfacción del Cliente (CSAT %)")
+                    fig_bar_csat = go.Figure()
+                    fig_bar_csat.add_trace(go.Bar(
+                        x=df_evol_csat["Semana"],
+                        y=df_evol_csat["CSAT"],
+                        marker=dict(color="#0284c7", cornerradius=8),
+                        text=df_evol_csat["CSAT"].apply(lambda v: f"{v}%"),
+                        textposition="inside",
+                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                    ))
+                    fig_bar_csat.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1"),
+                        xaxis=dict(gridcolor="#1e293b", title=None),
+                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                        margin=dict(t=30, b=20, l=20, r=20),
+                        height=360
+                    )
+                    st.plotly_chart(fig_bar_csat, use_container_width=True)
+    
+                    color_diff_csat = "#34d399" if diff_csat >= 0 else "#f43f5e"
+                    st.markdown(f"""
+                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <b style="color: {color_diff_csat}; font-size: 1.1rem;">{diff_csat:+.2f}% CSAT</b>
+                        <span style="color: #cbd5e1; font-size: 0.85rem;">{semana_seleccionada_str.split(' ')[0]} {target_week} ({foco_csat}%) vs Semana {sem_prev_num} ({prev_csat}%)</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                with col_g_ratio:
+                    st.markdown("##### Evolución Semana a Semana (Promedio Contactos por Empresa)")
+                    fig_bar_ratio = go.Figure()
+                    fig_bar_ratio.add_trace(go.Bar(
+                        x=df_evol_csat["Semana"],
+                        y=df_evol_csat["Ratio_Empresa"],
+                        marker=dict(color="#0369a1", cornerradius=8),
+                        text=df_evol_csat["Ratio_Empresa"].apply(lambda v: f"{v:.2f}"),
+                        textposition="inside",
+                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                    ))
+                    fig_bar_ratio.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1"),
+                        xaxis=dict(gridcolor="#1e293b", title=None),
+                        yaxis=dict( showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                        margin=dict(t=30, b=20, l=20, r=20),
+                        height=360
+                    )
+                    st.plotly_chart(fig_bar_ratio, use_container_width=True)
+    
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                        <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Empresa</div>
+                        <div class="metric-card-value" style="color: #38bdf8; font-size: 1.9rem; margin: 2px 0;">{foco_ratio:.2f}</div>
+                        <div style="font-size: 0.8rem; color: #34d399; font-weight: 600;">{pct_sem_cer}% Conversaciones Cerradas</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                st.markdown("---")
+    
+                # =========================================================================
+                # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
+                # =========================================================================
+                st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
+    
+                df_ext = df_target[df_target["horario_evaluado"] == "extendido"].copy()
+                tot_ext = len(df_ext)
+                tot_ext_cerrados = int(df_ext["es_cerrado"].sum())
+                pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
+    
+                dias_num = df_ext["created_at_dt"].dt.dayofweek
+                tot_domingo = int((dias_num == 6).sum())
+                derivados_l3_ext = int((df_ext["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
+                cerrados_ia_ext = int(df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
+                cerrados_hum_ext = tot_ext - cerrados_ia_ext
+    
+                col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
+    
+                with col_ext_pie:
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS EN HORARIO EXTENDIDO</div>
+                        <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
+                        <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                    if not df_ext.empty:
+                        df_ext_ag = df_ext[~df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(agentes_excluir_pie)]["agente_asignado"].value_counts().reset_index()
+                        df_ext_ag.columns = ["Agente", "Cantidad"]
+    
+                        palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
+    
+                        fig_pie_ext = go.Figure(data=[go.Pie(
+                            labels=df_ext_ag["Agente"],
+                            values=df_ext_ag["Cantidad"],
+                            hole=0.35,
+                            textinfo="label+percent",
+                            texttemplate="<b>%{label}</b><br>%{percent}",
+                            textposition="outside",
+                            insidetextorientation="horizontal",
+                            pull=[0.02] * len(df_ext_ag),
+                            marker=dict(colors=palette_pie_wbr, line=dict(color="#0b1120", width=2)),
+                            showlegend=False
+                        )])
+                        
+                        fig_pie_ext.update_layout(
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
+                            margin=dict(t=25, b=25, l=40, r=40),
+                            height=310
+                        )
+                        st.plotly_chart(fig_pie_ext, use_container_width=True)
+    
+                        st.markdown(f"""
+                        <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
+                            <span><b style="color: #38bdf8;">Obs:</b> {cerrados_ia_ext} chats cerrados por IA, {cerrados_hum_ext} cerrados por agentes asignados.</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.info("Sin chats registrados en horario extendido para esta semana.")
+    
+                with col_ext_dias:
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">EFECTIVIDAD DE GESTIÓN EXTENDIDA</div>
+                        <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{pct_ext_cerrados}%</div>
+                        <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{tot_ext_cerrados}</b> cerrados de <b>{tot_ext}</b> recibidos</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                    if not df_ext.empty:
+                        mapa_dias_nom = {
+                            0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
+                            4: "viernes", 5: "sábado", 6: "domingo"
+                        }
+                        df_ext["dia_nombre"] = df_ext["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
+                        orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+                        
+                        df_dias_ext_cnt = df_ext["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
+                        df_dias_ext_cnt.columns = ["Día", "Cantidad"]
+    
+                        df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
+    
+                        fig_bar_dias_ext = go.Figure(go.Bar(
+                            x=df_dias_ext_cnt["Cantidad"],
+                            y=df_dias_ext_cnt["Día"],
+                            orientation="h",
+                            text=df_dias_ext_cnt["texto_barra"],
+                            textposition="outside",
+                            cliponaxis=False,
+                            marker=dict(
+                                color="#0284c7",
+                                cornerradius=5
+                            ),
+                            textfont=dict(color="#f8fafc", size=11, family="Segoe UI, sans-serif")
+                        ))
+    
+                        fig_bar_dias_ext.update_layout(
+                            title=dict(
+                                text="<b>Q. de chats ingresados por Día</b>",
+                                font=dict(color="#f8fafc", size=13),
+                                x=0.02, y=0.96
+                            ),
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            font=dict(color="#94a3b8", size=11),
+                            xaxis=dict(
+                                showgrid=False,
+                                showticklabels=False,
+                                zeroline=False
+                            ),
+                            yaxis=dict(
+                                autorange="reversed",
+                                tickfont=dict(color="#cbd5e1", size=11),
+                                showgrid=False
+                            ),
+                            margin=dict(t=35, b=10, l=10, r=25),
+                            height=310
+                        )
+                        st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
+    
+                        st.markdown(f"""
+                        <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                            <div>• <b>Cierres:</b> {tot_ext_cerrados} de los {tot_ext} chats ingresados lograron cerrarse.</div>
+                            <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.info("Sin registros diarios de horario extendido.")
+        else:
+            st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
+        pass
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ==========================================
-        # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
-        # ==========================================
-        USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital"
-        es_super_usuario = (
-            st.session_state.get("user_email", "").strip().lower() == USUARIO_ADMIN_EMAIL.lower()
-            or st.session_state.get("admin_authenticated", False)
-        )
-
-        if es_super_usuario:
+if tab_admin is not None:
+    with tab_admin:
+        st.markdown("### Panel de Administración y Configuración")
+    
+        if not st.session_state["admin_authenticated"]:
+            col_pass1, col_pass2 = st.columns([2, 1])
+            with col_pass1:
+                with st.form("form_login_admin"):
+                    input_pass = st.text_input("Contraseña de Administrador", type="password")
+                    btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
+                    
+                    if btn_login:
+                        if input_pass == ADMIN_PASSWORD:
+                            st.session_state["admin_authenticated"] = True
+                            st.success("Acceso concedido.")
+                            st.rerun()
+                        else:
+                            st.error("Contraseña incorrecta.")
+        else:
+            st.success("Sesión de administración activa.")
+            if st.button("Cerrar Sesión Admin"):
+                st.session_state["admin_authenticated"] = False
+                st.rerun()
+    
+            st.markdown("<br>", unsafe_allow_html=True)
+    
+            # ==========================================
+            # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
+            # ==========================================
+            USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital"
+            es_super_usuario = (
+                st.session_state.get("user_email", "").strip().lower() == USUARIO_ADMIN_EMAIL.lower()
+                or st.session_state.get("admin_authenticated", False)
+            )
+    
+            if es_super_usuario:
+                with st.container():
+                    st.markdown("""
+                    <div class="admin-card">
+                        <h4 style="margin-top:0; color:#38bdf8;">🤖 Estado y Control de Evolución API (WhatsApp Bot)</h4>
+                        <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                            Monitoreo del servicio de notificaciones y reinicio forzado en Render.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+                    col_status1, col_status2 = st.columns([2, 1])
+    
+                    # Consulta de salud del servicio en FastAPI
+                    estado_bot = "CRITICAL"
+                    wa_state = "disconnected"
+                    try:
+                        res_health = requests.get(f"{NOTIFICADOR_API_URL.rstrip('/')}/health-status", timeout=4)
+                        if res_health.status_code == 200:
+                            data_h = res_health.json()
+                            estado_bot = data_h.get("status_general", "CRITICAL")
+                            wa_state = data_h.get("whatsapp_state", "disconnected")
+                    except Exception as e:
+                        estado_bot = "CRITICAL"
+                        wa_state = "offline"
+    
+                    with col_status1:
+                        if estado_bot == "OK":
+                            st.markdown(f"""
+                            <div class="metric-card" style="border-left: 4px solid #10b981;">
+                                <div class="metric-card-title">Estado del Bot WhatsApp</div>
+                                <div class="metric-card-value" style="color: #34d399;">🟢 Operativo ({wa_state})</div>
+                                <div class="metric-card-sub">Sesión activa y conectada</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div class="metric-card" style="border-left: 4px solid #ef4444;">
+                                <div class="metric-card-title">Estado del Bot WhatsApp</div>
+                                <div class="metric-card-value" style="color: #f87171;">🔴 Desconectado ({wa_state})</div>
+                                <div class="metric-card-sub">El Auto-Healing intentará reconectar automáticamente</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+    
+                    with col_status2:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
+                            with st.spinner("Enviando orden de reinicio a Render..."):
+                                try:
+                                    headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
+                                    res_req = requests.post(f"{NOTIFICADOR_API_URL.rstrip('/')}/reiniciar-servicio", headers=headers, timeout=10)
+                                    res_json = res_req.json()
+    
+                                    if res_json.get("status") == "success":
+                                        st.success("✅ Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
+                                    else:
+                                        st.error(f"❌ Error: {res_json.get('message')}")
+                                except Exception as ex_r:
+                                    st.error(f"❌ Error al comunicar con la API: {ex_r}")
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+    
             with st.container():
                 st.markdown("""
                 <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">🤖 Estado y Control de Evolución API (WhatsApp Bot)</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                        Monitoreo del servicio de notificaciones y reinicio forzado en Render.
+                    <h4 style="margin-top:0; color:#38bdf8;">Criterios de Cálculo de Tiempos y SLA</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
+                        <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
+                        <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
-
-                col_status1, col_status2 = st.columns([2, 1])
-
-                # Consulta de salud del servicio en FastAPI
-                estado_bot = "CRITICAL"
-                wa_state = "disconnected"
-                try:
-                    res_health = requests.get(f"{NOTIFICADOR_API_URL.rstrip('/')}/health-status", timeout=4)
-                    if res_health.status_code == 200:
-                        data_h = res_health.json()
-                        estado_bot = data_h.get("status_general", "CRITICAL")
-                        wa_state = data_h.get("whatsapp_state", "disconnected")
-                except Exception as e:
-                    estado_bot = "CRITICAL"
-                    wa_state = "offline"
-
-                with col_status1:
-                    if estado_bot == "OK":
-                        st.markdown(f"""
-                        <div class="metric-card" style="border-left: 4px solid #10b981;">
-                            <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                            <div class="metric-card-value" style="color: #34d399;">🟢 Operativo ({wa_state})</div>
-                            <div class="metric-card-sub">Sesión activa y conectada</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div class="metric-card" style="border-left: 4px solid #ef4444;">
-                            <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                            <div class="metric-card-value" style="color: #f87171;">🔴 Desconectado ({wa_state})</div>
-                            <div class="metric-card-sub">El Auto-Healing intentará reconectar automáticamente</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                with col_status2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
-                        with st.spinner("Enviando orden de reinicio a Render..."):
-                            try:
-                                headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
-                                res_req = requests.post(f"{NOTIFICADOR_API_URL.rstrip('/')}/reiniciar-servicio", headers=headers, timeout=10)
-                                res_json = res_req.json()
-
-                                if res_json.get("status") == "success":
-                                    st.success("✅ Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
-                                else:
-                                    st.error(f"❌ Error: {res_json.get('message')}")
-                            except Exception as ex_r:
-                                st.error(f"❌ Error al comunicar con la API: {ex_r}")
-
+    
             st.markdown("<br>", unsafe_allow_html=True)
-
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Criterios de Cálculo de Tiempos y SLA</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
-                    <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
-                    <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas (Segundo Plano)</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    El proceso se ejecuta en un <b>hilo paralelo libre de desconexión</b>.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            try:
-                res_count = supabase.table("conversaciones").select("id", count="exact").execute()
-                total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
-            except Exception:
-                total_registros_db = 0
-
-            c_meta1, c_meta2 = st.columns([1, 2])
-            with c_meta1:
-                st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #10b981;">
-                    <div class="metric-card-title">Total Registros en Supabase</div>
-                    <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
-                    <div class="metric-card-sub">Conversaciones guardadas</div>
+            
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas (Segundo Plano)</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                        El proceso se ejecuta en un <b>hilo paralelo libre de desconexión</b>.
+                    </p>
                 </div>
                 """, unsafe_allow_html=True)
-            
-            with c_meta2:
-                if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
-                    st.cache_data.clear()
-                    st.rerun()
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            sync_info = GLOBAL_SYNC_STATE
-
-            if sync_info["status"] == "running":
-                st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
-                time_lib.sleep(2)
-                st.rerun()
-            elif sync_info["status"] == "completed":
-                st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
-                if st.button("Limpiar Mensaje de Confirmación"):
-                    GLOBAL_SYNC_STATE["status"] = "idle"
-                    st.cache_data.clear()
-                    st.rerun()
-            elif sync_info["status"] == "error":
-                st.error(f"❌ Error en la sincronización: {sync_info['error']}")
-                if st.button("Reintentar / Limpiar Error"):
-                    GLOBAL_SYNC_STATE["status"] = "idle"
-                    st.rerun()
-
-            col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
-            f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
-            f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
-            
-            btn_bloqueado = (sync_info["status"] == "running")
-            
-            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
-                if SYNC_AVAILABLE:
-                    GLOBAL_SYNC_STATE["status"] = "running"
-                    GLOBAL_SYNC_STATE["processed"] = 0
-                    GLOBAL_SYNC_STATE["log"] = ""
-                    GLOBAL_SYNC_STATE["error"] = None
-
-                    def tarea_sync_paralela(f_inicio, f_final):
-                        try:
-                            def cb_progreso(proc, tot):
-                                GLOBAL_SYNC_STATE["processed"] = proc
-
-                            tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
-                            GLOBAL_SYNC_STATE["status"] = "completed"
-                            tz_py = timezone(timedelta(hours=-3))
-                            hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
-
-                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
-                        except Exception as ex_thread:
-                            GLOBAL_SYNC_STATE["status"] = "error"
-                            GLOBAL_SYNC_STATE["error"] = str(ex_thread)
-
-                    hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta), daemon=True)
-                    hilo_sync.start()
-                    st.rerun()
-                else:
-                    st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
-                    
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
-            
-            with col_cfg1:
-                st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
-                cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
-                cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
-            
-            with col_cfg2:
-                st.markdown("<b>Umbrales de SLA (Minutos)</b>", unsafe_allow_html=True)
-                cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
-                cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
-
-            with col_cfg3:
-                st.markdown("<b>Alerta de Chat Nuevo</b>", unsafe_allow_html=True)
-                cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Guardar Configuración de Parámetros", use_container_width=True):
-                st.session_state["auto_refresh"] = cfg_auto
-                st.session_state["refresh_interval"] = cfg_interval
-                st.session_state["sla_1ra_th"] = cfg_sla_1ra
-                st.session_state["sla_gest_th"] = cfg_sla_gest
-                st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
-                st.success("Configuración actualizada correctamente.")
-                st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">3. Gestion de Usuarios Autorizados</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
-                with st.form("form_nuevo_usuario"):
-                    col_u1, col_u2, col_u3 = st.columns(3)
-                    n_nombre = col_u1.text_input("Nombre / Agente:")
-                    n_email = col_u2.text_input("Correo Electronico:")
-                    n_pass = col_u3.text_input("Contraseña de Acceso:")
-                    btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
-
-                    if btn_crear_u:
-                        if n_email.strip() and n_pass.strip() and n_nombre.strip():
-                            try:
-                                supabase.table("usuarios_autorizados").insert({
-                                    "email": n_email.strip().lower(),
-                                    "password": n_pass.strip(),
-                                    "nombre": n_nombre.strip(),
-                                    "activo": True
-                                }).execute()
-                                st.success(f"Usuario {n_email} creado exitosamente.")
-                                st.rerun()
-                            except Exception as ex:
-                                st.error(f"Error al registrar usuario: {str(ex)}")
-                        else:
-                            st.warning("Completa todos los campos obligatorios.")
-
-            try:
-                res_users = supabase.table("usuarios_autorizados").select("*").order("created_at", desc=True).execute()
-                df_users = pd.DataFrame(res_users.data)
+    
+                try:
+                    res_count = supabase.table("conversaciones").select("id", count="exact").execute()
+                    total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
+                except Exception:
+                    total_registros_db = 0
+    
+                c_meta1, c_meta2 = st.columns([1, 2])
+                with c_meta1:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #10b981;">
+                        <div class="metric-card-title">Total Registros en Supabase</div>
+                        <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
+                        <div class="metric-card-sub">Conversaciones guardadas</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-                if not df_users.empty:
-                    st.markdown("<b>Listado de Usuarios Registrados:</b>", unsafe_allow_html=True)
-                    st.dataframe(
-                        df_users[["id", "nombre", "email", "password", "activo", "created_at"]],
-                        column_config={
-                            "id": "ID",
-                            "nombre": "Nombre",
-                            "email": "Correo",
-                            "password": "Contraseña",
-                            "activo": st.column_config.CheckboxColumn("Acceso Activo"),
-                            "created_at": "Fecha Alta"
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-
-                    col_edit1, col_edit2 = st.columns(2)
-                    id_toggle = col_edit1.number_input("ID de usuario a activar/desactivar:", min_value=1, step=1)
-                    if col_edit2.button("Alternar Estado (Activo/Inactivo)", use_container_width=True):
-                        usr_actual = df_users[df_users["id"] == id_toggle]
-                        if not usr_actual.empty:
-                            nuevo_estado = not bool(usr_actual.iloc[0]["activo"])
-                            supabase.table("usuarios_autorizados").update({"activo": nuevo_estado}).eq("id", id_toggle).execute()
-                            st.success(f"Estado del usuario ID {id_toggle} actualizado.")
-                            st.rerun()
-                        else:
-                            st.error("ID de usuario no encontrado.")
-                else:
-                    st.info("No hay usuarios registrados aún en la base de datos.")
-            except Exception as e:
-                st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
-
-        # GESTIÓN DINÁMICA DE MOTIVOS CSAT
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">4. Gestión de Motivos Normalizados (CSAT)</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Crea y desactiva los motivos que se muestran al categorizar chats negativos.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Formulario para agregar nuevo motivo
-            with st.form("form_nuevo_motivo_csat"):
-                col_m1, col_m2 = st.columns([3, 1])
-                nuevo_motivo_input = col_m1.text_input("Nuevo Motivo:")
-                btn_guardar_motivo = col_m2.form_submit_button("Agregar Motivo", use_container_width=True)
-
-                if btn_guardar_motivo:
-                    txt_motivo = nuevo_motivo_input.strip()
-                    if txt_motivo:
-                        try:
-                            supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
-                            st.success(f"Motivo '{txt_motivo}' creado con éxito.")
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as ex:
-                            st.error(f"Error o motivo duplicado: {ex}")
-                    else:
-                        st.warning("Escribe un nombre para el motivo.")
-
-            # Listado de motivos con opción de Cambiar Estado
-            try:
-                res_mot = supabase.table("motivos_csat").select("*").order("id", desc=False).execute()
-                df_motivos = pd.DataFrame(res_mot.data or [])
-                
-                if not df_motivos.empty:
-                    st.markdown("<b>Motivos Configurados Actualmente:</b>", unsafe_allow_html=True)
-                    st.dataframe(
-                        df_motivos[["id", "nombre", "activo"]],
-                        column_config={
-                            "id": "ID",
-                            "nombre": "Nombre del Motivo",
-                            "activo": st.column_config.CheckboxColumn("Estado Activo")
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-
-                    col_dis1, col_dis2 = st.columns([2, 1])
-                    
-                    motivos_dict = {f"ID {r['id']}: {r['nombre']} ({'Activo' if r['activo'] else 'Inactivo'})": r['id'] for _, r in df_motivos.iterrows()}
-                    motivo_seleccionado_str = col_dis1.selectbox("Seleccionar Motivo a Cambiar Estado:", options=list(motivos_dict.keys()))
-                    
-                    if col_dis2.button("Alternar Estado (Activar/Deshabilitar)", use_container_width=True):
-                        id_motivo_sel = motivos_dict[motivo_seleccionado_str]
-                        motivo_row = df_motivos[df_motivos["id"] == id_motivo_sel].iloc[0]
-                        nuevo_estado = not bool(motivo_row["activo"])
-                        
-                        try:
-                            supabase.table("motivos_csat")\
-                                .update({"activo": nuevo_estado})\
-                                .eq("id", id_motivo_sel)\
-                                .execute()
-                            
-                            st.success(f"El motivo ID {id_motivo_sel} ahora está {'Activo' if nuevo_estado else 'Deshabilitado'}.")
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as ex:
-                            st.error(f"Error al actualizar motivo: {ex}")
-                else:
-                    st.info("No hay motivos registrados en la base de datos.")
-            except Exception as e:
-                st.error(f"No se pudieron cargar los motivos: {e}")
-
-        # GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">5. Configuración de Notificaciones & Alertas (WhatsApp / Email)</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Cargar configuración actual desde Supabase
-            try:
-                res_cfg = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
-                cfg_data = res_cfg.data[0] if res_cfg.data else {}
-            except Exception:
-                cfg_data = {}
-
-            # Parseo seguro de la hora de envío
-            try:
-                hora_val = datetime.strptime(str(cfg_data.get("hora_reporte_diario", "18:00:00")), "%H:%M:%S").time()
-            except Exception:
-                hora_val = time(18, 0)
-
-            with st.form("form_config_notificaciones"):
-                st.markdown("##### 📧 Reporte Diario por Correo")
-                col_e1, col_e2 = st.columns(2)
-                v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
-                v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
-
-                st.markdown("---")
-                st.markdown("##### 📲 Alerta Individual de Chat Sin Responder")
-                col_w1, col_w2 = st.columns(2)
-                v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
-                v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
-
-                st.markdown("---")
-                st.markdown("##### 👥 Alerta Grupal por Antigüedad de Chats")
-                col_g1, col_g2 = st.columns(2)
-                v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
-                v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
-
-                btn_guardar_notif = st.form_submit_button("Guardar Parámetros de Notificación", use_container_width=True)
-
-                if btn_guardar_notif:
-                    try:
-                        supabase.table("config_notificaciones").upsert({
-                            "id": 1,
-                            "hora_reporte_diario": v_hora_rep.strftime("%H:%M:%S"),
-                            "email_destino_reporte": v_email_dest.strip(),
-                            "minutos_alerta_individual": v_min_indiv,
-                            "telefono_alerta_individual": v_tel_indiv.strip(),
-                            "horas_alerta_grupo": v_hs_grupo,
-                            "jid_grupo_whatsapp": v_jid_grupo.strip(),
-                            "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
-                        }).execute()
-                        st.success("✅ Configuración de notificaciones guardada en Supabase.")
+                with c_meta2:
+                    if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
+                        st.cache_data.clear()
                         st.rerun()
-                    except Exception as ex_g:
-                        st.error(f"Error al guardar configuración: {ex_g}")
-
-        # ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">6. Mapeo de Agentes y Teléfonos de WhatsApp</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            try:
-                res_usrs = supabase.table("usuarios_autorizados").select("id, nombre, email, telefono_whatsapp").order("nombre").execute()
-                df_usrs = pd.DataFrame(res_usrs.data or [])
-
-                if not df_usrs.empty:
-                    with st.form("form_telefonos_agentes"):
-                        edited_usrs = st.data_editor(
-                            df_usrs,
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+    
+                sync_info = GLOBAL_SYNC_STATE
+    
+                if sync_info["status"] == "running":
+                    st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
+                    time_lib.sleep(2)
+                    st.rerun()
+                elif sync_info["status"] == "completed":
+                    st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
+                    if st.button("Limpiar Mensaje de Confirmación"):
+                        GLOBAL_SYNC_STATE["status"] = "idle"
+                        st.cache_data.clear()
+                        st.rerun()
+                elif sync_info["status"] == "error":
+                    st.error(f"❌ Error en la sincronización: {sync_info['error']}")
+                    if st.button("Reintentar / Limpiar Error"):
+                        GLOBAL_SYNC_STATE["status"] = "idle"
+                        st.rerun()
+    
+                col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
+                f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
+                f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
+                
+                btn_bloqueado = (sync_info["status"] == "running")
+                
+                if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
+                    if SYNC_AVAILABLE:
+                        GLOBAL_SYNC_STATE["status"] = "running"
+                        GLOBAL_SYNC_STATE["processed"] = 0
+                        GLOBAL_SYNC_STATE["log"] = ""
+                        GLOBAL_SYNC_STATE["error"] = None
+    
+                        def tarea_sync_paralela(f_inicio, f_final):
+                            try:
+                                def cb_progreso(proc, tot):
+                                    GLOBAL_SYNC_STATE["processed"] = proc
+    
+                                tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
+                                GLOBAL_SYNC_STATE["status"] = "completed"
+                                tz_py = timezone(timedelta(hours=-3))
+                                hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
+    
+                                GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
+                            except Exception as ex_thread:
+                                GLOBAL_SYNC_STATE["status"] = "error"
+                                GLOBAL_SYNC_STATE["error"] = str(ex_thread)
+    
+                        hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta), daemon=True)
+                        hilo_sync.start()
+                        st.rerun()
+                    else:
+                        st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
+                        
+            st.markdown("<br>", unsafe_allow_html=True)
+    
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+                
+                with col_cfg1:
+                    st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
+                    cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
+                    cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
+                
+                with col_cfg2:
+                    st.markdown("<b>Umbrales de SLA (Minutos)</b>", unsafe_allow_html=True)
+                    cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
+                    cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
+    
+                with col_cfg3:
+                    st.markdown("<b>Alerta de Chat Nuevo</b>", unsafe_allow_html=True)
+                    cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
+    
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("Guardar Configuración de Parámetros", use_container_width=True):
+                    st.session_state["auto_refresh"] = cfg_auto
+                    st.session_state["refresh_interval"] = cfg_interval
+                    st.session_state["sla_1ra_th"] = cfg_sla_1ra
+                    st.session_state["sla_gest_th"] = cfg_sla_gest
+                    st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
+                    st.success("Configuración actualizada correctamente.")
+                    st.rerun()
+    
+            st.markdown("<br>", unsafe_allow_html=True)
+    
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">3. Gestion de Usuarios Autorizados</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
+                    with st.form("form_nuevo_usuario"):
+                        col_u1, col_u2, col_u3 = st.columns(3)
+                        n_nombre = col_u1.text_input("Nombre / Agente:")
+                        n_email = col_u2.text_input("Correo Electronico:")
+                        n_pass = col_u3.text_input("Contraseña de Acceso:")
+                        btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
+    
+                        if btn_crear_u:
+                            if n_email.strip() and n_pass.strip() and n_nombre.strip():
+                                try:
+                                    supabase.table("usuarios_autorizados").insert({
+                                        "email": n_email.strip().lower(),
+                                        "password": n_pass.strip(),
+                                        "nombre": n_nombre.strip(),
+                                        "activo": True
+                                    }).execute()
+                                    st.success(f"Usuario {n_email} creado exitosamente.")
+                                    st.rerun()
+                                except Exception as ex:
+                                    st.error(f"Error al registrar usuario: {str(ex)}")
+                            else:
+                                st.warning("Completa todos los campos obligatorios.")
+    
+                try:
+                    res_users = supabase.table("usuarios_autorizados").select("*").order("created_at", desc=True).execute()
+                    df_users = pd.DataFrame(res_users.data)
+                    
+                    if not df_users.empty:
+                        st.markdown("<b>Listado de Usuarios Registrados:</b>", unsafe_allow_html=True)
+                        st.dataframe(
+                            df_users[["id", "nombre", "email", "password", "activo", "created_at"]],
                             column_config={
-                                "id": None,
-                                "nombre": st.column_config.TextColumn("Agente / Usuario", disabled=True),
-                                "email": st.column_config.TextColumn("Correo", disabled=True),
-                                "telefono_whatsapp": st.column_config.TextColumn("Teléfono WhatsApp (ej: 595981xxxxxx)", required=True)
+                                "id": "ID",
+                                "nombre": "Nombre",
+                                "email": "Correo",
+                                "password": "Contraseña",
+                                "activo": st.column_config.CheckboxColumn("Acceso Activo"),
+                                "created_at": "Fecha Alta"
                             },
                             hide_index=True,
-                            use_container_width=True,
-                            key="editor_telefonos_agentes"
+                            use_container_width=True
                         )
-                        btn_save_tels = st.form_submit_button("Guardar Teléfonos de Agentes", use_container_width=True)
-
-                        if btn_save_tels:
-                            cambios = st.session_state.get("editor_telefonos_agentes", {}).get("edited_rows", {})
-                            if cambios:
-                                for fila_idx, datos_ed in cambios.items():
-                                    if "telefono_whatsapp" in datos_ed:
-                                        u_id = df_usrs.iloc[int(fila_idx)]["id"]
-                                        supabase.table("usuarios_autorizados")\
-                                            .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
-                                            .eq("id", u_id)\
-                                            .execute()
-                                st.success("✅ Teléfonos de agentes actualizados.")
+    
+                        col_edit1, col_edit2 = st.columns(2)
+                        id_toggle = col_edit1.number_input("ID de usuario a activar/desactivar:", min_value=1, step=1)
+                        if col_edit2.button("Alternar Estado (Activo/Inactivo)", use_container_width=True):
+                            usr_actual = df_users[df_users["id"] == id_toggle]
+                            if not usr_actual.empty:
+                                nuevo_estado = not bool(usr_actual.iloc[0]["activo"])
+                                supabase.table("usuarios_autorizados").update({"activo": nuevo_estado}).eq("id", id_toggle).execute()
+                                st.success(f"Estado del usuario ID {id_toggle} actualizado.")
                                 st.rerun()
-                else:
-                    st.info("No hay usuarios registrados aún.")
-            except Exception as ex_u:
-                st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
-
-        # GESTIÓN DINÁMICA DE FERIADOS
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">📅 Calendario de Feriados Oficiales & Móviles</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            feriados_actuales = obtener_feriados_activos()
-
-            col_add1, col_add2 = st.columns([2, 1])
-            fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
-            
-            if col_add2.button("➕ Agregar Feriado", use_container_width=True):
-                str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
-                if str_f not in feriados_actuales:
-                    feriados_actuales.append(str_f)
+                            else:
+                                st.error("ID de usuario no encontrado.")
+                    else:
+                        st.info("No hay usuarios registrados aún en la base de datos.")
+                except Exception as e:
+                    st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
+    
+            # GESTIÓN DINÁMICA DE MOTIVOS CSAT
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">4. Gestión de Motivos Normalizados (CSAT)</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                        Crea y desactiva los motivos que se muestran al categorizar chats negativos.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                # Formulario para agregar nuevo motivo
+                with st.form("form_nuevo_motivo_csat"):
+                    col_m1, col_m2 = st.columns([3, 1])
+                    nuevo_motivo_input = col_m1.text_input("Nuevo Motivo:")
+                    btn_guardar_motivo = col_m2.form_submit_button("Agregar Motivo", use_container_width=True)
+    
+                    if btn_guardar_motivo:
+                        txt_motivo = nuevo_motivo_input.strip()
+                        if txt_motivo:
+                            try:
+                                supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
+                                st.success(f"Motivo '{txt_motivo}' creado con éxito.")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"Error o motivo duplicado: {ex}")
+                        else:
+                            st.warning("Escribe un nombre para el motivo.")
+    
+                # Listado de motivos con opción de Cambiar Estado
+                try:
+                    res_mot = supabase.table("motivos_csat").select("*").order("id", desc=False).execute()
+                    df_motivos = pd.DataFrame(res_mot.data or [])
+                    
+                    if not df_motivos.empty:
+                        st.markdown("<b>Motivos Configurados Actualmente:</b>", unsafe_allow_html=True)
+                        st.dataframe(
+                            df_motivos[["id", "nombre", "activo"]],
+                            column_config={
+                                "id": "ID",
+                                "nombre": "Nombre del Motivo",
+                                "activo": st.column_config.CheckboxColumn("Estado Activo")
+                            },
+                            hide_index=True,
+                            use_container_width=True
+                        )
+    
+                        col_dis1, col_dis2 = st.columns([2, 1])
+                        
+                        motivos_dict = {f"ID {r['id']}: {r['nombre']} ({'Activo' if r['activo'] else 'Inactivo'})": r['id'] for _, r in df_motivos.iterrows()}
+                        motivo_seleccionado_str = col_dis1.selectbox("Seleccionar Motivo a Cambiar Estado:", options=list(motivos_dict.keys()))
+                        
+                        if col_dis2.button("Alternar Estado (Activar/Deshabilitar)", use_container_width=True):
+                            id_motivo_sel = motivos_dict[motivo_seleccionado_str]
+                            motivo_row = df_motivos[df_motivos["id"] == id_motivo_sel].iloc[0]
+                            nuevo_estado = not bool(motivo_row["activo"])
+                            
+                            try:
+                                supabase.table("motivos_csat")\
+                                    .update({"activo": nuevo_estado})\
+                                    .eq("id", id_motivo_sel)\
+                                    .execute()
+                                
+                                st.success(f"El motivo ID {id_motivo_sel} ahora está {'Activo' if nuevo_estado else 'Deshabilitado'}.")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"Error al actualizar motivo: {ex}")
+                    else:
+                        st.info("No hay motivos registrados en la base de datos.")
+                except Exception as e:
+                    st.error(f"No se pudieron cargar los motivos: {e}")
+    
+            # GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">5. Configuración de Notificaciones & Alertas (WhatsApp / Email)</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                        Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                # Cargar configuración actual desde Supabase
+                try:
+                    res_cfg = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
+                    cfg_data = res_cfg.data[0] if res_cfg.data else {}
+                except Exception:
+                    cfg_data = {}
+    
+                # Parseo seguro de la hora de envío
+                try:
+                    hora_val = datetime.strptime(str(cfg_data.get("hora_reporte_diario", "18:00:00")), "%H:%M:%S").time()
+                except Exception:
+                    hora_val = time(18, 0)
+    
+                with st.form("form_config_notificaciones"):
+                    st.markdown("##### 📧 Reporte Diario por Correo")
+                    col_e1, col_e2 = st.columns(2)
+                    v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
+                    v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
+    
+                    st.markdown("---")
+                    st.markdown("##### 📲 Alerta Individual de Chat Sin Responder")
+                    col_w1, col_w2 = st.columns(2)
+                    v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
+                    v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
+    
+                    st.markdown("---")
+                    st.markdown("##### 👥 Alerta Grupal por Antigüedad de Chats")
+                    col_g1, col_g2 = st.columns(2)
+                    v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
+                    v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
+    
+                    btn_guardar_notif = st.form_submit_button("Guardar Parámetros de Notificación", use_container_width=True)
+    
+                    if btn_guardar_notif:
+                        try:
+                            supabase.table("config_notificaciones").upsert({
+                                "id": 1,
+                                "hora_reporte_diario": v_hora_rep.strftime("%H:%M:%S"),
+                                "email_destino_reporte": v_email_dest.strip(),
+                                "minutos_alerta_individual": v_min_indiv,
+                                "telefono_alerta_individual": v_tel_indiv.strip(),
+                                "horas_alerta_grupo": v_hs_grupo,
+                                "jid_grupo_whatsapp": v_jid_grupo.strip(),
+                                "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
+                            }).execute()
+                            st.success("✅ Configuración de notificaciones guardada en Supabase.")
+                            st.rerun()
+                        except Exception as ex_g:
+                            st.error(f"Error al guardar configuración: {ex_g}")
+    
+            # ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">6. Mapeo de Agentes y Teléfonos de WhatsApp</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                        Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                try:
+                    res_usrs = supabase.table("usuarios_autorizados").select("id, nombre, email, telefono_whatsapp").order("nombre").execute()
+                    df_usrs = pd.DataFrame(res_usrs.data or [])
+    
+                    if not df_usrs.empty:
+                        with st.form("form_telefonos_agentes"):
+                            edited_usrs = st.data_editor(
+                                df_usrs,
+                                column_config={
+                                    "id": None,
+                                    "nombre": st.column_config.TextColumn("Agente / Usuario", disabled=True),
+                                    "email": st.column_config.TextColumn("Correo", disabled=True),
+                                    "telefono_whatsapp": st.column_config.TextColumn("Teléfono WhatsApp (ej: 595981xxxxxx)", required=True)
+                                },
+                                hide_index=True,
+                                use_container_width=True,
+                                key="editor_telefonos_agentes"
+                            )
+                            btn_save_tels = st.form_submit_button("Guardar Teléfonos de Agentes", use_container_width=True)
+    
+                            if btn_save_tels:
+                                cambios = st.session_state.get("editor_telefonos_agentes", {}).get("edited_rows", {})
+                                if cambios:
+                                    for fila_idx, datos_ed in cambios.items():
+                                        if "telefono_whatsapp" in datos_ed:
+                                            u_id = df_usrs.iloc[int(fila_idx)]["id"]
+                                            supabase.table("usuarios_autorizados")\
+                                                .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
+                                                .eq("id", u_id)\
+                                                .execute()
+                                    st.success("✅ Teléfonos de agentes actualizados.")
+                                    st.rerun()
+                    else:
+                        st.info("No hay usuarios registrados aún.")
+                except Exception as ex_u:
+                    st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
+    
+            # GESTIÓN DINÁMICA DE FERIADOS
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown("""
+                <div class="admin-card">
+                    <h4 style="margin-top:0; color:#38bdf8;">📅 Calendario de Feriados Oficiales & Móviles</h4>
+                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                        Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+    
+                feriados_actuales = obtener_feriados_activos()
+    
+                col_add1, col_add2 = st.columns([2, 1])
+                fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
+                
+                if col_add2.button("➕ Agregar Feriado", use_container_width=True):
+                    str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
+                    if str_f not in feriados_actuales:
+                        feriados_actuales.append(str_f)
+                        if guardar_feriados_db(feriados_actuales):
+                            st.success(f"Feriado {str_f} agregado correctamente.")
+                            st.rerun()
+                    else:
+                        st.info("Esa fecha ya se encuentra registrada como feriado.")
+    
+                df_feriados_adm = pd.DataFrame({"Fecha Feriado (YYYY-MM-DD)": feriados_actuales})
+                st.dataframe(df_feriados_adm, use_container_width=True, hide_index=True)
+    
+                col_del1, col_del2 = st.columns([2, 1])
+                feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
+                if col_del2.button("🗑️ Eliminar Feriado Seleccionado", use_container_width=True):
+                    feriados_actuales.remove(feriado_a_borrar)
                     if guardar_feriados_db(feriados_actuales):
-                        st.success(f"Feriado {str_f} agregado correctamente.")
+                        st.success(f"Feriado {feriado_a_borrar} eliminado.")
                         st.rerun()
-                else:
-                    st.info("Esa fecha ya se encuentra registrada como feriado.")
-
-            df_feriados_adm = pd.DataFrame({"Fecha Feriado (YYYY-MM-DD)": feriados_actuales})
-            st.dataframe(df_feriados_adm, use_container_width=True, hide_index=True)
-
-            col_del1, col_del2 = st.columns([2, 1])
-            feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
-            if col_del2.button("🗑️ Eliminar Feriado Seleccionado", use_container_width=True):
-                feriados_actuales.remove(feriado_a_borrar)
-                if guardar_feriados_db(feriados_actuales):
-                    st.success(f"Feriado {feriado_a_borrar} eliminado.")
-                    st.rerun()
+        pass
 
 with tab_faq:
     st.markdown("### Preguntas Frecuentes & Criterios Operativos")
