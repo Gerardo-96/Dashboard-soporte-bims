@@ -1535,7 +1535,7 @@ if bot_online:
             align-items: center; 
             gap: 6px;" 
             title="Conexión de WhatsApp Activa ({bot_state})">
-            🟢 Bot Operativo ({bot_state})
+            🟢 Bot Operativo
         </span>
     </div>
     """
@@ -1555,7 +1555,7 @@ else:
             align-items: center; 
             gap: 6px;" 
             title="Conexión de WhatsApp Caída ({bot_state})">
-            🔴 Bot Desconectado ({bot_state})
+            🔴 Bot Desconectado
         </span>
     </div>
     """
