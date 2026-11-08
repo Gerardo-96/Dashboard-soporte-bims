@@ -1652,35 +1652,35 @@ def renderizar_alertas_en_vivo():
 
             if not df_criticos_sla.empty:
                 cant = len(df_criticos_sla)
-                st.markdown(f"""
-                <div class="alert-card-critical">
-                    <div class="alert-card-critical-content">
-                        <div>
-                            <div style="font-weight: 700; font-size: 0.92rem; color: #fef3c7; display: flex; align-items: center; gap: 8px;">
-                                🚨 ALERTA CRÍTICA DE SLA EN VIVO
+                palabra_chat = "chat" if cant == 1 else "chats"
+
+                # El expander actúa directamente como el contenedor desplegable de la alerta
+                with st.expander(f"🚨 ALERTA CRÍTICA: {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Clic para gestionar", expanded=True):
+                    
+                    st.markdown(f"""
+                    <div class="alert-card-critical" style="margin-bottom: 12px;">
+                        <div class="alert-card-critical-content">
+                            <div>
+                                <div style="font-weight: 700; font-size: 0.92rem; color: #fef3c7;">
+                                    ⚠️ ATENCIÓN INMEDIATA REQUERIDA
+                                </div>
+                                <div style="color: #cbd5e1; font-size: 0.84rem; margin-top: 3px;">
+                                    <b>Hora Actual:</b> {now_dt.strftime('%H:%M:%S')} hs | Umbral configurado: <b>{alerta_nuevo_th} min</b>
+                                </div>
                             </div>
-                            <div style="color: #cbd5e1; font-size: 0.85rem; margin-top: 4px;">
-                                Hay chats en espera de asignación humana superando el límite de <b>{alerta_nuevo_th} min</b>.
+                            <div style="background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #fca5a5; font-size: 1.1rem; font-weight: 800; padding: 4px 14px; border-radius: 8px;">
+                                {cant} {palabra_chat} sin asignar
                             </div>
-                        </div>
-                        <div style="background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #fca5a5; font-size: 1.15rem; font-weight: 800; padding: 6px 16px; border-radius: 8px;">
-                            {cant} chat(s) en espera
                         </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
-                # RESTAURACIÓN EXACTA DEL DISPARO DE AUDIO FIEL AL BACKUP
-                if act_sonido:
-                    html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
-                    st.components.v1.html(html_con_ts, height=0)
+                    # Disparo de alarma sonora
+                    if act_sonido:
+                        html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
+                        st.components.v1.html(html_con_ts, height=0)
 
-            with st.expander("Panel de Verificación de Alertas en Vivo", expanded=True if not df_criticos_sla.empty else False):
-                st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Umbral:** {alerta_nuevo_th} min | **Chats Sin Asignar en Alerta:** {len(df_criticos_sla)}")
-                
-                if not df_criticos_sla.empty:
                     df_criticos_sla["atendido"] = False
-
                     cols_check = ["atendido", "intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "agente_asignado", "estado"]
                     if "canal" in df_criticos_sla.columns:
                         cols_check.append("canal")
@@ -1730,13 +1730,14 @@ def renderizar_alertas_en_vivo():
                             st.cache_data.clear()
                             st.rerun()
 
-                else:
-                    st.info("🟢 No hay ningún chat sin asignar en alerta crítica actualmente.")
+            else:
+                with st.expander("🟢 Monitor de Alertas en Vivo (Sin chats en espera)", expanded=False):
+                    st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats sin asignar pendientes.")
         else:
-            with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+            with st.expander("🛠️ Monitor de Alertas en Vivo", expanded=False):
                 st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 0 chats sin asignar pendientes.")
     else:
-        with st.expander("🛠️ Panel de Verificación de Alertas en Vivo", expanded=False):
+        with st.expander("🛠️ Monitor de Alertas en Vivo", expanded=False):
             st.write(f"**Hora Actual (PY):** {now_dt.strftime('%H:%M:%S')} hs | **Estado:** 🟢 Sin registros en la base de datos.")
             
 # ==========================================
