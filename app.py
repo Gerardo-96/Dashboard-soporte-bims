@@ -2891,7 +2891,7 @@ with tab_wbr:
     if not df_all.empty and "created_at_dt" in df_all.columns:
         df_wbr_base = df_all.copy()
 
-        # 1. Asegurar normalización de fechas de cierre y creación en hora local (PY)
+        # 1. Normalización de fechas de cierre y creación en hora local (PY)
         if "fecha_cierre_dt" not in df_wbr_base.columns:
             df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
             ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
@@ -3015,11 +3015,11 @@ with tab_wbr:
             fig_5w.update_layout(
                 barmode="group",
                 title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#1e293b",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1"),
-                xaxis=dict(gridcolor="#334155"),
-                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats"),
+                xaxis=dict(gridcolor="#1e293b"),
+                yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats"),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(t=50, b=20, l=30, r=20),
                 height=380
@@ -3029,7 +3029,7 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA (ALINEADO)
+            # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
             # =========================================================================
             st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
 
@@ -3125,12 +3125,12 @@ with tab_wbr:
                 ))
                 fig_dias.update_layout(
                     barmode="group",
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    xaxis=dict(gridcolor="#334155"),
-                    yaxis=dict(gridcolor="#334155"),
+                    xaxis=dict(gridcolor="#1e293b"),
+                    yaxis=dict(gridcolor="#1e293b"),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
@@ -3140,7 +3140,6 @@ with tab_wbr:
                 color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
                 sin_resp_count = int(df_target["etiquetas"].fillna("").astype(str).str.lower().str.contains("sin respuesta").sum())
 
-                # Altura idéntica y simétrica de 115px para ambos pies de columna
                 st.markdown(f"""
                 <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                     <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
@@ -3181,13 +3180,13 @@ with tab_wbr:
                     texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
                     textposition="outside",
                     insidetextorientation="horizontal",
-                    marker=dict(colors=palette_donut, line=dict(color="#1e293b", width=2)),
+                    marker=dict(colors=palette_donut, line=dict(color="#0b1120", width=2)),
                     showlegend=False
                 )])
 
                 fig_pie_w.update_layout(
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1", size=11),
                     margin=dict(t=30, b=30, l=40, r=40),
                     height=360
@@ -3214,7 +3213,7 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA (ALINEADO)
+            # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA
             # =========================================================================
             st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
 
@@ -3324,11 +3323,11 @@ with tab_wbr:
                     insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                 ))
                 fig_bar_gest.update_layout(
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#334155", title=None),
-                    yaxis=dict(gridcolor="#334155", title="Minutos"),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title="Minutos"),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
@@ -3356,11 +3355,11 @@ with tab_wbr:
                     insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                 ))
                 fig_bar_1ra.update_layout(
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#334155", title=None),
-                    yaxis=dict(gridcolor="#334155", title="Minutos"),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title="Minutos"),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
                 )
@@ -3379,7 +3378,7 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO (ALTURAS UNIFICADAS)
+            # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO
             # =========================================================================
             st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
 
@@ -3416,14 +3415,13 @@ with tab_wbr:
             def f_pct(c, t):
                 return f"{round((c / t * 100), 1)}%" if t > 0 else "0.0%"
 
-            # 4 Columnas con exactamente la misma altura (125px) y estructura armónica
             c_c1, c_c2, c_c3, c_c4 = st.columns(4)
 
             c_c1.markdown(f"""
             <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
                 <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
-                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la semana</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -3471,7 +3469,6 @@ with tab_wbr:
                 )
                 df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
 
-                # FILTRO ESTRICTO: Se quitan del gráfico a los no calificados (rating_int > 0)
                 df_target_calificados = df_target[df_target["rating_int"] > 0].copy()
                 df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
 
@@ -3490,10 +3487,11 @@ with tab_wbr:
                 )
                 fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
                 fig_niv.update_layout(
-                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1", size=11),
-                    xaxis=dict(gridcolor="#334155", title=None),
-                    yaxis=dict(gridcolor="#334155", title="Cantidad"),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title="Cantidad"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
                     margin=dict(t=30, b=20, l=20, r=20),
                     height=360
@@ -3516,11 +3514,12 @@ with tab_wbr:
                     textinfo="label+value+percent",
                     texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
                     textposition="outside",
-                    marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#1e293b", width=2)),
+                    marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#0b1120", width=2)),
                     showlegend=False
                 )])
                 fig_sent.update_layout(
-                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1", size=11),
                     margin=dict(t=30, b=30, l=30, r=30),
                     height=360
@@ -3530,7 +3529,7 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1 (ALTURA DINÁMICA & ROWSPAN)
+            # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1
             # =========================================================================
             st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
 
@@ -3545,7 +3544,6 @@ with tab_wbr:
             col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
 
             with col_card_l1:
-                # Estilo flex height 100% para acoplarse con la tabla contigua
                 st.markdown(f"""
                 <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                     <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L1</div>
@@ -3592,7 +3590,6 @@ with tab_wbr:
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
 
-            # Generación de Tabla HTML combinando celdas (rowspan) y ordenada ascendentemente
             if not df_l1_neg.empty:
                 df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
                 df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
@@ -3635,11 +3632,10 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA (CÁLCULO EXACTO & ROWSPAN)
+            # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
             # =========================================================================
             st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Casos Escalados a L3 / Jira")
 
-            # CÁLCULO ESTRICTO: Evaluaciones negativas (1, 2 y 3★) que tienen etiqueta/clasificación Niv-L3
             df_l3_neg = df_target[
                 (df_target["nivel_norm"] == "Niv-L3") &
                 (df_target["rating_int"].isin([1, 2, 3]))
@@ -3651,7 +3647,6 @@ with tab_wbr:
             col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
 
             with col_card_l3:
-                # Estilo flex height 100% acoplado
                 st.markdown(f"""
                 <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                     <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS ESCALADOS L3 / JIRA</div>
@@ -3706,7 +3701,6 @@ with tab_wbr:
                 df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
                 df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
 
-                # Orden ascendente por rating_int (1★ -> 2★ -> 3★)
                 df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
 
                 filas_html_l3 = []
@@ -3756,13 +3750,12 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 7: EVOLUTIVO CSAT (5 SEMANAS) & CONTACTOS POR EMPRESA
+            # SLIDE 7: EVOLUTIVO CSAT & RATIO CONTACTOS POR EMPRESA
             # =========================================================================
             st.markdown(f"#### 7. WBR | {semana_seleccionada_str} — Evolutivo de Satisfacción & Frecuencia por Empresa")
 
             evol_csat = []
             for _, s_row in df_5_semanas_info.iterrows():
-                # Universo de chats evaluados por CSAT en cada una de las 5 semanas
                 if "fecha_calificacion_dt" in df_wbr_base.columns:
                     sub_csat = df_wbr_base[
                         (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
@@ -3784,7 +3777,6 @@ with tab_wbr:
                 pos_c = int((sub_csat["r_num"] >= 4).sum())
                 pct_c = round((pos_c / tot_c * 100), 1) if tot_c > 0 else 0.0
 
-                # Chats totales creados para ratio de contactos por empresa
                 sub_vol = df_wbr_base[
                     (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
                     (df_wbr_base["iso_week"] == s_row["iso_week"])
@@ -3801,7 +3793,6 @@ with tab_wbr:
 
             df_evol_csat = pd.DataFrame(evol_csat)
 
-            # Métricas comparativas WoW CSAT
             foco_csat = df_evol_csat.iloc[-1]["CSAT"]
             prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
             diff_csat = round(foco_csat - prev_csat, 2)
@@ -3821,11 +3812,13 @@ with tab_wbr:
                     insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                 ))
                 fig_bar_csat.update_layout(
-                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#334155", title=None),
-                    yaxis=dict(gridcolor="#334155", range=[0, 105], title="CSAT (%)"),
-                    margin=dict(t=30, b=20, l=20, r=20), height=360
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", range=[0, 105], title="CSAT (%)"),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
                 )
                 st.plotly_chart(fig_bar_csat, use_container_width=True)
 
@@ -3849,11 +3842,13 @@ with tab_wbr:
                     insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                 ))
                 fig_bar_ratio.update_layout(
-                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#334155", title=None),
-                    yaxis=dict(gridcolor="#334155", title="Prom. Contactos"),
-                    margin=dict(t=30, b=20, l=20, r=20), height=360
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title="Prom. Contactos"),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
                 )
                 st.plotly_chart(fig_bar_ratio, use_container_width=True)
 
@@ -3868,7 +3863,7 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO (DISEÑO WBR PULIDO)
+            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
             # =========================================================================
             st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
 
@@ -3886,7 +3881,6 @@ with tab_wbr:
             col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
 
             with col_ext_pie:
-                # Tarjeta unificada idéntica a tu diapositiva original
                 st.markdown(f"""
                 <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                     <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS EN HORARIO EXTENDIDO</div>
@@ -3899,13 +3893,12 @@ with tab_wbr:
                     df_ext_ag = df_ext[~df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(agentes_excluir_pie)]["agente_asignado"].value_counts().reset_index()
                     df_ext_ag.columns = ["Agente", "Cantidad"]
 
-                    # Paleta corporativa degradada limpia
                     palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
 
                     fig_pie_ext = go.Figure(data=[go.Pie(
                         labels=df_ext_ag["Agente"],
                         values=df_ext_ag["Cantidad"],
-                        hole=0.35,  # Reducido para evitar deformaciones en las porciones
+                        hole=0.35,
                         textinfo="label+percent",
                         texttemplate="<b>%{label}</b><br>%{percent}",
                         textposition="outside",
@@ -3933,7 +3926,6 @@ with tab_wbr:
                     st.info("Sin chats registrados en horario extendido para esta semana.")
 
             with col_ext_dias:
-                # Tarjeta espejo para que ambas columnas inicien en la misma cota superior
                 st.markdown(f"""
                 <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                     <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">EFECTIVIDAD DE GESTIÓN EXTENDIDA</div>
@@ -3953,7 +3945,6 @@ with tab_wbr:
                     df_dias_ext_cnt = df_ext["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
                     df_dias_ext_cnt.columns = ["Día", "Cantidad"]
 
-                    # Ocultar visualmente la etiqueta '0' para que no ensucie la barra vacía
                     df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
 
                     fig_bar_dias_ext = go.Figure(go.Bar(
@@ -3981,7 +3972,7 @@ with tab_wbr:
                         font=dict(color="#94a3b8", size=11),
                         xaxis=dict(
                             showgrid=False,
-                            showticklabels=False,  # Se eliminan los números del eje X para que solo se lean los valores de las barras
+                            showticklabels=False,
                             zeroline=False
                         ),
                         yaxis=dict(
