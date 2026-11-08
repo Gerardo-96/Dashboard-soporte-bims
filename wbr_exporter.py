@@ -3,91 +3,175 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.chart.data import CategoryChartData
 
-COLOR_FONDO = RGBColor(11, 17, 32)      # #0b1120
-COLOR_TEXTO = RGBColor(248, 250, 252)   # #f8fafc
-COLOR_SUBTEXTO = RGBColor(148, 163, 184)# #94a3b8
-COLOR_AZUL = RGBColor(2, 132, 199)      # #0284c7
-COLOR_TURQUESA = RGBColor(56, 189, 248) # #38bdf8
+# Paleta corporativa
+C_FONDO = RGBColor(15, 23, 42)       # #0f172a
+C_AZUL_OSC = RGBColor(2, 132, 199)   # #0284c7
+C_AZUL_CLA = RGBColor(56, 189, 248)  # #38bdf8
+C_VERDE = RGBColor(52, 211, 153)     # #34d399
+C_BLANCO = RGBColor(248, 250, 252)   # #f8fafc
+C_GRIS = RGBColor(148, 163, 184)     # #94a3b8
 
-def crear_presentacion_base():
+def crear_presentacion():
     prs = Presentation()
-    # Dimensiones estándar 16:9 (13.33 x 7.5 pulgadas)
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
     return prs
 
-def agregar_slide_con_fondo(prs, titulo_slide):
-    blank_layout = prs.slide_layouts[6]
-    slide = prs.slides.add_slide(blank_layout)
-
-    # Fondo oscuro
-    background = slide.background
-    fill = background.fill
+def agregar_slide_base(prs, titulo):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    # Fondo sólido oscuro
+    bg = slide.background
+    fill = bg.fill
     fill.solid()
-    fill.fore_color.rgb = COLOR_FONDO
+    fill.fore_color.rgb = C_FONDO
 
-    # Encabezado estándar WBR
+    # Encabezado estándar
     tb = slide.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(0.8))
     tf = tb.text_frame
-    tf.word_wrap = True
     p = tf.paragraphs[0]
-    p.text = titulo_slide
-    p.font.size = Pt(22)
+    p.text = titulo
+    p.font.size = Pt(20)
     p.font.bold = True
-    p.font.color.rgb = COLOR_TEXTO
+    p.font.color.rgb = C_BLANCO
     return slide
 
-def exportar_wbr_pptx(datos_semana, figuras_dict):
-    """
-    Genera el archivo PPTX en memoria bytes a partir de los datos calculados y figuras Plotly.
-    """
-    prs = crear_presentacion_base()
-    semana_label = datos_semana.get("semana_label", "Semana")
+def agregar_tarjeta_metrica(slide, x, y, w, h, titulo, valor, sub=""):
+    shape = slide.shapes.add_shape(1, Inches(x), Inches(y), Inches(w), Inches(h))
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(30, 41, 59)
+    shape.line.color.rgb = C_AZUL_CLA
+    shape.line.width = Pt(1.5)
 
+    tf = shape.text_frame
+    tf.word_wrap = True
+    
+    p0 = tf.paragraphs[0]
+    p0.text = titulo.upper()
+    p0.alignment = PP_ALIGN.CENTER
+    p0.font.size = Pt(10)
+    p0.font.color.rgb = C_GRIS
+    p0.font.bold = True
+
+    p1 = tf.add_paragraph()
+    p1.text = str(valor)
+    p1.alignment = PP_ALIGN.CENTER
+    p1.font.size = Pt(26)
+    p1.font.color.rgb = C_AZUL_CLA
+    p1.font.bold = True
+
+    if sub:
+        p2 = tf.add_paragraph()
+        p2.text = str(sub)
+        p2.alignment = PP_ALIGN.CENTER
+        p2.font.size = Pt(9)
+        p2.font.color.rgb = C_GRIS
+
+def exportar_wbr_pptx(datos):
+    prs = crear_presentacion()
+    sem_label = datos.get("semana_label", "Semana Actual")
+
+    # =========================================================================
     # SLIDE 1: Evolutivo de Volumen (5 Semanas)
-    slide1 = agregar_slide_con_fondo(prs, f"WBR | Soporte & Experiencia | {semana_label} – Evolutivo")
-    if "fig_5w" in figuras_dict and figuras_dict["fig_5w"]:
-        img_bytes = figuras_dict["fig_5w"].to_image(format="png", width=1200, height=520, scale=2)
-        slide1.shapes.add_picture(io.BytesIO(img_bytes), Inches(0.8), Inches(1.8), width=Inches(11.7))
+    # =========================================================================
+    s1 = agregar_slide_base(prs, f"WBR | Soporte & Experiencia — Evolutivo de Volumen ({sem_label})")
+    agregar_tarjeta_metrica(s1, 0.8, 1.4, 5.7, 1.3, "Chats Recibidos (5 Semanas)", f"{datos.get('tot_5w_rec', 0):,}")
+    agregar_tarjeta_metrica(s1, 6.8, 1.4, 5.7, 1.3, "Promedio % Chats Cerrados (5 Semanas)", f"{datos.get('pct_5w_cer', 0)}%", f"{datos.get('tot_5w_cer', 0):,} cerrados")
 
-    # SLIDE 2: Detalle Operativo Diario & Distribución Agentes
-    slide2 = agregar_slide_con_fondo(prs, f"WBR | Soporte & Experiencia | {semana_label}")
-    if "fig_dias" in figuras_dict and figuras_dict["fig_dias"]:
-        img_dias = figuras_dict["fig_dias"].to_image(format="png", width=650, height=480, scale=2)
-        slide2.shapes.add_picture(io.BytesIO(img_dias), Inches(0.8), Inches(1.8), width=Inches(6.2))
-    if "fig_pie_ag" in figuras_dict and figuras_dict["fig_pie_ag"]:
-        img_pie = figuras_dict["fig_pie_ag"].to_image(format="png", width=550, height=480, scale=2)
-        slide2.shapes.add_picture(io.BytesIO(img_pie), Inches(7.2), Inches(1.8), width=Inches(5.3))
+    df_5w = datos.get("df_5w")
+    if df_5w is not None and not df_5w.empty:
+        cdata_1 = CategoryChartData()
+        cdata_1.categories = df_5w["Semana"].tolist()
+        cdata_1.add_series("Recibidos", tuple(df_5w["Recibidos"]))
+        cdata_1.add_series("Cerrados", tuple(df_5w["Cerrados"]))
 
+        chart1 = s1.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED,
+            Inches(0.8), Inches(2.9), Inches(11.7), Inches(4.1), cdata_1
+        ).chart
+        chart1.has_legend = True
+        chart1.legend.position = XL_LEGEND_POSITION.TOP
+        chart1.legend.include_in_layout = False
+
+    # =========================================================================
+    # SLIDE 2: Detalle Operativo Semanal
+    # =========================================================================
+    s2 = agregar_slide_base(prs, f"WBR | Detalle Operativo Semanal — {sem_label}")
+    agregar_tarjeta_metrica(s2, 0.8, 1.3, 5.7, 1.2, "Chats Recibidos", f"{datos.get('tot_sem_rec', 0):,}")
+    agregar_tarjeta_metrica(s2, 6.8, 1.3, 5.7, 1.2, "Chats Cerrados y Efectividad", f"{datos.get('tot_sem_cer', 0):,}", f"{datos.get('pct_sem_cer', 0)}% cerrados")
+
+    df_dias = datos.get("df_dias")
+    if df_dias is not None and not df_dias.empty:
+        cdata_2 = CategoryChartData()
+        cdata_2.categories = df_dias["Fecha"].tolist()
+        cdata_2.add_series("Recibidos", tuple(df_dias["Recibidos"]))
+        cdata_2.add_series("Cerrados", tuple(df_dias["Cerrados"]))
+        chart2 = s2.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED,
+            Inches(0.8), Inches(2.7), Inches(6.5), Inches(4.3), cdata_2
+        ).chart
+        chart2.has_legend = True
+        chart2.legend.position = XL_LEGEND_POSITION.TOP
+
+    df_agentes = datos.get("df_agentes")
+    if df_agentes is not None and not df_agentes.empty:
+        cdata_pie = CategoryChartData()
+        cdata_pie.categories = df_agentes["Agente"].tolist()
+        cdata_pie.add_series("Cerrados", tuple(df_agentes["Cerrados"]))
+        chart_pie = s2.shapes.add_chart(
+            XL_CHART_TYPE.DOUGHNUT,
+            Inches(7.6), Inches(2.7), Inches(4.9), Inches(4.3), cdata_pie
+        ).chart
+        chart_pie.has_legend = True
+        chart_pie.legend.position = XL_LEGEND_POSITION.RIGHT
+
+    # =========================================================================
     # SLIDE 3: Tiempos de Gestión y SLA
-    slide3 = agregar_slide_con_fondo(prs, f"WBR | Soporte & Experiencia | Evolutivo x Semana – Tiempo de Gestión y 1ra RTA")
-    if "fig_bar_gest" in figuras_dict and figuras_dict["fig_bar_gest"]:
-        img_g = figuras_dict["fig_bar_gest"].to_image(format="png", width=600, height=450, scale=2)
-        slide3.shapes.add_picture(io.BytesIO(img_g), Inches(0.8), Inches(2.0), width=Inches(5.7))
-    if "fig_bar_1ra" in figuras_dict and figuras_dict["fig_bar_1ra"]:
-        img_1 = figuras_dict["fig_bar_1ra"].to_image(format="png", width=600, height=450, scale=2)
-        slide3.shapes.add_picture(io.BytesIO(img_1), Inches(6.8), Inches(2.0), width=Inches(5.7))
+    # =========================================================================
+    s3 = agregar_slide_base(prs, f"WBR | Tiempos de Gestión y SLA — {sem_label}")
+    agregar_tarjeta_metrica(s3, 0.8, 1.3, 5.7, 1.2, "Tiempo Promedio Gestión", f"{datos.get('foco_gest', 0)} min")
+    agregar_tarjeta_metrica(s3, 6.8, 1.3, 5.7, 1.2, "Tiempo Prom. 1ra Respuesta", f"{datos.get('foco_1ra', 0)} min")
 
-    # SLIDE 4: Calidad y Sentimiento CSAT
-    slide4 = agregar_slide_con_fondo(prs, f"WBR | Soporte & Experiencia | {semana_label} – Chats Evaluados & Sentimiento")
-    if "fig_niv" in figuras_dict and figuras_dict["fig_niv"]:
-        img_niv = figuras_dict["fig_niv"].to_image(format="png", width=650, height=450, scale=2)
-        slide4.shapes.add_picture(io.BytesIO(img_niv), Inches(0.8), Inches(2.0), width=Inches(6.2))
-    if "fig_sent" in figuras_dict and figuras_dict["fig_sent"]:
-        img_sent = figuras_dict["fig_sent"].to_image(format="png", width=550, height=450, scale=2)
-        slide4.shapes.add_picture(io.BytesIO(img_sent), Inches(7.2), Inches(2.0), width=Inches(5.3))
+    df_tiempos = datos.get("df_tiempos")
+    if df_tiempos is not None and not df_tiempos.empty:
+        # Gráfico Gestión
+        cdata_tg = CategoryChartData()
+        cdata_tg.categories = df_tiempos["Semana"].tolist()
+        cdata_tg.add_series("Gestión (min)", tuple(df_tiempos["Prom_Gestion"]))
+        s3.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED,
+            Inches(0.8), Inches(2.7), Inches(5.7), Inches(4.2), cdata_tg
+        )
 
-    # SLIDE 5: Horario Extendido
-    slide5 = agregar_slide_con_fondo(prs, f"WBR | Soporte & Experiencia | {semana_label} – Chats Extendidos")
-    if "fig_pie_ext" in figuras_dict and figuras_dict["fig_pie_ext"]:
-        img_pe = figuras_dict["fig_pie_ext"].to_image(format="png", width=550, height=450, scale=2)
-        slide5.shapes.add_picture(io.BytesIO(img_pe), Inches(0.8), Inches(2.0), width=Inches(5.3))
-    if "fig_bar_dias_ext" in figuras_dict and figuras_dict["fig_bar_dias_ext"]:
-        img_be = figuras_dict["fig_bar_dias_ext"].to_image(format="png", width=650, height=450, scale=2)
-        slide5.shapes.add_picture(io.BytesIO(img_be), Inches(6.5), Inches(2.0), width=Inches(6.0))
+        # Gráfico 1ra Respuesta
+        cdata_t1 = CategoryChartData()
+        cdata_t1.categories = df_tiempos["Semana"].tolist()
+        cdata_t1.add_series("1ra Respuesta (min)", tuple(df_tiempos["Prom_1ra"]))
+        s3.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED,
+            Inches(6.8), Inches(2.7), Inches(5.7), Inches(4.2), cdata_t1
+        )
 
-    out_buffer = io.BytesIO()
-    prs.save(out_buffer)
-    out_buffer.seek(0)
-    return out_buffer
+    # =========================================================================
+    # SLIDE 4: Horario Extendido
+    # =========================================================================
+    s4 = agregar_slide_base(prs, f"WBR | Operación en Horario Extendido — {sem_label}")
+    agregar_tarjeta_metrica(s4, 0.8, 1.3, 5.7, 1.2, "Total Chats Extendido", f"{datos.get('tot_ext', 0)}", f"Domingo: {datos.get('tot_domingo', 0)}")
+    agregar_tarjeta_metrica(s4, 6.8, 1.3, 5.7, 1.2, "Efectividad Cierre", f"{datos.get('pct_ext_cerrados', 0)}%", f"{datos.get('tot_ext_cerrados', 0)} cerrados")
+
+    df_dias_ext = datos.get("df_dias_ext")
+    if df_dias_ext is not None and not df_dias_ext.empty:
+        cdata_dext = CategoryChartData()
+        cdata_dext.categories = df_dias_ext["Día"].tolist()
+        cdata_dext.add_series("Chats", tuple(df_dias_ext["Cantidad"]))
+        s4.shapes.add_chart(
+            XL_CHART_TYPE.BAR_CLUSTERED,
+            Inches(0.8), Inches(2.7), Inches(11.7), Inches(4.2), cdata_dext
+        )
+
+    out = io.BytesIO()
+    prs.save(out)
+    out.seek(0)
+    return out
