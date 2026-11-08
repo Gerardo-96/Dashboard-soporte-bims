@@ -3423,7 +3423,7 @@ with tab_wbr:
             <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
                 <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
-                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la semana</div>
             </div>
             """, unsafe_allow_html=True)
 
