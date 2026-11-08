@@ -2885,8 +2885,7 @@ with tab_resumen:
         st.markdown("---")
 
 with tab_wbr:
-    st.markdown("### 📊 Informe Ejecutivo Semanal (WBR - Weekly Business Review)")
-    st.caption("Consolidado evolutivo de 5 semanas para presentación a gerencia de Soporte & Experiencia.")
+    st.markdown("### Informe Ejecutivo Semanal")
 
     if not df_all.empty and "created_at_dt" in df_all.columns:
         df_wbr_base = df_all.copy()
@@ -2991,7 +2990,7 @@ with tab_wbr:
             <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center;">
                 <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
                 <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
-                    {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
+                    {tot_5w_cerrados:,} <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({pct_5w_cerrados} %)</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -3162,41 +3161,55 @@ with tab_wbr:
                 """, unsafe_allow_html=True)
 
             with col_pie_ag:
-                st.markdown("##### Q. de chats cerrados por Agentes (Detalle Integrado)")
+                st.markdown("##### Q. de chats cerrados por Agentes")
                 
-                # Distribución de agentes sobre los chats efectivamente cerrados en esa semana
-                df_ag_pie = df_target_cerrados["agente_asignado"].fillna("Sin asignar").value_counts().reset_index()
+                # 1. Separar chats de IA (Monica) y chats de soporte humano
+                agentes_bot_ia = ["monica", "mónica", "monica (bot)"]
+                
+                df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(agentes_bot_ia)
+                
+                cnt_cerrados_ia = int(es_cerrado_ia.sum())
+                cnt_cerrados_humanos = int((~es_cerrado_ia).sum())
+                pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
+
+                # 2. DataFrame para el gráfico: Agrupamos por agente
+                # Si deseas ver agentes humanos + Sin Asignar/Soporte (como en tu slide)
+                df_ag_pie = df_target_cerrados[~es_cerrado_ia]["agente_nom"].value_counts().reset_index()
                 df_ag_pie.columns = ["Agente", "Cerrados"]
 
-                palette_pie = ["#0284c7", "#38bdf8", "#0ea5e9", "#7dd3fc", "#0369a1", "#bae6fd", "#94a3b8", "#cbd5e1", "#64748b"]
-                
-                fig_pie_w = px.pie(
-                    df_ag_pie,
-                    values="Cerrados",
-                    names="Agente",
-                    color_discrete_sequence=palette_pie
-                )
-                # Detalle completo por porción: Agente, Cantidad y Porcentaje sin referencias externas
-                fig_pie_w.update_traces(
-                    textposition='inside',
-                    textinfo='label+value+percent',
-                    insidetextfont=dict(size=11, family="Arial")
-                )
+                # Paleta corporativa armónica en tonos azules y celestes
+                palette_donut = [
+                    "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
+                    "#7dd3fc", "#bae6fd", "#94a3b8", "#cbd5e1"
+                ]
+
+                fig_pie_w = go.Figure(data=[go.Pie(
+                    labels=df_ag_pie["Agente"],
+                    values=df_ag_pie["Cerrados"],
+                    hole=0.45,
+                    textinfo="label+value+percent",
+                    texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                    textposition="outside",
+                    insidetextorientation="horizontal",
+                    marker=dict(colors=palette_donut, line=dict(color="#1e293b", width=2)),
+                    showlegend=False
+                )])
+
                 fig_pie_w.update_layout(
-                    showlegend=False,
                     paper_bgcolor="#1e293b",
                     plot_bgcolor="#1e293b",
-                    font=dict(color="#f8fafc", size=11),
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    height=360
+                    font=dict(color="#cbd5e1", size=11),
+                    margin=dict(t=30, b=30, l=40, r=40),
+                    height=380
                 )
                 st.plotly_chart(fig_pie_w, use_container_width=True)
 
-                # Métricas de cobertura (Cuentas y Empresas únicas)
+                # 3. Métricas de cobertura (Cuentas y Empresas únicas)
                 cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
                 empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
                 num_agentes_activos = df_ag_pie["Agente"].nunique()
-                prom_por_agente = round(tot_sem_cer / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
+                prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
 
                 st.markdown(f"""
                 <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; margin-top: 10px;">
@@ -3204,6 +3217,9 @@ with tab_wbr:
                     <div class="metric-card-value" style="color: #38bdf8; font-size: 1.8rem;">{prom_por_agente}</div>
                     <div style="font-size: 0.82rem; color: #94a3b8; margin-top: 4px;">
                         <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
+                    </div>
+                    <div style="font-size: 0.76rem; color: #64748b; margin-top: 6px; border-top: 1px solid #334155; padding-top: 6px;">
+                        🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> fueron gestionados y cerrados por IA (Mónica).
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
