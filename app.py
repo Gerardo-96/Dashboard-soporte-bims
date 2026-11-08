@@ -2885,7 +2885,8 @@ with tab_resumen:
         st.markdown("---")
 
 with tab_wbr:
-    st.markdown("### Informe Ejecutivo Semanal")
+    st.markdown("### 📊 Informe Ejecutivo Semanal (WBR - Weekly Business Review)")
+    st.caption("Consolidado evolutivo de 5 semanas para presentación a gerencia de Soporte & Experiencia.")
 
     if not df_all.empty and "created_at_dt" in df_all.columns:
         df_wbr_base = df_all.copy()
@@ -2896,16 +2897,14 @@ with tab_wbr:
             ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
             df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
 
-        # Semanas ISO (Lunes a Domingo por defecto)
+        # Semanas ISO (Lunes a Domingo)
         df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
         df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
         df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
 
-        # Semanas de cierre
         df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
         df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
 
-        # Opciones ordenadas para el selector
         semanas_disponibles = (
             df_wbr_base[["iso_year", "iso_week", "semana_str"]]
             .drop_duplicates()
@@ -2926,7 +2925,6 @@ with tab_wbr:
             target_year = int(fila_sem["iso_year"])
             target_week = int(fila_sem["iso_week"])
 
-            # 2. Generar las últimas 5 semanas consecutivas (Lunes a Domingo)
             from datetime import datetime as dt_calc
             fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
             
@@ -2944,14 +2942,12 @@ with tab_wbr:
             tot_5w_cerrados = 0
 
             for _, s_row in df_5_semanas_info.iterrows():
-                # Recibidos en la semana
                 sub_rec = df_wbr_base[
                     (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
                     (df_wbr_base["iso_week"] == s_row["iso_week"])
                 ]
                 rec = len(sub_rec)
 
-                # Cerrados dentro de esa semana (fotografía real)
                 sub_cer = df_wbr_base[
                     (df_wbr_base["es_cerrado"] == True) &
                     (df_wbr_base["close_iso_year"] == s_row["iso_year"]) & 
@@ -2980,24 +2976,23 @@ with tab_wbr:
 
             s1_col1, s1_col2 = st.columns(2)
             s1_col1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS (5 SEMANAS)</div>
                 <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_5w_recibidos:,}</div>
             </div>
             """, unsafe_allow_html=True)
 
             s1_col2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
                 <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
-                    {tot_5w_cerrados:,} <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({pct_5w_cerrados} %)</span>
+                    {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Gráfico de 5 semanas a ancho completo con esquinas redondeadas
             fig_5w = go.Figure()
             fig_5w.add_trace(go.Bar(
                 x=df_res_5w["Semana"],
@@ -3034,18 +3029,16 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
+            # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA (ALINEADO)
             # =========================================================================
             st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
 
-            # Chats creados/recibidos en la semana foco
             df_target = df_wbr_base[
                 (df_wbr_base["iso_year"] == target_year) & 
                 (df_wbr_base["iso_week"] == target_week)
             ].copy()
             tot_sem_rec = len(df_target)
 
-            # Chats cerrados en la semana foco (fotografía)
             df_target_cerrados = df_wbr_base[
                 (df_wbr_base["es_cerrado"] == True) &
                 (df_wbr_base["close_iso_year"] == target_year) & 
@@ -3054,7 +3047,6 @@ with tab_wbr:
             tot_sem_cer = len(df_target_cerrados)
             pct_sem_cer = round((tot_sem_cer / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
 
-            # Cálculos WoW contra la semana inmediatamente anterior
             sem_prev_num = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[1]
             sem_prev_year = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[0]
             
@@ -3073,14 +3065,14 @@ with tab_wbr:
 
             s3_m1, s3_m2 = st.columns(2)
             s3_m1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS</div>
                 <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_sem_rec:,}</div>
             </div>
             """, unsafe_allow_html=True)
 
             s3_m2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">CHATS CERRADOS Y EFECTIVIDAD</div>
                 <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
                     {tot_sem_cer:,} <span style="font-size: 1.25rem; font-weight: 600; color: #38bdf8;">({pct_sem_cer}%)</span>
@@ -3095,10 +3087,7 @@ with tab_wbr:
             with col_dia_bar:
                 st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
 
-                # Días del Lunes al Domingo de la semana seleccionada
                 dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
-                
-                # Fechas de creación y cierre a nivel solo fecha
                 df_target["creado_dia"] = df_target["created_at_dt"].dt.date
                 df_target_cerrados["cerrado_dia"] = df_target_cerrados["fecha_cierre_dt"].dt.date
 
@@ -3147,38 +3136,38 @@ with tab_wbr:
                 )
                 st.plotly_chart(fig_dias, use_container_width=True)
 
-                # Insights WoW
                 color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
                 color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
                 sin_resp_count = int(df_target["etiquetas"].fillna("").astype(str).str.lower().str.contains("sin respuesta").sum())
 
+                # Altura idéntica y simétrica de 115px para ambos pies de columna
                 st.markdown(f"""
-                <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6;">
-                    • <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})<br>
-                    • <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})<br>
-                    • <b>Obs:</b> De los {tot_sem_rec} chats ingresados, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
+                    <div>• <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})</div>
+                    <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_rec} chats ingresados, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
                 </div>
                 """, unsafe_allow_html=True)
 
             with col_pie_ag:
                 st.markdown("##### Q. de chats cerrados por Agentes")
                 
-                # 1. Separar chats de IA (Monica) y chats de soporte humano
-                agentes_bot_ia = ["monica", "mónica", "monica (bot)", "sin asignar"]
+                agentes_excluir_pie = [
+                    "monica", "mónica", "monica (bot)", 
+                    "sin asignar", "none", "nan", ""
+                ]
                 
                 df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-                es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(agentes_bot_ia)
+                es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
+                es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
                 
                 cnt_cerrados_ia = int(es_cerrado_ia.sum())
-                cnt_cerrados_humanos = int((~es_cerrado_ia).sum())
+                cnt_cerrados_humanos = int((~es_omitido_torta).sum())
                 pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
 
-                # 2. DataFrame para el gráfico: Agrupamos por agente
-                # Si deseas ver agentes humanos + Sin Asignar/Soporte (como en tu slide)
-                df_ag_pie = df_target_cerrados[~es_cerrado_ia]["agente_nom"].value_counts().reset_index()
+                df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
                 df_ag_pie.columns = ["Agente", "Cerrados"]
 
-                # Paleta corporativa armónica en tonos azules y celestes
                 palette_donut = [
                     "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
                     "#7dd3fc", "#bae6fd", "#94a3b8", "#cbd5e1"
@@ -3201,25 +3190,23 @@ with tab_wbr:
                     plot_bgcolor="#1e293b",
                     font=dict(color="#cbd5e1", size=11),
                     margin=dict(t=30, b=30, l=40, r=40),
-                    height=380
+                    height=360
                 )
                 st.plotly_chart(fig_pie_w, use_container_width=True)
 
-                # 3. Métricas de cobertura (Cuentas y Empresas únicas)
                 cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
                 empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
                 num_agentes_activos = df_ag_pie["Agente"].nunique()
                 prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
 
                 st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; margin-top: 10px;">
-                    <div class="metric-card-title" style="justify-content: center;"># Promedio de Contactos por Agente</div>
-                    <div class="metric-card-value" style="color: #38bdf8; font-size: 1.8rem;">{prom_por_agente}</div>
-                    <div style="font-size: 0.82rem; color: #94a3b8; margin-top: 4px;">
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                    <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Agente: <span style="color:#38bdf8; font-size:1.1rem; font-weight:700; margin-left:6px;">{prom_por_agente}</span></div>
+                    <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">
                         <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
                     </div>
-                    <div style="font-size: 0.76rem; color: #64748b; margin-top: 6px; border-top: 1px solid #334155; padding-top: 6px;">
-                        🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> fueron gestionados y cerrados por IA (Mónica).
+                    <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
+                        🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA (Mónica).
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -3227,18 +3214,16 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA (5 SEMANAS)
+            # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA (ALINEADO)
             # =========================================================================
             st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
 
-            # 1. Función auxiliar para calcular promedios de la semana según reglas de negocio
             def calcular_metricas_tiempos_semana(df_sub):
                 if df_sub.empty:
                     return 0.0, 0.0, 0.0, 0.0
 
                 agentes_omitir_t = ["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"]
                 
-                # A. 1ra Respuesta: Horario hábil normal y agentes válidos
                 dt_col = df_sub["created_at_dt"]
                 dias_col = dt_col.dt.dayofweek
                 horas_col = dt_col.dt.time
@@ -3261,7 +3246,6 @@ with tab_wbr:
                 prom_1ra_val = round(s_1ra.mean(), 2) if not s_1ra.empty else 0.0
                 pct_sla_1ra_val = round(((s_1ra <= 2.0).sum() / len(s_1ra) * 100), 1) if not s_1ra.empty else 0.0
 
-                # B. Gestión: Cerrados, sin "Sin Respuesta", horario operativo
                 etiquetas_s = df_sub["etiquetas"].fillna("").astype(str).str.lower()
                 es_sin_resp = etiquetas_s.str.contains("sin respuesta", na=False)
                 es_horario_gest = df_sub["horario_evaluado"] != "fuera de horario"
@@ -3281,7 +3265,6 @@ with tab_wbr:
 
                 return prom_gest_val, prom_1ra_val, pct_sla_gest_val, pct_sla_1ra_val
 
-            # 2. Calcular los evolutivos de las 5 semanas
             evol_tiempos = []
             for _, s_row in df_5_semanas_info.iterrows():
                 sub_w = df_wbr_base[
@@ -3299,7 +3282,6 @@ with tab_wbr:
 
             df_evol_tiempos = pd.DataFrame(evol_tiempos)
 
-            # Métricas de la semana foco actual y semana previa para comparativa WoW
             foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
             foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
             foco_sla_gest = df_evol_tiempos.iloc[-1]["SLA_Gestion"]
@@ -3311,17 +3293,16 @@ with tab_wbr:
             wow_gest_pct = round(((foco_gest - prev_gest) / prev_gest * 100), 2) if prev_gest > 0 else 0.0
             wow_1ra_pct = round(((foco_1ra - prev_1ra) / prev_1ra * 100), 2) if prev_1ra > 0 else 0.0
 
-            # 3. Tarjetas superiores
             col_t1, col_t2 = st.columns(2)
             col_t1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">TIEMPO PROMEDIO TOTAL DE GESTIÓN</div>
                 <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_gest} min</div>
             </div>
             """, unsafe_allow_html=True)
 
             col_t2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">TIEMPO PROM. DE 1RA RESPUESTA</div>
                 <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_1ra} min</div>
             </div>
@@ -3329,7 +3310,6 @@ with tab_wbr:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # 4. Gráficos de barras evolutivos de 5 semanas
             col_g_gest, col_g_1ra = st.columns(2)
 
             with col_g_gest:
@@ -3358,9 +3338,9 @@ with tab_wbr:
                 color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
 
                 st.markdown(f"""
-                <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center;">
-                    <b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)<br>
-                    SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b>
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div><b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)</div>
+                    <div>SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b></div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -3390,22 +3370,19 @@ with tab_wbr:
                 color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
 
                 st.markdown(f"""
-                <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center;">
-                    <b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)<br>
-                    <span style="font-size: 0.8rem; color: #94a3b8;">OBS: No está incluido el horario extendido</span><br>
-                    SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b>
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div><b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)</div>
+                    <div>SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b> <span style="font-size: 0.74rem; color: #94a3b8;">(Sin horario extendido)</span></div>
                 </div>
                 """, unsafe_allow_html=True)
 
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO (SEMANA FOCO)
+            # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO (ALTURAS UNIFICADAS)
             # =========================================================================
             st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
 
-            # Universo de CSAT de la semana foco:
-            # Se evalúa por fecha_calificacion_dt si existe, o en su defecto por la semana de creación
             if "fecha_calificacion_dt" in df_target.columns:
                 df_target_csat = df_wbr_base[
                     (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
@@ -3427,7 +3404,6 @@ with tab_wbr:
             pct_calificados = round((tot_evaluados / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
             pct_sin_calificar = round((tot_sin_calificar / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
 
-            # Desglose de estrellas
             cnt_5 = int((df_target_csat["rating_num"] == 5).sum())
             cnt_4 = int((df_target_csat["rating_num"] == 4).sum())
             cnt_3 = int((df_target_csat["rating_num"] == 3).sum())
@@ -3436,60 +3412,55 @@ with tab_wbr:
 
             tot_positivas = cnt_5 + cnt_4
             tot_negativas = cnt_3 + cnt_2 + cnt_1
-            pct_positivas = round((tot_positivas / tot_evaluados * 100), 1) if tot_evaluados > 0 else 0.0
-            pct_negativas = round((tot_negativas / tot_evaluados * 100), 1) if tot_evaluados > 0 else 0.0
 
-            # Tarjetas superiores de CSAT
-            c_c1, c_c2, c_c3, c_c4 = st.columns([1, 1, 1, 1.4])
+            def f_pct(c, t):
+                return f"{round((c / t * 100), 1)}%" if t > 0 else "0.0%"
+
+            # 4 Columnas con exactamente la misma altura (125px) y estructura armónica
+            c_c1, c_c2, c_c3, c_c4 = st.columns(4)
 
             c_c1.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center;">
-                <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS</div>
-                <div class="metric-card-value">{tot_sem_rec:,}</div>
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
+                <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
             </div>
             """, unsafe_allow_html=True)
 
             c_c2.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">SIN CALIFICAR</div>
-                <div class="metric-card-value" style="color: #38bdf8;">{pct_sin_calificar}%</div>
-                <div class="metric-card-sub" style="color: #94a3b8;">{tot_sin_calificar:,} chats</div>
+                <div class="metric-card-value" style="color: #38bdf8; font-size: 2.2rem;">{pct_sin_calificar}%</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_sin_calificar:,} conversaciones</div>
             </div>
             """, unsafe_allow_html=True)
 
             c_c3.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center;">
+            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-card-title" style="justify-content: center;">CALIFICADOS</div>
-                <div class="metric-card-value" style="color: #34d399;">{pct_calificados}%</div>
-                <div class="metric-card-sub" style="color: #94a3b8;">{tot_evaluados:,} encuestas</div>
+                <div class="metric-card-value" style="color: #34d399; font-size: 2.2rem;">{pct_calificados}%</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_evaluados:,} encuestas recibidas</div>
             </div>
             """, unsafe_allow_html=True)
 
-            def f_pct(c, t):
-                return f"{round((c / t * 100), 2)}%" if t > 0 else "0.0%"
-
             c_c4.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #818cf8; font-size: 0.82rem; padding: 14px 16px;">
-                <div class="metric-card-title" style="margin-bottom: 6px;">TOP CALIFICACIONES</div>
-                <div style="line-height: 1.5; color: #cbd5e1;">
-                    • <b>Excelente (5★):</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)})<br>
-                    • <b>Muy bueno (4★):</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
-                    • <b>Regular (3★):</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)})<br>
-                    • <b>Malo (2★):</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
-                    • <b>Muy malo (1★):</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
+            <div class="metric-card" style="border-left: 4px solid #818cf8; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                <div class="metric-card-title" style="font-size: 0.7rem; margin-bottom: 3px;">TOP CALIFICACIONES</div>
+                <div style="font-size: 0.75rem; line-height: 1.35; color: #cbd5e1;">
+                    • <b>5★:</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)}) | <b>4★:</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
+                    • <b>3★:</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)}) | <b>2★:</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
+                    • <b>1★:</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Gráficos: Puntuación por nivel y Sentimiento Donut
             col_p_niv, col_p_sent = st.columns([1.3, 1])
 
             with col_p_niv:
-                st.markdown("##### Q. de Puntuaciones por Nivel")
+                st.markdown("##### Q. de Puntuaciones por Nivel (Solo Calificados)")
 
-                # Asignación estándar de etiquetas de escala
                 mapa_escala = {
                     5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
                 }
@@ -3499,10 +3470,13 @@ with tab_wbr:
                     .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
                 )
                 df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
-                df_target["puntuacion_str"] = df_target["rating_int"].map(mapa_escala).fillna("Sin calificación")
 
-                orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo", "Sin calificación"]
-                df_niv_grp = df_target.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
+                # FILTRO ESTRICTO: Se quitan del gráfico a los no calificados (rating_int > 0)
+                df_target_calificados = df_target[df_target["rating_int"] > 0].copy()
+                df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
+
+                orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo"]
+                df_niv_grp = df_target_calificados.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
 
                 fig_niv = px.bar(
                     df_niv_grp,
@@ -3556,11 +3530,10 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1 (FRICCIÓN)
+            # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1 (ALTURA DINÁMICA & ROWSPAN)
             # =========================================================================
             st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
 
-            # Filtro de casos negativos (1, 2 y 3★) en Nivel 1
             df_l1_neg = df_target[
                 (df_target["nivel_norm"] == "Niv-L1") &
                 (df_target["rating_int"].isin([1, 2, 3]))
@@ -3572,10 +3545,11 @@ with tab_wbr:
             col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
 
             with col_card_l1:
+                # Estilo flex height 100% para acoplarse con la tabla contigua
                 st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">CASOS NIVEL L1</div>
-                    <div class="metric-card-value" style="font-size: 3.2rem; color: #f59e0b;">{tot_l1_neg}</div>
+                <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L1</div>
+                    <div class="metric-card-value" style="font-size: 3.4rem; color: #f59e0b; margin: 8px 0;">{tot_l1_neg}</div>
                     <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
                         <b>{pct_l1_del_total}%</b> del total de reclamos ({tot_negativas} casos)
                     </div>
@@ -3583,7 +3557,6 @@ with tab_wbr:
                 """, unsafe_allow_html=True)
 
             with col_matriz_l1:
-                st.markdown("##### Matriz de fricción por agente asignado (Nivel 1)")
                 if not df_l1_neg.empty:
                     df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
                     
@@ -3595,7 +3568,6 @@ with tab_wbr:
                         fill_value=0
                     ).reset_index()
 
-                    # Asegurar presencia de columnas 1, 2, 3
                     for col_star in [3, 2, 1]:
                         if col_star not in pivot_l1.columns:
                             pivot_l1[col_star] = 0
@@ -3617,44 +3589,80 @@ with tab_wbr:
                 else:
                     st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
 
-            # Desglose de comentarios y motivos normalizados en L1
+            st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
+
+            # Generación de Tabla HTML combinando celdas (rowspan) y ordenada ascendentemente
             if not df_l1_neg.empty:
                 df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
-                df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].map(mapa_escala)
-                df_l1_motivos = df_l1_motivos.rename(columns={"motivo_normalizado": "Motivo Normalizado"}).sort_values(["rating_int", "Cantidad"], ascending=[False, False])
-                st.dataframe(df_l1_motivos[["Calificación", "Motivo Normalizado", "Cantidad"]], hide_index=True, use_container_width=True)
+                df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
+                    lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+                )
+                df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
+
+                filas_html_l1 = []
+                for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
+                    filas = grp.to_dict("records")
+                    rowspan_cnt = len(filas)
+                    for idx, row_item in enumerate(filas):
+                        if idx == 0:
+                            td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>"
+                        else:
+                            td_calif = ""
+                        filas_html_l1.append(
+                            f"<tr>{td_calif}<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_normalizado']}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center; font-weight:700; color:#38bdf8;'>{row_item['Cantidad']}</td></tr>"
+                        )
+
+                html_tabla_l1 = f"""
+                <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
+                    <thead>
+                        <tr style='background-color:#0284c7; color:white;'>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:28%;'>Calificación</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo Normalizado</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:15%;'>Cantidad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join(filas_html_l1)}
+                    </tbody>
+                </table>
+                """
+                st.markdown(html_tabla_l1, unsafe_allow_html=True)
+            else:
+                st.caption("Sin motivos registrados en L1.")
 
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA (DESARROLLO)
+            # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA (CÁLCULO EXACTO & ROWSPAN)
             # =========================================================================
             st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Casos Escalados a L3 / Jira")
 
+            # CÁLCULO ESTRICTO: Evaluaciones negativas (1, 2 y 3★) que tienen etiqueta/clasificación Niv-L3
             df_l3_neg = df_target[
-                (df_target["nivel_norm"] == "Niv-L3") |
-                (df_target["ticket_relacionado"].fillna("").astype(str).str.strip().str.len() > 0)
+                (df_target["nivel_norm"] == "Niv-L3") &
+                (df_target["rating_int"].isin([1, 2, 3]))
             ].copy()
 
-            tot_l3 = len(df_l3_neg)
-            pct_l3_total = round((tot_l3 / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+            tot_l3_neg = len(df_l3_neg)
+            pct_l3_sobre_total_neg = round((tot_l3_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
 
             col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
 
             with col_card_l3:
+                # Estilo flex height 100% acoplado
                 st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">CASOS ESCALADOS L3 / JIRA</div>
-                    <div class="metric-card-value" style="font-size: 3.2rem; color: #ef4444;">{tot_l3}</div>
+                <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS ESCALADOS L3 / JIRA</div>
+                    <div class="metric-card-value" style="font-size: 3.4rem; color: #ef4444; margin: 8px 0;">{tot_l3_neg}</div>
                     <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
-                        <b>{pct_l3_total}%</b> del volumen total de reclamos
+                        <b>{pct_l3_sobre_total_neg}%</b> del total de reclamos ({tot_negativas} casos)
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
             with col_matriz_l3:
-                st.markdown("##### Casos Vinculados con Tickets de Jira / Desarrollo")
                 if not df_l3_neg.empty:
                     df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
                     pivot_l3 = df_l3_neg.pivot_table(
@@ -3671,7 +3679,7 @@ with tab_wbr:
 
                     pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
                     pivot_l3["% del Total L3"] = pivot_l3["Todos los casos"].apply(
-                        lambda c: f"{round((c / tot_l3 * 100), 1)}%" if tot_l3 > 0 else "0%"
+                        lambda c: f"{round((c / tot_l3_neg * 100), 1)}%" if tot_l3_neg > 0 else "0%"
                     )
 
                     pivot_l3 = pivot_l3.rename(columns={
@@ -3684,21 +3692,66 @@ with tab_wbr:
                     cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total L3"]
                     st.dataframe(pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
                 else:
-                    st.info("🟢 No hay casos escalados a L3 ni tareas Jira vinculadas a reclamos de esta semana.")
+                    st.info("🟢 No hay evaluaciones negativas registradas en Nivel 3 para esta semana.")
 
-            # Tabla de seguimiento a Jira
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### Detalle de Casos L3 & Tickets Jira Relacionados")
+
             if not df_l3_neg.empty:
-                st.markdown("##### Detalle de Tickets Jira Relacionados")
-                df_l3_neg["Calificación"] = df_l3_neg["rating_int"].map(mapa_escala).fillna("Negativo")
-                cols_jira = ["Calificación", "motivo_normalizado", "ticket_relacionado", "tenant", "agente_asignado"]
-                
-                df_jira_table = df_l3_neg.reindex(columns=cols_jira).rename(columns={
-                    "motivo_normalizado": "Motivo",
-                    "ticket_relacionado": "Ticket Jira / Tarea",
-                    "tenant": "Tenant",
-                    "agente_asignado": "Agente"
-                })
-                st.dataframe(df_jira_table, hide_index=True, use_container_width=True)
+                df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
+                    lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+                )
+                df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
+                df_l3_neg["jira_clean"] = df_l3_neg["ticket_relacionado"].fillna("").replace(["", "None", "nan"], "Sin ticket vinculado")
+                df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
+                df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
+
+                # Orden ascendente por rating_int (1★ -> 2★ -> 3★)
+                df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
+
+                filas_html_l3 = []
+                for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
+                    filas = grp.to_dict("records")
+                    rowspan_cnt = len(filas)
+                    for idx, row_item in enumerate(filas):
+                        if idx == 0:
+                            td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación_HTML']}</td>"
+                        else:
+                            td_calif = ""
+                        
+                        ticket_badge = (
+                            f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600;'>{row_item['jira_clean']}</span>"
+                            if row_item['jira_clean'] != "Sin ticket vinculado"
+                            else f"<span style='color:#64748b;'>{row_item['jira_clean']}</span>"
+                        )
+
+                        filas_html_l3.append(
+                            f"<tr>{td_calif}"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_clean']}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155;'>{ticket_badge}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{row_item['tenant_clean']}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{row_item['agente_clean']}</td></tr>"
+                        )
+
+                html_tabla_l3 = f"""
+                <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
+                    <thead>
+                        <tr style='background-color:#0284c7; color:white;'>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Calificación</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Ticket Jira / Tarea</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:18%;'>Tenant</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:16%;'>Agente</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join(filas_html_l3)}
+                    </tbody>
+                </table>
+                """
+                st.markdown(html_tabla_l3, unsafe_allow_html=True)
+            else:
+                st.caption("Sin casos L3 registrados.")
     else:
         st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
 
