@@ -3868,7 +3868,7 @@ with tab_wbr:
             st.markdown("---")
 
             # =========================================================================
-            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO (PERFECCIONADO)
+            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO (DISEÑO WBR PULIDO)
             # =========================================================================
             st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
 
@@ -3880,26 +3880,18 @@ with tab_wbr:
             dias_num = df_ext["created_at_dt"].dt.dayofweek
             tot_domingo = int((dias_num == 6).sum())
             derivados_l3_ext = int((df_ext["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
+            cerrados_ia_ext = int(df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
+            cerrados_hum_ext = tot_ext - cerrados_ia_ext
 
-            # Dos columnas con proporción visual 1:1.2
-            col_ext_pie, col_ext_dias = st.columns([1.1, 1.2])
+            col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
 
             with col_ext_pie:
-                # Doble tarjeta métrica para llenar armoniosamente la cabecera
-                c_kpi_ext1, c_kpi_ext2 = st.columns(2)
-                c_kpi_ext1.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px;">
-                    <div class="metric-card-title" style="justify-content: center; font-size: 0.68rem; margin: 0;">TOTAL EXTENDIDO</div>
-                    <div class="metric-card-value" style="font-size: 1.9rem; color: #38bdf8; margin: 1px 0; line-height: 1.1;">{tot_ext}</div>
-                    <div class="metric-card-sub" style="font-size: 0.72rem; margin: 0; color: #94a3b8;">Domingo: {tot_domingo} chats</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                c_kpi_ext2.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px;">
-                    <div class="metric-card-title" style="justify-content: center; font-size: 0.68rem; margin: 0;">EFECTIVIDAD CIERRE</div>
-                    <div class="metric-card-value" style="font-size: 1.9rem; color: #34d399; margin: 1px 0; line-height: 1.1;">{pct_ext_cerrados}%</div>
-                    <div class="metric-card-sub" style="font-size: 0.72rem; margin: 0; color: #94a3b8;">{tot_ext_cerrados} de {tot_ext} cerrados</div>
+                # Tarjeta unificada idéntica a tu diapositiva original
+                st.markdown(f"""
+                <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS EN HORARIO EXTENDIDO</div>
+                    <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
+                    <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b></div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -3907,79 +3899,103 @@ with tab_wbr:
                     df_ext_ag = df_ext[~df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(agentes_excluir_pie)]["agente_asignado"].value_counts().reset_index()
                     df_ext_ag.columns = ["Agente", "Cantidad"]
 
+                    # Paleta corporativa degradada limpia
+                    palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
+
                     fig_pie_ext = go.Figure(data=[go.Pie(
                         labels=df_ext_ag["Agente"],
                         values=df_ext_ag["Cantidad"],
-                        hole=0.48,
-                        textinfo="label+value+percent",
-                        texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                        hole=0.35,  # Reducido para evitar deformaciones en las porciones
+                        textinfo="label+percent",
+                        texttemplate="<b>%{label}</b><br>%{percent}",
                         textposition="outside",
                         insidetextorientation="horizontal",
-                        marker=dict(colors=palette_donut, line=dict(color="#1e293b", width=2)),
+                        pull=[0.02] * len(df_ext_ag),
+                        marker=dict(colors=palette_pie_wbr, line=dict(color="#0b1120", width=2)),
                         showlegend=False
                     )])
-                    # Margen inferior aumentado (b=50) para que nunca se corte el nombre de abajo
+                    
                     fig_pie_ext.update_layout(
-                        paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
-                        font=dict(color="#cbd5e1", size=10),
-                        margin=dict(t=20, b=50, l=35, r=35),
-                        height=330
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
+                        margin=dict(t=25, b=25, l=40, r=40),
+                        height=310
                     )
                     st.plotly_chart(fig_pie_ext, use_container_width=True)
 
-                    cerrados_ia_ext = int(df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
-                    cerrados_hum_ext = tot_ext - cerrados_ia_ext
                     st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 10px 14px; font-size: 0.8rem; color: #94a3b8; height: 50px; box-sizing: border-box; display: flex; align-items: center;">
-                        <span>🤖 <b>{cerrados_ia_ext} chats gestionados por IA</b>, {cerrados_hum_ext} asignados a agentes.</span>
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
+                        <span><b style="color: #38bdf8;">Obs:</b> {cerrados_ia_ext} chats cerrados por IA, {cerrados_hum_ext} cerrados por agentes asignados.</span>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.info("Sin chats registrados en horario extendido para esta semana.")
 
             with col_ext_dias:
-                st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-                st.markdown("##### Q. de chats ingresados por Día (Horario Extendido)")
-
-                mapa_dias_nom = {
-                    0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
-                    4: "viernes", 5: "sábado", 6: "domingo"
-                }
+                # Tarjeta espejo para que ambas columnas inicien en la misma cota superior
+                st.markdown(f"""
+                <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">EFECTIVIDAD DE GESTIÓN EXTENDIDA</div>
+                    <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{pct_ext_cerrados}%</div>
+                    <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{tot_ext_cerrados}</b> cerrados de <b>{tot_ext}</b> recibidos</div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 if not df_ext.empty:
+                    mapa_dias_nom = {
+                        0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
+                        4: "viernes", 5: "sábado", 6: "domingo"
+                    }
                     df_ext["dia_nombre"] = df_ext["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
                     orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
                     
                     df_dias_ext_cnt = df_ext["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
                     df_dias_ext_cnt.columns = ["Día", "Cantidad"]
 
-                    fig_bar_dias_ext = px.bar(
-                        df_dias_ext_cnt,
-                        x="Cantidad",
-                        y="Día",
+                    # Ocultar visualmente la etiqueta '0' para que no ensucie la barra vacía
+                    df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
+
+                    fig_bar_dias_ext = go.Figure(go.Bar(
+                        x=df_dias_ext_cnt["Cantidad"],
+                        y=df_dias_ext_cnt["Día"],
                         orientation="h",
-                        text="Cantidad",
-                        color_discrete_sequence=["#0284c7"]
-                    )
-                    # Oculta el número si es 0 para no ensuciar el eje
-                    fig_bar_dias_ext.update_traces(
-                        texttemplate="%{text}",
+                        text=df_dias_ext_cnt["texto_barra"],
                         textposition="outside",
                         cliponaxis=False,
-                        marker=dict(cornerradius=6)
-                    )
+                        marker=dict(
+                            color="#0284c7",
+                            cornerradius=5
+                        ),
+                        textfont=dict(color="#f8fafc", size=11, family="Segoe UI, sans-serif")
+                    ))
+
                     fig_bar_dias_ext.update_layout(
-                        paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
-                        font=dict(color="#cbd5e1"),
-                        xaxis=dict(gridcolor="#334155", title="Cantidad"),
-                        yaxis=dict(autorange="reversed", title=None),
-                        margin=dict(t=20, b=20, l=20, r=20),
-                        height=355
+                        title=dict(
+                            text="<b>Q. de chats ingresados por Día</b>",
+                            font=dict(color="#f8fafc", size=13),
+                            x=0.02, y=0.96
+                        ),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#94a3b8", size=11),
+                        xaxis=dict(
+                            showgrid=False,
+                            showticklabels=False,  # Se eliminan los números del eje X para que solo se lean los valores de las barras
+                            zeroline=False
+                        ),
+                        yaxis=dict(
+                            autorange="reversed",
+                            tickfont=dict(color="#cbd5e1", size=11),
+                            showgrid=False
+                        ),
+                        margin=dict(t=35, b=10, l=10, r=25),
+                        height=310
                     )
                     st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
 
                     st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 10px 14px; font-size: 0.8rem; line-height: 1.4; color: #cbd5e1; height: 50px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                         <div>• <b>Cierres:</b> {tot_ext_cerrados} de los {tot_ext} chats ingresados lograron cerrarse.</div>
                         <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
                     </div>
