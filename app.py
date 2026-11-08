@@ -3223,6 +3223,179 @@ with tab_wbr:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA (5 SEMANAS)
+            # =========================================================================
+            st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
+
+            # 1. Función auxiliar para calcular promedios de la semana según reglas de negocio
+            def calcular_metricas_tiempos_semana(df_sub):
+                if df_sub.empty:
+                    return 0.0, 0.0, 0.0, 0.0
+
+                agentes_omitir_t = ["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"]
+                
+                # A. 1ra Respuesta: Horario hábil normal y agentes válidos
+                dt_col = df_sub["created_at_dt"]
+                dias_col = dt_col.dt.dayofweek
+                horas_col = dt_col.dt.time
+                fechas_col = dt_col.dt.strftime("%Y-%m-%d")
+
+                es_horario_1ra = (
+                    ((dias_col.isin([0, 1, 2, 3, 4])) & (horas_col >= time(8, 0)) & (horas_col <= time(17, 30))) |
+                    ((dias_col == 5) & (horas_col >= time(9, 0)) & (horas_col <= time(11, 45)))
+                ) & (~fechas_col.isin(FERIADOS))
+
+                es_agente_1ra = (
+                    (df_sub["por_agente"].fillna("").astype(str).str.lower() == "no excluido") &
+                    (~df_sub["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitir_t))
+                )
+
+                sub_1ra = df_sub[es_horario_1ra & es_agente_1ra].copy()
+                sub_1ra["p1_num"] = pd.to_numeric(sub_1ra["primera_respuesta_min"], errors="coerce")
+                s_1ra = sub_1ra["p1_num"].dropna()
+
+                prom_1ra_val = round(s_1ra.mean(), 2) if not s_1ra.empty else 0.0
+                pct_sla_1ra_val = round(((s_1ra <= 2.0).sum() / len(s_1ra) * 100), 1) if not s_1ra.empty else 0.0
+
+                # B. Gestión: Cerrados, sin "Sin Respuesta", horario operativo
+                etiquetas_s = df_sub["etiquetas"].fillna("").astype(str).str.lower()
+                es_sin_resp = etiquetas_s.str.contains("sin respuesta", na=False)
+                es_horario_gest = df_sub["horario_evaluado"] != "fuera de horario"
+                
+                sub_gest = df_sub[
+                    es_agente_1ra & 
+                    es_horario_gest & 
+                    (~es_sin_resp) & 
+                    (df_sub["es_cerrado"] == True)
+                ].copy()
+                
+                sub_gest["pg_num"] = pd.to_numeric(sub_gest["tiempo_resolucion_minutos"], errors="coerce")
+                s_gest = sub_gest["pg_num"].dropna()
+
+                prom_gest_val = round(s_gest.mean(), 1) if not s_gest.empty else 0.0
+                pct_sla_gest_val = round(((s_gest <= 60.0).sum() / len(s_gest) * 100), 1) if not s_gest.empty else 0.0
+
+                return prom_gest_val, prom_1ra_val, pct_sla_gest_val, pct_sla_1ra_val
+
+            # 2. Calcular los evolutivos de las 5 semanas
+            evol_tiempos = []
+            for _, s_row in df_5_semanas_info.iterrows():
+                sub_w = df_wbr_base[
+                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["iso_week"] == s_row["iso_week"])
+                ]
+                p_gest_w, p_1ra_w, sla_g_w, sla_1_w = calcular_metricas_tiempos_semana(sub_w)
+                evol_tiempos.append({
+                    "Semana": s_row["etiqueta_semana"],
+                    "Prom_Gestion": p_gest_w,
+                    "Prom_1ra": p_1ra_w,
+                    "SLA_Gestion": sla_g_w,
+                    "SLA_1ra": sla_1_w
+                })
+
+            df_evol_tiempos = pd.DataFrame(evol_tiempos)
+
+            # Métricas de la semana foco actual y semana previa para comparativa WoW
+            foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
+            foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
+            foco_sla_gest = df_evol_tiempos.iloc[-1]["SLA_Gestion"]
+            foco_sla_1ra = df_evol_tiempos.iloc[-1]["SLA_1ra"]
+
+            prev_gest = df_evol_tiempos.iloc[-2]["Prom_Gestion"] if len(df_evol_tiempos) >= 2 else 0.0
+            prev_1ra = df_evol_tiempos.iloc[-2]["Prom_1ra"] if len(df_evol_tiempos) >= 2 else 0.0
+
+            wow_gest_pct = round(((foco_gest - prev_gest) / prev_gest * 100), 2) if prev_gest > 0 else 0.0
+            wow_1ra_pct = round(((foco_1ra - prev_1ra) / prev_1ra * 100), 2) if prev_1ra > 0 else 0.0
+
+            # 3. Tarjetas superiores
+            col_t1, col_t2 = st.columns(2)
+            col_t1.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center;">
+                <div class="metric-card-title" style="justify-content: center;">TIEMPO PROMEDIO TOTAL DE GESTIÓN</div>
+                <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_gest} min</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col_t2.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center;">
+                <div class="metric-card-title" style="justify-content: center;">TIEMPO PROM. DE 1RA RESPUESTA</div>
+                <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_1ra} min</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # 4. Gráficos de barras evolutivos de 5 semanas
+            col_g_gest, col_g_1ra = st.columns(2)
+
+            with col_g_gest:
+                st.markdown("##### Tiempo promedio total de gestión (min)")
+                fig_bar_gest = go.Figure()
+                fig_bar_gest.add_trace(go.Bar(
+                    x=df_evol_tiempos["Semana"],
+                    y=df_evol_tiempos["Prom_Gestion"],
+                    marker=dict(color="#0284c7", cornerradius=8),
+                    text=df_evol_tiempos["Prom_Gestion"].apply(lambda v: f"{v}"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_gest.update_layout(
+                    paper_bgcolor="#1e293b",
+                    plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#334155", title=None),
+                    yaxis=dict(gridcolor="#334155", title="Minutos"),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_bar_gest, use_container_width=True)
+
+                color_wow_g = "#34d399" if wow_gest_pct <= 0 else "#f43f5e"
+                color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
+
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center;">
+                    <b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)<br>
+                    SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_g_1ra:
+                st.markdown("##### Tiempo promedio primera respuesta")
+                fig_bar_1ra = go.Figure()
+                fig_bar_1ra.add_trace(go.Bar(
+                    x=df_evol_tiempos["Semana"],
+                    y=df_evol_tiempos["Prom_1ra"],
+                    marker=dict(color="#0369a1", cornerradius=8),
+                    text=df_evol_tiempos["Prom_1ra"].apply(lambda v: f"{v}"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_1ra.update_layout(
+                    paper_bgcolor="#1e293b",
+                    plot_bgcolor="#1e293b",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#334155", title=None),
+                    yaxis=dict(gridcolor="#334155", title="Minutos"),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_bar_1ra, use_container_width=True)
+
+                color_wow_1 = "#34d399" if wow_1ra_pct <= 0 else "#f43f5e"
+                color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
+
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center;">
+                    <b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)<br>
+                    <span style="font-size: 0.8rem; color: #94a3b8;">OBS: No está incluido el horario extendido</span><br>
+                    SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b>
+                </div>
+                """, unsafe_allow_html=True)
     else:
         st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
 
