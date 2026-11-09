@@ -88,19 +88,23 @@ if token_url and not st.session_state["user_authenticated"]:
     except Exception:
         pass
 
-# 2. Script JS de auto-restauración vía LocalStorage
-st.components.v1.html("""
+# 2. Script JS de auto-restauración vía LocalStorage seguro (sin recarga infinita)
+st.html("""
 <script>
-    const storedUser = localStorage.getItem('bims_user_session');
-    const urlParams = new URLSearchParams(window.location.search);
-    
-    // Si hay usuario en localStorage pero la URL perdió el token al desconectarse, auto-restaurar
-    if (storedUser && !urlParams.has('session_token')) {
-        urlParams.set('session_token', storedUser);
-        window.location.search = urlParams.toString();
-    }
+    (function() {
+        try {
+            const storedUser = localStorage.getItem('bims_user_session');
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // Solo auto-restaura si hay un usuario válido y no venimos de un logout explícito
+            if (storedUser && !urlParams.has('session_token') && !sessionStorage.getItem('bims_just_logged_out')) {
+                urlParams.set('session_token', storedUser);
+                window.location.search = urlParams.toString();
+            }
+        } catch(e) {}
+    })();
 </script>
-""", height=0)
+""")
 
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
@@ -272,11 +276,12 @@ if not st.session_state["user_authenticated"]:
                         st.session_state["user_name"] = datos_user.get("nombre")
 
                         st.query_params["session_token"] = email_user
-                        st.components.v1.html(f"""
+                        st.html(f"""
                         <script>
+                            sessionStorage.removeItem('bims_just_logged_out');
                             localStorage.setItem('bims_user_session', '{email_user}');
                         </script>
-                        """, height=0)
+                        """)
 
                         st.rerun()
                     else:
@@ -1605,11 +1610,12 @@ if st.sidebar.button("Cerrar Sesión", use_container_width=True, key="btn_logout
 
     # 2. Limpieza de credenciales en LocalStorage y parámetros de URL
     st.query_params.clear()
-    st.components.v1.html("""
+    st.html("""
     <script>
+        sessionStorage.setItem('bims_just_logged_out', 'true');
         localStorage.removeItem('bims_user_session');
     </script>
-    """, height=0)
+    """)
 
     # 3. Breve pausa para completar la animación de salida
     time_lib.sleep(0.7)
