@@ -209,12 +209,22 @@ def construir_tabla_casos_l3(slide, df_l3_neg, x=4.3, y=3.8, w=8.3):
 
 def exportar_wbr_con_plantilla(datos):
     """
-    Rellena la plantilla template_wbr.pptx o template_wbr_2.pptx con los datos semanales.
+    Rellena la plantilla template_wbr_2.pptx o template_wbr.pptx con los datos semanales.
     """
-    ruta_plantilla = "template_wbr_2.pptx" if os.path.exists("template_wbr_2.pptx") else "template_wbr.pptx"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    ruta_2 = os.path.join(base_dir, "template_wbr_2.pptx")
+    ruta_1 = os.path.join(base_dir, "template_wbr.pptx")
     
-    if not os.path.exists(ruta_plantilla):
-        raise FileNotFoundError(f"No se encontró el archivo de plantilla: {ruta_plantilla}")
+    if os.path.exists(ruta_2):
+        ruta_plantilla = ruta_2
+    elif os.path.exists(ruta_1):
+        ruta_plantilla = ruta_1
+    elif os.path.exists("template_wbr_2.pptx"):
+        ruta_plantilla = "template_wbr_2.pptx"
+    elif os.path.exists("template_wbr.pptx"):
+        ruta_plantilla = "template_wbr.pptx"
+    else:
+        raise FileNotFoundError("No se encontró el archivo 'template_wbr_2.pptx' ni 'template_wbr.pptx' en el repositorio.")
 
     prs = Presentation(ruta_plantilla)
 
