@@ -3604,17 +3604,26 @@ if tab_wbr is not None:
                 # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1
                 # =========================================================================
                 st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
-    
+
+                # Inicialización de variables para exportación segura
                 df_l1_neg = df_target[
                     (df_target["nivel_norm"] == "Niv-L1") &
                     (df_target["rating_int"].isin([1, 2, 3]))
                 ].copy()
-    
+
+                df_l3_neg = df_target[
+                    (df_target["nivel_norm"] == "Niv-L3") &
+                    (df_target["rating_int"].isin([1, 2, 3]))
+                ].copy()
+
                 tot_l1_neg = len(df_l1_neg)
                 pct_l1_del_total = round((tot_l1_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
-    
+
+                tot_l3_neg = len(df_l3_neg)
+                pct_l3_sobre_total_neg = round((tot_l3_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+
                 col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
-    
+
                 with col_card_l1:
                     st.markdown(f"""
                     <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
@@ -3625,7 +3634,7 @@ if tab_wbr is not None:
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-    
+
                 with col_matriz_l1:
                     if not df_l1_neg.empty:
                         df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
@@ -3637,52 +3646,50 @@ if tab_wbr is not None:
                             aggfunc="count",
                             fill_value=0
                         ).reset_index()
-    
+
                         for col_star in [3, 2, 1]:
                             if col_star not in pivot_l1.columns:
                                 pivot_l1[col_star] = 0
-    
+
                         pivot_l1["Todos los casos"] = pivot_l1[3] + pivot_l1[2] + pivot_l1[1]
                         pivot_l1["% del Total a L1"] = pivot_l1["Todos los casos"].apply(
                             lambda c: f"{round((c / tot_l1_neg * 100), 1)}%" if tot_l1_neg > 0 else "0%"
                         )
-    
+
                         pivot_l1 = pivot_l1.rename(columns={
                             "agente_nom": "Agente Asignado",
                             3: "Regular (3★)",
                             2: "Malo (2★)",
                             1: "Muy malo (1★)"
                         })
-    
+
                         cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
                         st.dataframe(pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
                     else:
                         st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
-    
+
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
-    
+
+                df_l1_motivos = pd.DataFrame()
                 if not df_l1_neg.empty:
                     df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
                     df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
                         lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
                     )
                     df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
-    
+
                     filas_html_l1 = []
                     for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
                         filas = grp.to_dict("records")
                         rowspan_cnt = len(filas)
                         for idx, row_item in enumerate(filas):
-                            if idx == 0:
-                                td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>"
-                            else:
-                                td_calif = ""
+                            td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>" if idx == 0 else ""
                             filas_html_l1.append(
                                 f"<tr>{td_calif}<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_normalizado']}</td>"
                                 f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center; font-weight:700; color:#38bdf8;'>{row_item['Cantidad']}</td></tr>"
                             )
-    
+
                     html_tabla_l1 = f"""
                     <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
                         <thead>
@@ -3700,60 +3707,63 @@ if tab_wbr is not None:
                     st.markdown(html_tabla_l1, unsafe_allow_html=True)
                 else:
                     st.caption("Sin motivos registrados en L1.")
-    
+
                 st.markdown("---")
 
                 # =========================================================================
-                # CARGA Y VINCULACIÓN DE ESTADOS/PRIORIDADES PARA TICKETS L3
+                # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
                 # =========================================================================
-                @st.cache_data(ttl=300)
-                def obtener_metadatos_tickets():
-                    try:
-                        res = supabase.table("tickets_l3").select("ticket_id, prioridad, estado").execute()
-                        if res.data:
-                            return pd.DataFrame(res.data)
-                    except Exception as e:
-                        print(f"Error consultando tickets_l3: {e}")
-                    return pd.DataFrame(columns=["ticket_id", "prioridad", "estado"])
-                
-                # En la sección del SLIDE 6 (Casos L3):
-                df_tickets_meta = obtener_metadatos_tickets()
-                
-                if not df_l3_neg.empty:
-                    df_l3_neg["ticket_limpio"] = (
-                        df_l3_neg["ticket_relacionado"]
-                        .fillna("Sin ticket vinculado")
-                        .astype(str)
-                        .str.strip()
-                    )
-                
-                    # Cruzar datos por el código del ticket
-                    if not df_tickets_meta.empty:
-                        df_l3_neg = df_l3_neg.merge(
-                            df_tickets_meta,
-                            left_on="ticket_limpio",
-                            right_on="ticket_id",
-                            how="left"
+                st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 3 (L3 / Jira)")
+
+                col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
+
+                with col_card_l3:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L3</div>
+                        <div class="metric-card-value" style="font-size: 3.4rem; color: #ef4444; margin: 8px 0;">{tot_l3_neg}</div>
+                        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                            <b>{pct_l3_sobre_total_neg}%</b> del total de reclamos ({tot_negativas} casos)
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col_matriz_l3:
+                    if not df_l3_neg.empty:
+                        df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                        pivot_l3 = df_l3_neg.pivot_table(
+                            index="agente_nom",
+                            columns="rating_int",
+                            values="id",
+                            aggfunc="count",
+                            fill_value=0
+                        ).reset_index()
+
+                        for col_star in [3, 2, 1]:
+                            if col_star not in pivot_l3.columns:
+                                pivot_l3[col_star] = 0
+
+                        pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
+                        pivot_l3["% del Total a L3"] = pivot_l3["Todos los casos"].apply(
+                            lambda c: f"{round((c / tot_l3_neg * 100), 1)}%" if tot_l3_neg > 0 else "0%"
                         )
+
+                        pivot_l3 = pivot_l3.rename(columns={
+                            "agente_nom": "Agente Asignado",
+                            3: "Regular (3★)",
+                            2: "Malo (2★)",
+                            1: "Muy malo (1★)"
+                        })
+
+                        cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L3"]
+                        st.dataframe(pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
                     else:
-                        df_l3_neg["prioridad"] = None
-                        df_l3_neg["estado"] = None
-                
-                    # Valores por defecto para tickets que aún no se han clasificado
-                    df_l3_neg["prioridad"] = df_l3_neg["prioridad"].fillna("Media")
-                    df_l3_neg["estado"] = df_l3_neg["estado"].fillna("Pendiente")
-                # ---------------------------------------------------------------------
-                # TABLA DE DETALLE L3 CON PRIORIDAD Y ESTADO
-                # ---------------------------------------------------------------------
+                        st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 3 esta semana.")
+
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### Detalle de Casos L3 & Tickets Jira Relacionados")
-    
+
                 if not df_l3_neg.empty:
-                    # 1. Limpieza de datos y valores por defecto
-                    df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
-                        lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
-                    )
-                    df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
                     df_l3_neg["ticket_limpio"] = (
                         df_l3_neg["ticket_relacionado"]
                         .fillna("")
@@ -3761,38 +3771,37 @@ if tab_wbr is not None:
                         .astype(str)
                         .str.strip()
                     )
-                    df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
-                    df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
-    
-                    # Si no vinieron de la tabla tickets_l3, asignamos valores base
+
+                    try:
+                        res_tickets = supabase.table("tickets_l3").select("ticket_id, prioridad, estado").execute()
+                        df_meta_tk = pd.DataFrame(res_tickets.data or [])
+                        if not df_meta_tk.empty:
+                            df_l3_neg = df_l3_neg.merge(df_meta_tk, left_on="ticket_limpio", right_on="ticket_id", how="left")
+                    except Exception:
+                        pass
+
                     if "prioridad" not in df_l3_neg.columns:
                         df_l3_neg["prioridad"] = "Media"
                     else:
                         df_l3_neg["prioridad"] = df_l3_neg["prioridad"].fillna("Media")
-    
+
                     if "estado" not in df_l3_neg.columns:
                         df_l3_neg["estado"] = "Pendiente"
                     else:
                         df_l3_neg["estado"] = df_l3_neg["estado"].fillna("Pendiente")
-    
-                    # Mapeo de colores estéticos para Prioridad y Estado
-                    color_prio = {
-                        "Crítica": "#ef4444", 
-                        "Alta": "#f97316", 
-                        "Media": "#38bdf8", 
-                        "Baja": "#94a3b8"
-                    }
-                    color_est = {
-                        "Resuelto": "#34d399", 
-                        "Cerrado": "#10b981",
-                        "En progreso": "#38bdf8", 
-                        "Abierto": "#fbbf24", 
-                        "Pendiente": "#94a3b8"
-                    }
-    
+
+                    df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
+                        lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+                    )
+                    df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
+                    df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
+                    df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
+
+                    color_prio = {"Crítica": "#ef4444", "Alta": "#f97316", "Media": "#38bdf8", "Baja": "#94a3b8"}
+                    color_est = {"Resuelto": "#34d399", "Cerrado": "#10b981", "En progreso": "#38bdf8", "Abierto": "#fbbf24", "Pendiente": "#94a3b8"}
+
                     df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
-    
-                    # 2. Generación dinámica de filas combinando la calificación (rowspan)
+
                     filas_html_l3 = []
                     for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
                         filas = grp.to_dict("records")
@@ -3804,19 +3813,18 @@ if tab_wbr is not None:
                                 f"{r_item['Calificación_HTML']}</td>"
                                 if idx == 0 else ""
                             )
-                            
                             c_p = color_prio.get(r_item['prioridad'], "#94a3b8")
                             c_e = color_est.get(r_item['estado'], "#94a3b8")
-    
+
                             ticket_txt = r_item['ticket_limpio']
-                            if ticket_txt != "Sin ticket":
-                                badge_ticket = f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600; font-family:monospace;'>{ticket_txt}</span>"
-                            else:
-                                badge_ticket = f"<span style='color:#64748b;'>{ticket_txt}</span>"
-    
+                            badge_ticket = (
+                                f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600; font-family:monospace;'>{ticket_txt}</span>"
+                                if ticket_txt != "Sin ticket" else f"<span style='color:#64748b;'>{ticket_txt}</span>"
+                            )
+
                             badge_prio = f"<span style='color:{c_p}; font-weight:600; font-size:0.8rem;'>● {r_item['prioridad']}</span>"
                             badge_est = f"<span style='border:1px solid {c_e}; color:{c_e}; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:600;'>{r_item['estado']}</span>"
-    
+
                             filas_html_l3.append(
                                 f"<tr>{td_calif}"
                                 f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{r_item['motivo_clean']}</td>"
@@ -3826,8 +3834,7 @@ if tab_wbr is not None:
                                 f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{r_item['tenant_clean']}</td>"
                                 f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{r_item['agente_clean']}</td></tr>"
                             )
-    
-                    # 3. Renderizado de la tabla HTML
+
                     html_tabla_l3 = f"""
                     <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.84rem; border:1px solid #334155;'>
                         <thead>
@@ -3849,6 +3856,8 @@ if tab_wbr is not None:
                     st.markdown(html_tabla_l3, unsafe_allow_html=True)
                 else:
                     st.info("🟢 No hay casos escalados a L3 con calificación negativa esta semana.")
+
+                st.markdown("---")
     
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### Detalle de Casos L3 & Tickets Jira Relacionados")
