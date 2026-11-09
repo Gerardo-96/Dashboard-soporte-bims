@@ -1537,16 +1537,89 @@ st.sidebar.markdown("---")
 if st.sidebar.button("Exportar Reporte a Excel", use_container_width=True):
     modal_exportar_excel()
 
-if st.sidebar.button("Cerrar Sesión", use_container_width=True):
+if st.sidebar.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
+    # 1. Overlay visual oscuro con animación de fade y spinner de despedida
+    st.markdown("""
+    <style>
+        @keyframes fadeInOverlay {
+            from { opacity: 0; backdrop-filter: blur(0px); }
+            to { opacity: 1; backdrop-filter: blur(8px); }
+        }
+        @keyframes spinRing {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .logout-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(11, 17, 32, 0.88);
+            z-index: 999999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            animation: fadeInOverlay 0.25s ease-out forwards;
+        }
+        .logout-box {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 28px 36px;
+            text-align: center;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .logout-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(56, 189, 248, 0.2);
+            border-top: 3px solid #38bdf8;
+            border-radius: 50%;
+            animation: spinRing 0.75s linear infinite;
+        }
+        .logout-txt-principal {
+            color: #f8fafc;
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+        }
+        .logout-txt-sub {
+            color: #94a3b8;
+            font-size: 0.82rem;
+        }
+    </style>
+    <div class="logout-overlay">
+        <div class="logout-box">
+            <div class="logout-spinner"></div>
+            <div class="logout-txt-principal">Cerrando sesión de forma segura...</div>
+            <div class="logout-txt-sub">Limpiando credenciales y caché</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. Limpieza de credenciales en LocalStorage y parámetros de URL
     st.query_params.clear()
     st.components.v1.html("""
     <script>
         localStorage.removeItem('bims_user_session');
     </script>
     """, height=0)
-    
+
+    # 3. Breve pausa para completar la animación de salida
+    time_lib.sleep(0.7)
+
+    # 4. Reseteo de sesión y recarga limpia
     st.session_state["user_authenticated"] = False
     st.session_state["user_email"] = ""
+    if "admin_authenticated" in st.session_state:
+        st.session_state["admin_authenticated"] = False
+    
     st.rerun()
 
 # ==========================================
