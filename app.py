@@ -4218,14 +4218,26 @@ if tab_wbr is not None:
                         "foco_csat": foco_csat,
                         "diff_csat_wow": diff_csat,
                         "foco_ratio": foco_ratio,
-                        # Slide 6 y 7
+                        # Slide 5 (L1)
                         "tot_negativas": tot_negativas,
                         "tot_l1_neg": tot_l1_neg,
                         "pct_l1_total": pct_l1_del_total,
-                        "df_l1_motivos": df_l1_motivos if not df_l1_neg.empty else None,
+                        "df_l1_agentes": pivot_l1 if ('pivot_l1' in locals() and not pivot_l1.empty) else None,
+                        "df_l1_motivos": df_l1_motivos if ('df_l1_motivos' in locals() and not df_l1_motivos.empty) else None,
+
+                        # Slide 6 (L3)
                         "tot_l3_neg": tot_l3_neg,
                         "pct_l3_total": pct_l3_sobre_total_neg,
-                        "df_l3_neg": df_l3_neg if not df_l3_neg.empty else None,
+                        "df_l3_agentes": pivot_l3 if ('pivot_l3' in locals() and not pivot_l3.empty) else None,
+                        "df_l3_neg": df_l3_neg if ('df_l3_neg' in locals() and not df_l3_neg.empty) else None,
+
+                        # Gráficos
+                        "df_tiempos": df_evol_tiempos,
+                        "df_evol_csat": df_evol_csat,
+                        "df_5w": df_res_5w,
+                        "df_dias": df_dias_agg,
+                        "df_agentes": df_ag_pie,
+                    
                         # Slide 8
                         "tot_ext": tot_ext,
                         "tot_domingo": tot_domingo,
