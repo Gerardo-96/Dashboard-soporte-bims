@@ -157,75 +157,78 @@ def obtener_permisos_usuario(identificador_usuario):
     return {"acceso_wbr": False, "acceso_admin": False}
 
 # ==========================================
-# PANTALLA DE LOGIN CENTRADA Y FIJA (SIN DEFORMACIÓN)
+# PANTALLA DE LOGIN CENTRADA Y ACOTADA
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
-        .stApp { 
-            background-color: #0b1120 !important; 
-            color: #f8fafc; 
-        }
+        .stApp { background-color: #0f172a; color: #f8fafc; }
 
         header[data-testid="stHeader"] {
-            background-color: #0b1120 !important;
+            background-color: #0f172a !important;
         }
 
-        /* Ocultar barra lateral en login */
-        [data-testid="stSidebar"] {
-            display: none !important;
+        .block-container {
+            max-width: 520px !important;
+            padding-top: 5rem !important;
+            margin: 0 auto !important;
         }
 
-        /* Estilo de la tarjeta de login */
-        .login-card-container {
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+        .login-card-header {
+            background-color: #1e293b;
             border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 30px 24px 20px 24px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border-bottom: none;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            padding: 28px 24px 10px 24px;
             text-align: center;
-            margin-top: 10vh;
         }
 
-        .login-logo-circle {
-            width: 54px;
-            height: 54px;
-            margin: 0 auto 12px auto;
-            border-radius: 50%;
-            background: rgba(56, 189, 248, 0.1);
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.6rem;
-        }
-
-        .login-title-txt {
-            color: #f8fafc;
-            font-size: 1.35rem;
+        .login-title {
+            color: #38bdf8;
+            font-size: 1.45rem;
             font-weight: 700;
             margin-bottom: 4px;
         }
 
-        .login-sub-txt {
+        .login-subtitle {
             color: #94a3b8;
-            font-size: 0.84rem;
-            margin-bottom: 20px;
+            font-size: 0.85rem;
         }
 
-        /* Inputs estilizados */
         div[data-testid="stForm"] {
-            background: transparent !important;
-            border: none !important;
-            padding: 0 !important;
+            background-color: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-top: none !important;
+            border-bottom-left-radius: 16px !important;
+            border-bottom-right-radius: 16px !important;
+            padding: 0 24px 28px 24px !important;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        div[data-testid="stTextInput"] {
+            width: 100% !important;
+        }
+
+        div[data-testid="stTextInput"] small, 
+        div[data-testid="stInputInstructions"], 
+        .st-emotion-cache-12w0q3e, 
+        [data-testid="stFormSubmitButton"] + div {
+            display: none !important;
+            visibility: hidden !important;
         }
 
         div[data-testid="stTextInput"] input {
-            background-color: #0b1120 !important;
+            background-color: #0f172a !important;
             color: #f8fafc !important;
             border: 1px solid #334155 !important;
             border-radius: 8px !important;
             padding: 10px 12px !important;
+        }
+
+        input::-ms-reveal,
+        input::-ms-clear {
+            display: none !important;
         }
 
         div[data-testid="stTextInput"] input:focus {
@@ -233,66 +236,75 @@ if not st.session_state["user_authenticated"]:
             box-shadow: 0 0 0 1px #38bdf8 !important;
         }
 
-        /* Botón de login con degradado cian/azul */
         .stButton>button { 
-            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; 
+            background-color: #0284c7 !important; 
             color: white !important; 
-            font-weight: 600 !important; 
+            font-weight: bold !important; 
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 10px !important;
-            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3) !important;
+            margin-top: 8px !important;
         }
-        .stButton>button:hover {
-            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.45) !important;
+
+        .loading-badge {
+            background-color: #0f172a;
+            border: 1px solid #0284c7;
+            border-radius: 8px;
+            padding: 10px;
+            color: #38bdf8;
+            font-size: 0.88rem;
+            font-weight: 600;
+            text-align: center;
+            margin-top: 10px;
         }
     </style>
+
+    <div class="login-card-header">
+        <div class="login-title">Dashboard Soporte BIMS</div>
+        <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
+    </div>
     """, unsafe_allow_html=True)
 
-    # Centrado estructural estricto con columnas Streamlit
-    col_izq, col_centro, col_der = st.columns([1.2, 1.4, 1.2])
+    with st.form("form_login_global", clear_on_submit=False):
+        input_user_email = st.text_input("Correo Electrónico")
+        input_user_pass = st.text_input("Contraseña", type="password")
+        
+        status_box = st.empty()
+        btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
 
-    with col_centro:
-        st.markdown("""
-        <div class="login-card-container">
-            <div class="login-logo-circle">📈</div>
-            <div class="login-title-txt">Dashboard Soporte BIMS</div>
-            <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
-        """, unsafe_allow_html=True)
-
-        with st.form("form_login_global", clear_on_submit=False):
-            input_user_email = st.text_input("Correo Electrónico", placeholder="usuario@bims.com")
-            input_user_pass = st.text_input("Contraseña", type="password", placeholder="••••••••")
-            
-            btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
-
-            if btn_login_user:
-                if not input_user_email.strip() or not input_user_pass.strip():
-                    st.warning("Completa tu correo y contraseña.")
+        if btn_login_user:
+            if not input_user_email.strip() or not input_user_pass.strip():
+                status_box.warning("Por favor ingresa tu correo y contraseña.")
+            else:
+                with status_box.container():
+                    st.markdown("""
+                    <div class="loading-badge">
+                        ⏳ Verificando credenciales...
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    time_lib.sleep(0.5)
+                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                    
+                if valido:
+                    email_user = datos_user.get("email")
+                    st.session_state["user_authenticated"] = True
+                    st.session_state["user_email"] = email_user
+                    st.session_state["user_name"] = datos_user.get("nombre")
+    
+                    # Guardar en URL y LocalStorage simultáneamente
+                    st.query_params["session_token"] = email_user
+                    st.components.v1.html(f"""
+                    <script>
+                        localStorage.setItem('bims_user_session', '{email_user}');
+                    </script>
+                    """, height=0)
+    
+                    status_box.success("Acceso concedido.")
+                    time_lib.sleep(0.3)
+                    st.rerun()
                 else:
-                    with st.spinner("Verificando credenciales..."):
-                        valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
-                        
-                    if valido:
-                        email_user = datos_user.get("email")
-                        st.session_state["user_authenticated"] = True
-                        st.session_state["user_email"] = email_user
-                        st.session_state["user_name"] = datos_user.get("nombre")
-
-                        st.query_params["session_token"] = email_user
-                        st.html(f"""
-                        <script>
-                            sessionStorage.removeItem('bims_just_logged_out');
-                            localStorage.setItem('bims_user_session', '{email_user}');
-                        </script>
-                        """)
-
-                        st.rerun()
-                    else:
-                        st.error("Credenciales incorrectas o usuario inactivo.")
-
-        st.markdown("</div>", unsafe_allow_html=True)
+                    status_box.error("Credenciales incorrectas o usuario no activo.")
 
     st.stop()
 
