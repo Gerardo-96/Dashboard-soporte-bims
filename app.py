@@ -71,22 +71,27 @@ if "user_authenticated" not in st.session_state:
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
 
-# 1. Recuperar token de sesión de la URL al recargar o reabrir
-token_url = st.query_params.get("session_token", None)
-
-if token_url and not st.session_state["user_authenticated"]:
+@st.cache_data(ttl=600, show_spinner=False)
+def validar_token_url_rapido(token_limpio):
     try:
         res = supabase.table("usuarios_autorizados")\
-            .select("*")\
-            .eq("email", str(token_url).strip().lower())\
+            .select("email, nombre")\
+            .eq("email", token_limpio)\
             .eq("activo", True)\
+            .limit(1)\
             .execute()
-        if len(res.data) > 0:
-            st.session_state["user_authenticated"] = True
-            st.session_state["user_email"] = res.data[0].get("email")
-            st.session_state["user_name"] = res.data[0].get("nombre")
+        return res.data[0] if (res.data and len(res.data) > 0) else None
     except Exception:
-        pass
+        return None
+
+token_url = st.query_params.get("session_token", None)
+if token_url and not st.session_state["user_authenticated"]:
+    t_clean = str(token_url).strip().lower()
+    user_info = validar_token_url_rapido(t_clean)
+    if user_info:
+        st.session_state["user_authenticated"] = True
+        st.session_state["user_email"] = user_info.get("email")
+        st.session_state["user_name"] = user_info.get("nombre")
 
 # 2. Script JS de auto-restauración vía LocalStorage seguro (sin recarga infinita)
 st.html("""
