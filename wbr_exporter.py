@@ -56,30 +56,142 @@ def obtener_todos_los_graficos(slide):
         buscar(shp)
     return graficos
 
-def poblar_tabla_l1(slide, df_l1_motivos):
-    """Rellena o crea la tabla de motivos en la diapositiva 6."""
+def obtener_todas_las_tablas(slide):
+    """Extrae todas las tablas de un slide ordenadas de arriba a abajo (por posición Y)."""
+    tablas = []
+    for shp in slide.shapes:
+        if shp.has_table:
+            tablas.append(shp)
+    # Ordenar por posición vertical top
+    tablas.sort(key=lambda t: t.top)
+    return tablas
+
+# =============================================================================
+# FUNCIONES PARA TABLAS DE MATRIZ DE AGENTES (SLIDES 6 Y 7)
+# =============================================================================
+def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def=1.5, w_def=8.3):
+    """
+    Llena la tabla de resumen de agentes con calificaciones 1★, 2★, 3★.
+    """
+    if df_agentes is None or df_agentes.empty:
+        return
+
+    cols_esperadas = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total"]
+    
+    # Asegurar columnas necesarias en df_agentes
+    df_poblar = df_agentes.copy()
+    if "% del Total a L1" in df_poblar.columns:
+        df_poblar = df_poblar.rename(columns={"% del Total a L1": "% del Total"})
+    elif "% del Total a L3" in df_poblar.columns:
+        df_poblar = df_poblar.rename(columns={"% del Total a L3": "% del Total"})
+
+    for col in cols_esperadas:
+        if col not in df_poblar.columns:
+            df_poblar[col] = 0
+
+    num_filas = len(df_poblar) + 1
+
+    if tabla_shape is None:
+        shape_t = slide.shapes.add_table(num_filas, 6, Inches(x_def), Inches(y_def), Inches(w_def), Inches(0.28 * num_filas))
+        table = shape_t.table
+        headers = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total"]
+        for c_idx, h_text in enumerate(headers):
+            cell = table.cell(0, c_idx)
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = C_HEADER_TABLA
+            cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+            p = cell.text_frame.paragraphs[0]
+            p.text = h_text
+            p.font.bold = True
+            p.font.size = Pt(9)
+            p.font.color.rgb = C_TEXTO_BLANCO
+            if c_idx > 0:
+                p.alignment = PP_ALIGN.CENTER
+    else:
+        table = tabla_shape.table
+        while len(table.rows) < num_filas:
+            table.rows._tbl.append(table.rows[0]._tr)
+
+    for r_idx, (_, row) in enumerate(df_poblar.iterrows(), start=1):
+        # 1. Agente
+        c0 = table.cell(r_idx, 0)
+        c0.fill.solid()
+        c0.fill.fore_color.rgb = C_FONDO_TABLA
+        p0 = c0.text_frame.paragraphs[0]
+        p0.text = str(row.get("Agente Asignado", "Sin asignar"))
+        p0.font.bold = True
+        p0.font.size = Pt(8.5)
+        p0.font.color.rgb = C_TEXTO_BLANCO
+
+        # 2. Regular 3★
+        c1 = table.cell(r_idx, 1)
+        c1.fill.solid()
+        c1.fill.fore_color.rgb = C_FONDO_TABLA
+        p1 = c1.text_frame.paragraphs[0]
+        p1.text = str(row.get("Regular (3★)", 0))
+        p1.alignment = PP_ALIGN.CENTER
+        p1.font.size = Pt(8.5)
+        p1.font.color.rgb = C_DORADO
+
+        # 3. Malo 2★
+        c2 = table.cell(r_idx, 2)
+        c2.fill.solid()
+        c2.fill.fore_color.rgb = C_FONDO_TABLA
+        p2 = c2.text_frame.paragraphs[0]
+        p2.text = str(row.get("Malo (2★)", 0))
+        p2.alignment = PP_ALIGN.CENTER
+        p2.font.size = Pt(8.5)
+        p2.font.color.rgb = RGBColor(249, 115, 22)
+
+        # 4. Muy malo 1★
+        c3 = table.cell(r_idx, 3)
+        c3.fill.solid()
+        c3.fill.fore_color.rgb = C_FONDO_TABLA
+        p3 = c3.text_frame.paragraphs[0]
+        p3.text = str(row.get("Muy malo (1★)", 0))
+        p3.alignment = PP_ALIGN.CENTER
+        p3.font.size = Pt(8.5)
+        p3.font.color.rgb = RGBColor(239, 68, 68)
+
+        # 5. Todos los casos
+        c4 = table.cell(r_idx, 4)
+        c4.fill.solid()
+        c4.fill.fore_color.rgb = RGBColor(30, 41, 59)
+        p4 = c4.text_frame.paragraphs[0]
+        p4.text = str(row.get("Todos los casos", 0))
+        p4.alignment = PP_ALIGN.CENTER
+        p4.font.bold = True
+        p4.font.size = Pt(8.5)
+        p4.font.color.rgb = C_AZUL_TXT
+
+        # 6. % del Total
+        c5 = table.cell(r_idx, 5)
+        c5.fill.solid()
+        c5.fill.fore_color.rgb = RGBColor(30, 41, 59)
+        p5 = c5.text_frame.paragraphs[0]
+        p5.text = str(row.get("% del Total", "0%"))
+        p5.alignment = PP_ALIGN.CENTER
+        p5.font.bold = True
+        p5.font.size = Pt(8.5)
+        p5.font.color.rgb = C_AZUL_TXT
+
+# =============================================================================
+# FUNCIONES PARA TABLAS DE DETALLE INFERIORES (MOTIVOS / TICKETS)
+# =============================================================================
+def poblar_tabla_l1_motivos(tabla_shape, df_l1_motivos, slide):
     if df_l1_motivos is None or df_l1_motivos.empty:
         return
 
-    # Buscar tabla inferior existente (la que tiene 3 columnas)
-    tabla_objetivo = None
-    for shape in slide.shapes:
-        if shape.has_table and len(shape.table.columns) == 3:
-            tabla_objetivo = shape
-            break
-
     df_ord = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
     mapa_stars = {1: "★ Muy malo (1★)", 2: "★★ Malo (2★)", 3: "★★★ Regular (3★)"}
+    num_filas = len(df_ord) + 1
 
-    # Si no existe, crearla en la posición visual adecuada
-    if tabla_objetivo is None:
-        num_filas = len(df_ord) + 1
-        shape_t = slide.shapes.add_table(num_filas, 3, Inches(4.3), Inches(4.2), Inches(8.3), Inches(0.3 * num_filas))
+    if tabla_shape is None:
+        shape_t = slide.shapes.add_table(num_filas, 3, Inches(4.3), Inches(4.2), Inches(8.3), Inches(0.28 * num_filas))
         table = shape_t.table
         table.columns[0].width = Inches(2.2)
         table.columns[1].width = Inches(4.8)
         table.columns[2].width = Inches(1.3)
-
         headers = ["Calificación", "Motivo normalizado", "Cantidad"]
         for c_idx, h_text in enumerate(headers):
             cell = table.cell(0, c_idx)
@@ -93,16 +205,12 @@ def poblar_tabla_l1(slide, df_l1_motivos):
             p.font.color.rgb = C_TEXTO_BLANCO
             if c_idx == 2:
                 p.alignment = PP_ALIGN.CENTER
-        fila_inicio = 1
     else:
-        table = tabla_objetivo.table
-        # Agregar filas si faltan
-        filas_necesarias = len(df_ord) + 1
-        while len(table.rows) < filas_necesarias:
+        table = tabla_shape.table
+        while len(table.rows) < num_filas:
             table.rows._tbl.append(table.rows[0]._tr)
-        fila_inicio = 1
 
-    fila_actual = fila_inicio
+    fila_actual = 1
     bloques_merge = []
 
     for rating_val, grp in df_ord.groupby("rating_int", sort=True):
@@ -145,30 +253,22 @@ def poblar_tabla_l1(slide, df_l1_motivos):
         table.cell(ini, 0).merge(table.cell(fin, 0))
         table.cell(ini, 0).vertical_anchor = MSO_ANCHOR.MIDDLE
 
-def poblar_tabla_l3(slide, df_l3_neg):
-    """Rellena o crea la tabla de detalle L3 en la diapositiva 7."""
+def poblar_tabla_l3_casos(tabla_shape, df_l3_neg, slide):
     if df_l3_neg is None or df_l3_neg.empty:
         return
 
-    tabla_objetivo = None
-    for shape in slide.shapes:
-        if shape.has_table and len(shape.table.columns) == 5:
-            tabla_objetivo = shape
-            break
-
     df_ord = df_l3_neg.sort_values(by=["rating_int", "ticket_limpio"], ascending=[True, True])
     mapa_stars = {1: "★ Muy malo (1★)", 2: "★★ Malo (2★)", 3: "★★★ Regular (3★)"}
+    num_filas = len(df_ord) + 1
 
-    if tabla_objetivo is None:
-        num_filas = len(df_ord) + 1
-        shape_t = slide.shapes.add_table(num_filas, 5, Inches(4.3), Inches(4.2), Inches(8.3), Inches(0.3 * num_filas))
+    if tabla_shape is None:
+        shape_t = slide.shapes.add_table(num_filas, 5, Inches(4.3), Inches(4.2), Inches(8.3), Inches(0.28 * num_filas))
         table = shape_t.table
         table.columns[0].width = Inches(1.8)
         table.columns[1].width = Inches(2.7)
         table.columns[2].width = Inches(1.4)
         table.columns[3].width = Inches(1.1)
         table.columns[4].width = Inches(1.3)
-
         headers = ["Calificación", "Motivo", "Ticket", "Prioridad", "Estado"]
         for c_idx, h_text in enumerate(headers):
             cell = table.cell(0, c_idx)
@@ -182,15 +282,12 @@ def poblar_tabla_l3(slide, df_l3_neg):
             p.font.color.rgb = C_TEXTO_BLANCO
             if c_idx in [2, 3, 4]:
                 p.alignment = PP_ALIGN.CENTER
-        fila_inicio = 1
     else:
-        table = tabla_objetivo.table
-        filas_necesarias = len(df_ord) + 1
-        while len(table.rows) < filas_necesarias:
+        table = tabla_shape.table
+        while len(table.rows) < num_filas:
             table.rows._tbl.append(table.rows[0]._tr)
-        fila_inicio = 1
 
-    fila_actual = fila_inicio
+    fila_actual = 1
     bloques_merge = []
 
     for rating_val, grp in df_ord.groupby("rating_int", sort=True):
@@ -251,6 +348,9 @@ def poblar_tabla_l3(slide, df_l3_neg):
         table.cell(ini, 0).merge(table.cell(fin, 0))
         table.cell(ini, 0).vertical_anchor = MSO_ANCHOR.MIDDLE
 
+# =============================================================================
+# EXPORTADOR PRINCIPAL
+# =============================================================================
 def exportar_wbr_con_plantilla(datos):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     ruta_2 = os.path.join(base_dir, "template_wbr_2.pptx")
@@ -338,7 +438,7 @@ def exportar_wbr_con_plantilla(datos):
             procesar_forma_reemplazos(shape, reemplazos)
 
     # 2. Inyección de Gráficos (Slide por Slide)
-    # SLIDE 1 (Evolutivo 5 Semanas)
+    # SLIDE 1: Evolutivo 5 Semanas
     try:
         df_5w = datos.get("df_5w")
         if df_5w is not None and not df_5w.empty and len(prs.slides) > 0:
@@ -352,14 +452,14 @@ def exportar_wbr_con_plantilla(datos):
     except Exception as e:
         print(f"Error gráfico S1: {e}")
 
-    # SLIDE 2 (Detalle Día a Día y Donut de Agentes)
+    # SLIDE 2: Detalle Día a Día y Donut de Agentes
     try:
         if len(prs.slides) > 1:
             chs_2 = obtener_todos_los_graficos(prs.slides[1])
             df_dias = datos.get("df_dias")
             if chs_2 and df_dias is not None and not df_dias.empty:
                 cd_dias = CategoryChartData()
-                cd_dias.categories = [str(x)[5:] for x in df_dias["Fecha"]]  # Mes-Día
+                cd_dias.categories = [str(x)[5:] for x in df_dias["Fecha"]]
                 cd_dias.add_series("Recibidos", [float(x) for x in df_dias["Recibidos"]])
                 cd_dias.add_series("Cerrados", [float(x) for x in df_dias["Cerrados"]])
                 chs_2[0].replace_data(cd_dias)
@@ -373,7 +473,7 @@ def exportar_wbr_con_plantilla(datos):
     except Exception as e:
         print(f"Error gráfico S2: {e}")
 
-    # SLIDE 3 (Tiempos de Gestión y 1ra Respuesta)
+    # SLIDE 3: Tiempos de Gestión y 1ra Respuesta
     try:
         if len(prs.slides) > 2:
             chs_3 = obtener_todos_los_graficos(prs.slides[2])
@@ -391,11 +491,10 @@ def exportar_wbr_con_plantilla(datos):
     except Exception as e:
         print(f"Error gráfico S3: {e}")
 
-    # SLIDE 4 (Evaluados: Puntuaciones y Sentimiento)
+    # SLIDE 4: Sentimiento (Dona de Calificaciones)
     try:
         if len(prs.slides) > 3:
             chs_4 = obtener_todos_los_graficos(prs.slides[3])
-            # Gráfico de barras de calificaciones
             c_pos = int(datos.get("cnt_5", 0)) + int(datos.get("cnt_4", 0))
             c_neg = int(datos.get("cnt_3", 0)) + int(datos.get("cnt_2", 0)) + int(datos.get("cnt_1", 0))
             if len(chs_4) > 1 and (c_pos + c_neg) > 0:
@@ -406,7 +505,7 @@ def exportar_wbr_con_plantilla(datos):
     except Exception as e:
         print(f"Error gráfico S4: {e}")
 
-    # SLIDE 5 (Evolutivo CSAT y Ratio Empresa)
+    # SLIDE 5: Evolutivo CSAT y Ratio Empresa
     try:
         if len(prs.slides) > 4:
             chs_5 = obtener_todos_los_graficos(prs.slides[4])
@@ -424,18 +523,32 @@ def exportar_wbr_con_plantilla(datos):
     except Exception as e:
         print(f"Error gráfico S5: {e}")
 
-    # 3. Poblar Tablas de L1 y L3
+    # 3. Poblar Tablas de L1 (Slide 6) y L3 (Slide 7)
+    # SLIDE 6: L1 (Tabla Superior de Agentes + Tabla Inferior de Motivos)
     try:
         if len(prs.slides) >= 6:
-            poblar_tabla_l1(prs.slides[5], datos.get("df_l1_motivos"))
-    except Exception as e:
-        print(f"Error tabla L1: {e}")
+            s_l1 = prs.slides[5]
+            tablas_s6 = obtener_todas_las_tablas(s_l1)
+            t_agentes_l1 = tablas_s6[0] if len(tablas_s6) >= 1 else None
+            t_motivos_l1 = tablas_s6[1] if len(tablas_s6) >= 2 else None
 
+            poblar_tabla_matriz_agentes(t_agentes_l1, datos.get("df_l1_agentes"), s_l1, y_def=1.5)
+            poblar_tabla_l1_motivos(t_motivos_l1, datos.get("df_l1_motivos"), s_l1)
+    except Exception as e:
+        print(f"Error en tablas Slide 6 (L1): {e}")
+
+    # SLIDE 7: L3 (Tabla Superior de Agentes + Tabla Inferior de Casos/Tickets)
     try:
         if len(prs.slides) >= 7:
-            poblar_tabla_l3(prs.slides[6], datos.get("df_l3_neg"))
+            s_l3 = prs.slides[6]
+            tablas_s7 = obtener_todas_las_tablas(s_l3)
+            t_agentes_l3 = tablas_s7[0] if len(tablas_s7) >= 1 else None
+            t_casos_l3 = tablas_s7[1] if len(tablas_s7) >= 2 else None
+
+            poblar_tabla_matriz_agentes(t_agentes_l3, datos.get("df_l3_agentes"), s_l3, y_def=1.5)
+            poblar_tabla_l3_casos(t_casos_l3, datos.get("df_l3_neg"), s_l3)
     except Exception as e:
-        print(f"Error tabla L3: {e}")
+        print(f"Error en tablas Slide 7 (L3): {e}")
 
     out = io.BytesIO()
     prs.save(out)
