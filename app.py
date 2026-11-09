@@ -4159,30 +4159,72 @@ if tab_wbr is not None:
                 # EXPORTACIÓN NATIVA A POWERPOINT
                 # =========================================================================
                 try:
-                    from wbr_exporter import exportar_wbr_pptx
+                    from wbr_exporter import exportar_wbr_con_plantilla
                     
                     paquete_datos_wbr = {
                         "semana_label": semana_seleccionada_str,
+                        "target_week": target_week,
+                        "sem_prev_num": sem_prev_num,
+                        # Slide 1
                         "tot_5w_rec": tot_5w_recibidos,
-                        "pct_5w_cer": pct_5w_cerrados,
                         "tot_5w_cer": tot_5w_cerrados,
+                        "pct_5w_cer": pct_5w_cerrados,
                         "df_5w": df_res_5w,
+                        # Slide 2
                         "tot_sem_rec": tot_sem_rec,
                         "tot_sem_cer": tot_sem_cer,
                         "pct_sem_cer": pct_sem_cer,
+                        "diff_rec_pct": diff_rec_pct,
+                        "diff_cer_pct": diff_cer_pct,
+                        "tot_prev_rec": tot_prev_rec,
+                        "tot_prev_cer": tot_prev_cer,
+                        "sin_resp_count": sin_resp_count,
+                        "prom_por_agente": prom_por_agente,
+                        "cuentas_unicas": cuentas_unicas,
+                        "empresas_unicas": empresas_unicas,
+                        "cnt_cerrados_ia": cnt_cerrados_ia,
+                        "pct_ia": pct_ia,
                         "df_dias": df_dias_agg,
                         "df_agentes": df_ag_pie,
+                        # Slide 3
                         "foco_gest": foco_gest,
                         "foco_1ra": foco_1ra,
-                        "df_tiempos": df_evol_tiempos,
+                        "prev_gest": prev_gest,
+                        "prev_1ra": prev_1ra,
+                        "wow_gest_pct": wow_gest_pct,
+                        "wow_1ra_pct": wow_1ra_pct,
+                        "foco_sla_gest": foco_sla_gest,
+                        "foco_sla_1ra": foco_sla_1ra,
+                        # Slide 4
+                        "tot_sin_calificar": tot_sin_calificar,
+                        "pct_sin_calificar": pct_sin_calificar,
+                        "tot_evaluados": tot_evaluados,
+                        "pct_calificados": pct_calificados,
+                        "cnt_5": cnt_5, "pct_5": f_pct(cnt_5, tot_evaluados),
+                        "cnt_4": cnt_4, "pct_4": f_pct(cnt_4, tot_evaluados),
+                        "cnt_3": cnt_3, "pct_3": f_pct(cnt_3, tot_evaluados),
+                        "cnt_2": cnt_2, "pct_2": f_pct(cnt_2, tot_evaluados),
+                        "cnt_1": cnt_1, "pct_1": f_pct(cnt_1, tot_evaluados),
+                        # Slide 5
+                        "foco_csat": foco_csat,
+                        "diff_csat_wow": diff_csat,
+                        "foco_ratio": foco_ratio,
+                        # Slide 6 y 7
+                        "tot_negativas": tot_negativas,
+                        "tot_l1_neg": tot_l1_neg,
+                        "pct_l1_total": pct_l1_del_total,
+                        "df_l1_motivos": df_l1_motivos if not df_l1_neg.empty else None,
+                        "tot_l3_neg": tot_l3_neg,
+                        "pct_l3_total": pct_l3_sobre_total_neg,
+                        "df_l3_neg": df_l3_neg if not df_l3_neg.empty else None,
+                        # Slide 8
                         "tot_ext": tot_ext,
                         "tot_domingo": tot_domingo,
                         "pct_ext_cerrados": pct_ext_cerrados,
                         "tot_ext_cerrados": tot_ext_cerrados,
-                        "df_dias_ext": df_dias_ext_cnt if not df_ext.empty else None
                     }
-    
-                    pptx_io = exportar_wbr_pptx(paquete_datos_wbr)
+                    
+                    pptx_io = exportar_wbr_con_plantilla(paquete_datos_wbr)
     
                     with contenedor_descarga.container():
                         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
