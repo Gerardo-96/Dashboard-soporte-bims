@@ -148,78 +148,72 @@ def obtener_permisos_usuario(identificador_usuario):
     return {"acceso_wbr": False, "acceso_admin": False}
 
 # ==========================================
-# PANTALLA DE LOGIN CENTRADA Y ACOTADA
+# PANTALLA DE LOGIN CON SKELETON / SPINNER ELEGANTE
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
-        .stApp { background-color: #0f172a; color: #f8fafc; }
+        .stApp { background-color: #0b1120 !important; color: #f8fafc; }
 
         header[data-testid="stHeader"] {
-            background-color: #0f172a !important;
+            background-color: #0b1120 !important;
         }
 
         .block-container {
-            max-width: 520px !important;
-            padding-top: 5rem !important;
+            max-width: 480px !important;
+            padding-top: 6rem !important;
             margin: 0 auto !important;
         }
 
-        .login-card-header {
-            background-color: #1e293b;
+        .login-card {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
             border: 1px solid #334155;
-            border-bottom: none;
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-            padding: 28px 24px 10px 24px;
+            border-radius: 16px;
+            padding: 32px 28px 24px 28px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
             text-align: center;
         }
 
+        .login-logo-ring {
+            width: 58px;
+            height: 58px;
+            margin: 0 auto 16px auto;
+            border-radius: 50%;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.7rem;
+        }
+
         .login-title {
-            color: #38bdf8;
-            font-size: 1.45rem;
+            color: #f8fafc;
+            font-size: 1.4rem;
             font-weight: 700;
-            margin-bottom: 4px;
+            letter-spacing: -0.3px;
+            margin-bottom: 6px;
         }
 
         .login-subtitle {
             color: #94a3b8;
             font-size: 0.85rem;
+            margin-bottom: 24px;
         }
 
         div[data-testid="stForm"] {
-            background-color: #1e293b !important;
-            border: 1px solid #334155 !important;
-            border-top: none !important;
-            border-bottom-left-radius: 16px !important;
-            border-bottom-right-radius: 16px !important;
-            padding: 0 24px 28px 24px !important;
-            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
-        }
-
-        div[data-testid="stTextInput"] {
-            width: 100% !important;
-        }
-
-        div[data-testid="stTextInput"] small, 
-        div[data-testid="stInputInstructions"], 
-        .st-emotion-cache-12w0q3e, 
-        [data-testid="stFormSubmitButton"] + div {
-            display: none !important;
-            visibility: hidden !important;
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
         }
 
         div[data-testid="stTextInput"] input {
-            background-color: #0f172a !important;
+            background-color: #0b1120 !important;
             color: #f8fafc !important;
             border: 1px solid #334155 !important;
-            border-radius: 8px !important;
-            padding: 10px 12px !important;
-        }
-
-        input::-ms-reveal,
-        input::-ms-clear {
-            display: none !important;
+            border-radius: 10px !important;
+            padding: 12px 14px !important;
+            font-size: 0.9rem !important;
         }
 
         div[data-testid="stTextInput"] input:focus {
@@ -228,53 +222,83 @@ if not st.session_state["user_authenticated"]:
         }
 
         .stButton>button { 
-            background-color: #0284c7 !important; 
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; 
             color: white !important; 
-            font-weight: bold !important; 
-            border-radius: 8px !important; 
+            font-weight: 600 !important; 
+            border-radius: 10px !important; 
             border: none !important;
-            height: 44px !important;
-            margin-top: 8px !important;
+            height: 46px !important;
+            margin-top: 12px !important;
+            transition: all 0.2s ease !important;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3) !important;
+        }
+        .stButton>button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4) !important;
         }
 
-        .loading-badge {
-            background-color: #0f172a;
-            border: 1px solid #0284c7;
-            border-radius: 8px;
-            padding: 10px;
+        /* Animación Skeleton Pulso para autenticación */
+        @keyframes pulseSkeleton {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        .skeleton-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
             color: #38bdf8;
             font-size: 0.88rem;
             font-weight: 600;
-            text-align: center;
-            margin-top: 10px;
+            padding: 12px;
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 8px;
+            margin-top: 14px;
+            animation: pulseSkeleton 1.4s infinite ease-in-out;
+        }
+
+        .spinner-ring {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #38bdf8;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 
-    <div class="login-card-header">
+    <div class="login-card">
+        <div class="login-logo-ring">📈</div>
         <div class="login-title">Dashboard Soporte BIMS</div>
-        <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
-    </div>
+        <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder</div>
     """, unsafe_allow_html=True)
 
     with st.form("form_login_global", clear_on_submit=False):
-        input_user_email = st.text_input("Correo Electrónico")
-        input_user_pass = st.text_input("Contraseña", type="password")
+        input_user_email = st.text_input("Correo Electrónico", placeholder="usuario@bims.com")
+        input_user_pass = st.text_input("Contraseña", type="password", placeholder="••••••••")
         
         status_box = st.empty()
         btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
 
         if btn_login_user:
             if not input_user_email.strip() or not input_user_pass.strip():
-                status_box.warning("Por favor ingresa tu correo y contraseña.")
+                status_box.warning("Por favor completa correo y contraseña.")
             else:
                 with status_box.container():
                     st.markdown("""
-                    <div class="loading-badge">
-                        ⏳ Verificando credenciales...
+                    <div class="skeleton-loading">
+                        <div class="spinner-ring"></div>
+                        <span>Autenticando credenciales...</span>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    time_lib.sleep(0.5)
                     valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
@@ -283,7 +307,6 @@ if not st.session_state["user_authenticated"]:
                     st.session_state["user_email"] = email_user
                     st.session_state["user_name"] = datos_user.get("nombre")
     
-                    # Guardar en URL y LocalStorage simultáneamente
                     st.query_params["session_token"] = email_user
                     st.components.v1.html(f"""
                     <script>
@@ -292,11 +315,11 @@ if not st.session_state["user_authenticated"]:
                     """, height=0)
     
                     status_box.success("Acceso concedido.")
-                    time_lib.sleep(0.3)
                     st.rerun()
                 else:
-                    status_box.error("Credenciales incorrectas o usuario no activo.")
+                    status_box.error("Credenciales incorrectas o usuario inactivo.")
 
+    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # ==========================================
@@ -2641,34 +2664,69 @@ with tab_resumen:
         pct_top = round((top_agente_count / total_chats_periodo) * 100, 1) if total_chats_periodo > 0 else 0
 
         r1, r2, r3, r4 = st.columns(4)
-        r1.markdown(f'<div class="metric-card"><div class="metric-card-title">Total Chats en Rango</div><div class="metric-card-value">{total_chats_periodo}</div></div>', unsafe_allow_html=True)
-        r2.markdown(f'<div class="metric-card"><div class="metric-card-title">Promedio Diario</div><div class="metric-card-value">{promedio_diario}</div></div>', unsafe_allow_html=True)
-        r3.markdown(f'<div class="metric-card"><div class="metric-card-title">Agente con Más Chats</div><div class="metric-card-value" style="font-size:1.2rem;">{top_agente}</div><div class="metric-card-sub">{top_agente_count} chats</div></div>', unsafe_allow_html=True)
-        r4.markdown(f'<div class="metric-card"><div class="metric-card-title">Participación Top Agente</div><div class="metric-card-value">{pct_top}%</div></div>', unsafe_allow_html=True)
+        r1.markdown(f'<div class="metric-card" style="border-left: 4px solid #0284c7;"><div class="metric-card-title">Total Chats en Rango</div><div class="metric-card-value">{total_chats_periodo:,}</div><div class="metric-card-sub">{num_dias} días consultados</div></div>', unsafe_allow_html=True)
+        r2.markdown(f'<div class="metric-card" style="border-left: 4px solid #38bdf8;"><div class="metric-card-title">Promedio Diario</div><div class="metric-card-value">{promedio_diario}</div><div class="metric-card-sub">chats por jornada</div></div>', unsafe_allow_html=True)
+        r3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">Agente con Más Chats</div><div class="metric-card-value" style="font-size:1.35rem; color:#34d399;">{top_agente}</div><div class="metric-card-sub">{top_agente_count} chats atendidos</div></div>', unsafe_allow_html=True)
+        r4.markdown(f'<div class="metric-card" style="border-left: 4px solid #818cf8;"><div class="metric-card-title">Participación Top Agente</div><div class="metric-card-value">{pct_top}%</div><div class="metric-card-sub">del total acumulado</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        palette_mate = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#2dd4bf", "#94a3b8"]
+        palette_mate = ["#0284c7", "#38bdf8", "#0ea5e9", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#94a3b8"]
         
         # ==========================================
         # 1. BLOQUE GENERAL DE AGENTES Y EVOLUCIÓN
         # ==========================================
-        g_pie, g_bar = st.columns([1, 1])
+        g_pie, g_bar = st.columns([1, 1.2])
 
         with g_pie:
             st.markdown("#### Distribución de Chats por Agente")
-            fig_pie = px.pie(df_agentes_total, values="Cantidad de Chats", names="Agente", hole=0.55, color_discrete_sequence=palette_mate)
-            fig_pie.update_traces(textposition='inside', textinfo='percent', hovertemplate="<b>%{label}</b><br>Chats: %{value}<br>Porcentaje: %{percent}<extra></extra>", marker=dict(line=dict(color='#1e293b', width=2)))
-            fig_pie.update_layout(showlegend=True, paper_bgcolor="#1e293b", plot_bgcolor="#1e293b", font=dict(color="#cbd5e1", size=12), height=380, margin=dict(t=20, b=20, l=20, r=20))
+            fig_pie = px.pie(
+                df_agentes_total, 
+                values="Cantidad de Chats", 
+                names="Agente", 
+                hole=0.5, 
+                color_discrete_sequence=palette_mate
+            )
+            fig_pie.update_traces(
+                textposition='inside', 
+                textinfo='percent', 
+                hovertemplate="<b>%{label}</b><br>Chats: %{value}<br>Porcentaje: %{percent}<extra></extra>", 
+                marker=dict(line=dict(color='#0b1120', width=2))
+            )
+            fig_pie.update_layout(
+                showlegend=True, 
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                font=dict(color="#cbd5e1", size=11), 
+                height=360, 
+                legend=dict(orientation="v", y=0.5, x=1.05),
+                margin=dict(t=20, b=20, l=10, r=10)
+            )
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with g_bar:
             st.markdown("#### Evolución Diaria por Agente")
             df_dia_agente = df_res.groupby(["Dia", "agente_asignado"]).size().reset_index(name="Cantidad")
-            fig_bar = px.bar(df_dia_agente, x="Dia", y="Cantidad", color="agente_asignado", barmode="stack", color_discrete_sequence=palette_mate)
-            fig_bar.update_layout(paper_bgcolor="#1e293b", plot_bgcolor="#1e293b", font=dict(color="#cbd5e1", size=12), height=380, margin=dict(t=20, b=20, l=20, r=20))
+            fig_bar = px.bar(
+                df_dia_agente, 
+                x="Dia", 
+                y="Cantidad", 
+                color="agente_asignado", 
+                barmode="stack", 
+                color_discrete_sequence=palette_mate
+            )
+            fig_bar.update_traces(marker=dict(cornerradius=4))
+            fig_bar.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                font=dict(color="#cbd5e1", size=11), 
+                height=360, 
+                xaxis=dict(gridcolor="#1e293b", title=None),
+                yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
+                margin=dict(t=20, b=20, l=20, r=20)
+            )
             st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Tabla resumen por día y agente
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("#### Tabla General de Chats por Día y Agente")
         df_pivot = df_res.pivot_table(index="Dia", columns="agente_asignado", values="id", aggfunc="count", fill_value=0)
@@ -2678,16 +2736,14 @@ with tab_resumen:
         st.markdown("---")
 
         # ==========================================
-        # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES HISTÓRICOS POR AGENTE
+        # 2. ANTIGÜEDAD DE CHATS PENDIENTES HISTÓRICOS POR DÍA
         # ==========================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("#### Antigüedad de Chats Pendientes por Día")
 
-        # Evaluamos sobre df_all (todos los registros) filtrando únicamente los chats abiertos
         df_abiertos_historicos = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
         if not df_abiertos_historicos.empty:
-            # Excluimos explícitamente a Mónica, Soporte y sin asignar
             agentes_excluidos = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
             df_abiertos_filtro = df_abiertos_historicos[
                 ~df_abiertos_historicos["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_excluidos)
@@ -2695,7 +2751,6 @@ with tab_resumen:
 
             if not df_abiertos_filtro.empty:
                 now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
-                # Días HÁBILES basados en jornadas de ~8 hs hábiles
                 df_abiertos_filtro["dias_antiguedad_num"] = df_abiertos_filtro.apply(
                     lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_resumen) / 60.0 / 8.0),
                     axis=1
@@ -2718,11 +2773,11 @@ with tab_resumen:
 
                 orden_rangos = ["0 días (Hoy)", "1 día hábil", "2 días hábiles", "3 días hábiles", ">3 días hábiles"]
                 color_map_antiguedad = {
-                    "0 días (Hoy)": "#34d399",
+                    "0 días (Hoy)": "#10b981",
                     "1 día hábil": "#38bdf8",
                     "2 días hábiles": "#fbbf24",
                     "3 días hábiles": "#f97316",
-                    ">3 días hábiles": "#f43f5e"
+                    ">3 días hábiles": "#ef4444"
                 }
 
                 fig_antiguedad = px.bar(
@@ -2736,12 +2791,15 @@ with tab_resumen:
                     text="Cantidad"
                 )
 
-                fig_antiguedad.update_traces(textposition="inside")
+                fig_antiguedad.update_traces(textposition="inside", marker=dict(cornerradius=4))
                 fig_antiguedad.update_layout(
-                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1", size=12),
-                    xaxis_title="Agente Asignado", yaxis_title="Cantidad de Chats Abiertos",
-                    legend_title_text="Antigüedad", height=400,
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats Abiertos"),
+                    legend_title_text="Antigüedad", 
+                    height=380,
                     margin=dict(t=20, b=20, l=20, r=20)
                 )
 
@@ -2754,16 +2812,14 @@ with tab_resumen:
         st.markdown("---")
 
         # ==========================================
-        # GRÁFICO: ANTIGÜEDAD DE CHATS PENDIENTES POR FRANJA HORARIA (4 COLORES)
+        # 3. ANTIGÜEDAD DE CHATS PENDIENTES POR FRANJA HORARIA
         # ==========================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("#### Antigüedad de Chats Pendientes por Hora")
 
-        # Evaluamos sobre todos los chats abiertos históricos
         df_abiertos_horas = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
 
         if not df_abiertos_horas.empty:
-            # Exclusión explícita de Mónica, Soporte y Sin Asignar
             agentes_excluidos_hs = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
             df_abiertos_hs_filtro = df_abiertos_horas[
                 ~df_abiertos_horas["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_excluidos_hs)
@@ -2771,14 +2827,11 @@ with tab_resumen:
 
             if not df_abiertos_hs_filtro.empty:
                 now_py_horas = pd.Timestamp.now(tz="America/Asuncion")
-                
-                # Cálculo exacto del tiempo abierto en horas
                 df_abiertos_hs_filtro["horas_abierto_num"] = df_abiertos_hs_filtro.apply(
                     lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_horas) / 60.0),
                     axis=1
                 ).fillna(0.0)
 
-                # Clasificación en 4 franjas horarias
                 def clasificar_franja_horas(horas):
                     if horas <= 1.0:
                         return "0 a 1 hora"
@@ -2790,17 +2843,14 @@ with tab_resumen:
                         return ">5 horas"
 
                 df_abiertos_hs_filtro["Franja_Horaria"] = df_abiertos_hs_filtro["horas_abierto_num"].apply(clasificar_franja_horas)
-
-                # Agrupación por Agente Asignado y Franja Horaria
                 df_horas_grp = df_abiertos_hs_filtro.groupby(["agente_asignado", "Franja_Horaria"]).size().reset_index(name="Cantidad")
 
-                # Ordenamiento de las 4 franjas y paleta de colores
                 orden_franjas = ["0 a 1 hora", ">1 a 3 horas", ">3 a 5 horas", ">5 horas"]
                 color_map_horas = {
-                    "0 a 1 hora": "#34d399",     # Verde
-                    ">1 a 3 horas": "#fbbf24",   # Amarillo
-                    ">3 a 5 horas": "#f97316",   # Naranja
-                    ">5 horas": "#f43f5e"        # Rojo
+                    "0 a 1 hora": "#10b981",
+                    ">1 a 3 horas": "#fbbf24",
+                    ">3 a 5 horas": "#f97316",
+                    ">5 horas": "#ef4444"
                 }
 
                 fig_horas = px.bar(
@@ -2814,12 +2864,15 @@ with tab_resumen:
                     text="Cantidad"
                 )
 
-                fig_horas.update_traces(textposition="inside")
+                fig_horas.update_traces(textposition="inside", marker=dict(cornerradius=4))
                 fig_horas.update_layout(
-                    paper_bgcolor="#1e293b", plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
                     font=dict(color="#cbd5e1", size=12),
-                    xaxis_title="Agente Asignado", yaxis_title="Cantidad de Chats Abiertos",
-                    legend_title_text="Franja Horaria", height=400,
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats Abiertos"),
+                    legend_title_text="Franja Horaria", 
+                    height=380,
                     margin=dict(t=20, b=20, l=20, r=20)
                 )
 
@@ -2832,18 +2885,17 @@ with tab_resumen:
         st.markdown("---")
 
         # ==========================================
-        # 2. BLOQUE DE ANÁLISIS DE CSAT NEGATIVO (<=3 ★)
+        # 4. ANÁLISIS DE EVALUACIONES NEGATIVAS (<=3 ★)
         # ==========================================
         st.markdown("### 📊 Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
         
-        # Filtro de calificaciones negativas
         df_res["rating_num"] = pd.to_numeric(df_res.get("rating"), errors="coerce")
         df_negativos_res = df_res[df_res["rating_num"] <= 3].copy()
 
         if not df_negativos_res.empty:
-            g_motivo, g_nivel = st.columns([1, 1])
+            g_motivo, g_nivel = st.columns([1.1, 1])
 
-            # A. Gráfico por Motivo Normalizado
+            # A. Por Motivo Normalizado
             with g_motivo:
                 st.markdown("#### Evaluaciones Negativas por Motivo")
                 df_motivos_cnt = df_negativos_res.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar").value_counts().reset_index()
@@ -2855,26 +2907,28 @@ with tab_resumen:
                     y="Motivo Normalizado", 
                     orientation="h",
                     color="Cantidad",
-                    color_continuous_scale="Reds",
+                    color_continuous_scale=["#f97316", "#ef4444"],
                     text="Cantidad"
                 )
-                fig_motivos.update_traces(textposition="outside", marker_line_color="#1e293b", marker_line_width=1)
+                fig_motivos.update_traces(
+                    textposition="outside", 
+                    marker=dict(cornerradius=4, line=dict(color="#0b1120", width=1))
+                )
                 fig_motivos.update_layout(
-                    paper_bgcolor="#1e293b", 
-                    plot_bgcolor="#1e293b", 
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
                     font=dict(color="#cbd5e1", size=11), 
-                    height=380, 
-                    yaxis=dict(autorange="reversed"),
+                    height=360, 
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(autorange="reversed", gridcolor="#1e293b", title=None),
                     coloraxis_showscale=False,
-                    margin=dict(t=20, b=20, l=20, r=20)
+                    margin=dict(t=20, b=20, l=10, r=20)
                 )
                 st.plotly_chart(fig_motivos, use_container_width=True)
 
-            # B. Gráfico por Nivel de Soporte
+            # B. Por Nivel de Soporte
             with g_nivel:
                 st.markdown("#### Evaluaciones Negativas por Nivel")
-    
-                # Asignar 'Nivel 1' por defecto
                 niveles_series = (
                     df_negativos_res.get("nivel", pd.Series(dtype=str))
                     .fillna("Niv-L1")
@@ -2889,24 +2943,26 @@ with tab_resumen:
                     x="Nivel", 
                     y="Cantidad", 
                     color="Nivel",
-                    color_discrete_sequence=["#f87171", "#fbbf24", "#818cf8", "#38bdf8"],
+                    color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#ef4444"},
                     text="Cantidad"
                 )
-                fig_nivel.update_traces(textposition="outside")
+                fig_nivel.update_traces(textposition="outside", marker=dict(cornerradius=6))
                 fig_nivel.update_layout(
-                    paper_bgcolor="#1e293b", 
-                    plot_bgcolor="#1e293b", 
-                    font=dict(color="#cbd5e1", size=12), 
-                    height=380, 
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font=dict(color="#cbd5e1", size=11), 
+                    height=360, 
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title=None, showticklabels=False),
                     showlegend=False,
-                    margin=dict(t=20, b=20, l=20, r=20)
+                    margin=dict(t=20, b=20, l=10, r=20)
                 )
                 st.plotly_chart(fig_nivel, use_container_width=True)
+
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # FILA INFERIOR: Ticket Relacionado (Ancho Completo)
+            # C. Ticket Relacionado
             st.markdown("#### Evaluaciones Negativas por Ticket Relacionado")
-            
             tickets_series = df_negativos_res.get("ticket_relacionado", pd.Series(dtype=str)).fillna("").astype(str).str.strip()
             tickets_validos = tickets_series[~tickets_series.isin(["", "None", "nan", "null"])]
 
@@ -2920,18 +2976,22 @@ with tab_resumen:
                     y="Ticket / Tarea", 
                     orientation="h",
                     color="Cantidad",
-                    color_continuous_scale="Oranges",
+                    color_continuous_scale=["#38bdf8", "#0284c7"],
                     text="Cantidad"
                 )
-                fig_ticket.update_traces(textposition="outside", marker_line_color="#1e293b", marker_line_width=1)
+                fig_ticket.update_traces(
+                    textposition="outside", 
+                    marker=dict(cornerradius=4, line=dict(color="#0b1120", width=1))
+                )
                 fig_ticket.update_layout(
-                    paper_bgcolor="#1e293b", 
-                    plot_bgcolor="#1e293b", 
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
                     font=dict(color="#cbd5e1", size=11), 
-                    height=320, 
-                    yaxis=dict(autorange="reversed"),
+                    height=300, 
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(autorange="reversed", gridcolor="#1e293b", title=None),
                     coloraxis_showscale=False,
-                    margin=dict(t=20, b=20, l=20, r=20)
+                    margin=dict(t=20, b=20, l=10, r=20)
                 )
                 st.plotly_chart(fig_ticket, use_container_width=True)
             else:
@@ -3857,66 +3917,6 @@ if tab_wbr is not None:
                 else:
                     st.info("🟢 No hay casos escalados a L3 con calificación negativa esta semana.")
 
-                st.markdown("---")
-    
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("##### Detalle de Casos L3 & Tickets Jira Relacionados")
-    
-                if not df_l3_neg.empty:
-                    df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
-                        lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
-                    )
-                    df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
-                    df_l3_neg["jira_clean"] = df_l3_neg["ticket_relacionado"].fillna("").replace(["", "None", "nan"], "Sin ticket vinculado")
-                    df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
-                    df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
-    
-                    df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
-    
-                    filas_html_l3 = []
-                    for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
-                        filas = grp.to_dict("records")
-                        rowspan_cnt = len(filas)
-                        for idx, row_item in enumerate(filas):
-                            if idx == 0:
-                                td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación_HTML']}</td>"
-                            else:
-                                td_calif = ""
-                            
-                            ticket_badge = (
-                                f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600;'>{row_item['jira_clean']}</span>"
-                                if row_item['jira_clean'] != "Sin ticket vinculado"
-                                else f"<span style='color:#64748b;'>{row_item['jira_clean']}</span>"
-                            )
-    
-                            filas_html_l3.append(
-                                f"<tr>{td_calif}"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_clean']}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155;'>{ticket_badge}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{row_item['tenant_clean']}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{row_item['agente_clean']}</td></tr>"
-                            )
-    
-                    html_tabla_l3 = f"""
-                    <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
-                        <thead>
-                            <tr style='background-color:#0284c7; color:white;'>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Calificación</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:22%;'>Ticket Jira / Tarea</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:18%;'>Tenant</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:16%;'>Agente</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {''.join(filas_html_l3)}
-                        </tbody>
-                    </table>
-                    """
-                    st.markdown(html_tabla_l3, unsafe_allow_html=True)
-                else:
-                    st.caption("Sin casos L3 registrados.")
-    
                 st.markdown("---")
     
                 # =========================================================================
