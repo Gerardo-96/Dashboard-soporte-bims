@@ -157,7 +157,7 @@ def obtener_permisos_usuario(identificador_usuario):
     return {"acceso_wbr": False, "acceso_admin": False}
 
 # ==========================================
-# PANTALLA DE LOGIN UNIFICADA Y CENTRADA (FIJA)
+# PANTALLA DE LOGIN CON MODAL INSTANTÁNEO (ANTI-DEFORMACIÓN AL DAR ENTER)
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
@@ -183,13 +183,13 @@ if not st.session_state["user_authenticated"]:
             visibility: hidden !important;
         }
 
-        /* Ajuste de altura superior para centrado equilibrado */
+        /* Centrado natural superior */
         div[data-testid="stAppViewBlockContainer"] {
-            padding-top: 3.5rem !important;
+            padding-top: 4.5rem !important;
             padding-bottom: 2rem !important;
         }
 
-        /* Tarjeta de login fijada al 100% de su columna contenedora */
+        /* Formulario con dimensiones y posición física fija */
         div[data-testid="stForm"] {
             width: 100% !important;
             max-width: 440px !important;
@@ -197,13 +197,13 @@ if not st.session_state["user_authenticated"]:
             background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
             border: 1px solid #334155 !important;
             border-radius: 16px !important;
-            padding: 26px 28px 30px 28px !important;
+            padding: 28px 30px 32px 30px !important;
             box-shadow: 0 20px 30px -8px rgba(0, 0, 0, 0.6) !important;
         }
 
         .login-logo-circle {
-            width: 54px;
-            height: 54px;
+            width: 56px;
+            height: 56px;
             margin: 0 auto 12px auto;
             border-radius: 50%;
             background: rgba(56, 189, 248, 0.12);
@@ -211,12 +211,12 @@ if not st.session_state["user_authenticated"]:
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.65rem;
+            font-size: 1.7rem;
         }
 
         .login-title-txt {
             color: #f8fafc;
-            font-size: 1.35rem;
+            font-size: 1.4rem;
             font-weight: 700;
             text-align: center;
             letter-spacing: -0.3px;
@@ -225,9 +225,9 @@ if not st.session_state["user_authenticated"]:
 
         .login-sub-txt {
             color: #94a3b8;
-            font-size: 0.84rem;
+            font-size: 0.85rem;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 22px;
         }
 
         div[data-testid="stTextInput"] input {
@@ -254,7 +254,7 @@ if not st.session_state["user_authenticated"]:
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 10px !important;
+            margin-top: 12px !important;
             box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35) !important;
             transition: all 0.2s ease !important;
         }
@@ -263,10 +263,92 @@ if not st.session_state["user_authenticated"]:
             background: #0369a1 !important;
             transform: translateY(-1px);
         }
+
+        /* Overlay modal instantáneo para Login */
+        #login-loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(11, 17, 32, 0.82);
+            backdrop-filter: blur(6px);
+            z-index: 9999999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-load-box {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 26px 36px;
+            text-align: center;
+            box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .login-ring-spinner {
+            width: 34px;
+            height: 34px;
+            border: 3px solid rgba(56, 189, 248, 0.2);
+            border-top: 3px solid #38bdf8;
+            border-radius: 50%;
+            animation: spinLogin 0.75s linear infinite;
+        }
+
+        @keyframes spinLogin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
+
+    <!-- Modal de carga precargado en el DOM -->
+    <div id="login-loading-overlay">
+        <div class="login-load-box">
+            <div class="login-ring-spinner"></div>
+            <div style="color:#f8fafc; font-weight:700; font-size:1.05rem;">Iniciando sesión...</div>
+            <div style="color:#94a3b8; font-size:0.82rem;">Validando credenciales en Supabase</div>
+        </div>
+    </div>
+
+    <!-- Script para disparar el modal con clic O con la tecla Enter -->
+    <script>
+        (function() {
+            function activarModalLogin() {
+                const modal = window.parent.document.getElementById('login-loading-overlay') 
+                           || document.getElementById('login-loading-overlay');
+                if (modal) {
+                    modal.style.display = 'flex';
+                }
+            }
+
+            setTimeout(() => {
+                // 1. Detección en el botón submit
+                const forms = window.parent.document.querySelectorAll('div[data-testid="stForm"]');
+                forms.forEach(f => {
+                    f.addEventListener('submit', () => activarModalLogin());
+                });
+
+                // 2. Detección en pulsación de la tecla Enter
+                const inputs = window.parent.document.querySelectorAll('input[type="password"], input[type="text"]');
+                inputs.forEach(inp => {
+                    inp.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            activarModalLogin();
+                        }
+                    });
+                });
+            }, 300);
+        })();
+    </script>
     """, unsafe_allow_html=True)
 
-    # El centrado físico en pantalla lo garantizan las columnas Streamlit
     col_izq, col_centro, col_der = st.columns([1, 1.15, 1])
 
     with col_centro:
@@ -282,16 +364,14 @@ if not st.session_state["user_authenticated"]:
             
             btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
 
-        # Contenedor de estado externo al form para no romper el layout durante la validación
         login_status = st.empty()
 
         if btn_login_user:
             if not input_user_email.strip() or not input_user_pass.strip():
                 login_status.warning("Completa tu correo y contraseña.")
             else:
-                with login_status:
-                    with st.spinner("Verificando credenciales..."):
-                        valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                # Consulta directa sin st.spinner para que no rompa el diseño CSS
+                valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                         
                 if valido:
                     email_user = datos_user.get("email")
@@ -308,6 +388,14 @@ if not st.session_state["user_authenticated"]:
 
                     st.rerun()
                 else:
+                    # Si falló la contraseña, ocultamos el overlay para permitir reintentar
+                    st.markdown("""
+                    <script>
+                        const modal = window.parent.document.getElementById('login-loading-overlay') 
+                                   || document.getElementById('login-loading-overlay');
+                        if (modal) { modal.style.display = 'none'; }
+                    </script>
+                    """, unsafe_allow_html=True)
                     login_status.error("Credenciales incorrectas o usuario inactivo.")
 
     st.stop()
