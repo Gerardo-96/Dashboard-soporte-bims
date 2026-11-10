@@ -508,7 +508,7 @@ def renderizar_panel_carga_asignador():
         # Lista de agentes/entidades a EXCLUIR explícitamente
         agentes_omitir = [
             "monica", "mónica", "monica (bot)", "soporte", 
-            "gerardo gaona", "gerardo.gaona@itti.digital",
+            "gerardo gaona", "gerardo.gaona@itti.digital", "laura.almiron@tivahq.com", "Laura Almirón",
             "none", "nan", "sin asignar", ""
         ]
 
@@ -3280,1190 +3280,1213 @@ def renderizar_informe_wbr(df_base_in):
                 </div>
             </div>
             """, unsafe_allow_html=True)
-    
-                st.markdown("---")
-    
-                # =========================================================================
-                # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
-                # =========================================================================
-                st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
-    
-                df_target = df_wbr_base[
-                    (df_wbr_base["iso_year"] == target_year) & 
-                    (df_wbr_base["iso_week"] == target_week)
-                ].copy()
-                tot_sem_rec = len(df_target)
-    
-                df_target_cerrados = df_wbr_base[
-                    (df_wbr_base["es_cerrado"] == True) &
-                    (df_wbr_base["close_iso_year"] == target_year) & 
-                    (df_wbr_base["close_iso_week"] == target_week)
-                ].copy()
-                tot_sem_cer = len(df_target_cerrados)
-                pct_sem_cer = round((tot_sem_cer / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
-    
-                sem_prev_num = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[1]
-                sem_prev_year = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[0]
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            fig_5w = go.Figure()
+            fig_5w.add_trace(go.Bar(
+                x=df_res_5w["Semana"],
+                y=df_res_5w["Recibidos"],
+                name="Q. de chats recibidos",
+                marker=dict(color="#0284c7", cornerradius=8),
+                text=df_res_5w["Recibidos"],
+                textposition="inside",
+                insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+            ))
+            fig_5w.add_trace(go.Bar(
+                x=df_res_5w["Semana"],
+                y=df_res_5w["Cerrados"],
+                name="Q. de chats cerrados",
+                marker=dict(color="#38bdf8", cornerradius=8),
+                text=df_res_5w["Cerrados"],
+                textposition="inside",
+                insidetextfont=dict(color="#0f172a", size=13, family="Arial Black")
+            ))
+            fig_5w.update_layout(
+                hovermode=False,
+                barmode="group",
+                title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1"),
+                xaxis=dict(gridcolor="#1e293b"),
+                yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(t=50, b=20, l=30, r=20),
+                height=380
+            )
+            st.plotly_chart(fig_5w, use_container_width=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 3: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
+            # =========================================================================
+            st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
+
+            df_target = df_wbr_base[
+                (df_wbr_base["iso_year"] == target_year) & 
+                (df_wbr_base["iso_week"] == target_week)
+            ].copy()
+            tot_sem_rec = len(df_target)
+
+            df_target_cerrados = df_wbr_base[
+                (df_wbr_base["es_cerrado"] == True) &
+                (df_wbr_base["close_iso_year"] == target_year) & 
+                (df_wbr_base["close_iso_week"] == target_week)
+            ].copy()
+            tot_sem_cer = len(df_target_cerrados)
+            pct_sem_cer = round((tot_sem_cer / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+
+            sem_prev_num = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[1]
+            sem_prev_year = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[0]
+            
+            tot_prev_rec = len(df_wbr_base[
+                (df_wbr_base["iso_year"] == sem_prev_year) & 
+                (df_wbr_base["iso_week"] == sem_prev_num)
+            ])
+            tot_prev_cer = len(df_wbr_base[
+                (df_wbr_base["es_cerrado"] == True) &
+                (df_wbr_base["close_iso_year"] == sem_prev_year) & 
+                (df_wbr_base["close_iso_week"] == sem_prev_num)
+            ])
+
+            diff_rec_pct = round(((tot_sem_rec - tot_prev_rec) / tot_prev_rec * 100), 2) if tot_prev_rec > 0 else 0.0
+            diff_cer_pct = round(((tot_sem_cer - tot_prev_cer) / tot_prev_cer * 100), 2) if tot_prev_cer > 0 else 0.0
+
+            s3_m1, s3_m2 = st.columns(2)
+            s3_m1.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS</div>
+                <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            s3_m2.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">CHATS CERRADOS Y EFECTIVIDAD</div>
+                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+                    {tot_sem_cer:,} <span style="font-size: 1.25rem; font-weight: 600; color: #38bdf8;">({pct_sem_cer}%)</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_dia_bar, col_pie_ag = st.columns([1.2, 1])
+
+            with col_dia_bar:
+                st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
+
+                dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
+                df_target["creado_dia"] = df_target["created_at_dt"].dt.date
+                df_target_cerrados["cerrado_dia"] = df_target_cerrados["fecha_cierre_dt"].dt.date
+
+                filas_dias = []
+                for f_dia in dias_semana_l_d:
+                    str_dia = f_dia.strftime("%Y-%m-%d")
+                    cnt_rec = len(df_target[df_target["creado_dia"] == f_dia])
+                    cnt_cer = len(df_target_cerrados[df_target_cerrados["cerrado_dia"] == f_dia])
+                    filas_dias.append({
+                        "Fecha": str_dia,
+                        "Recibidos": cnt_rec,
+                        "Cerrados": cnt_cer
+                    })
+
+                df_dias_agg = pd.DataFrame(filas_dias)
+
+                fig_dias = go.Figure()
+                fig_dias.add_trace(go.Bar(
+                    x=df_dias_agg["Fecha"],
+                    y=df_dias_agg["Recibidos"],
+                    name="Q. de chats recibidos",
+                    marker=dict(color="#0284c7", cornerradius=8),
+                    text=df_dias_agg["Recibidos"],
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=12, family="Arial Black")
+                ))
+                fig_dias.add_trace(go.Bar(
+                    x=df_dias_agg["Fecha"],
+                    y=df_dias_agg["Cerrados"],
+                    name="Q. de chats cerrados",
+                    marker=dict(color="#38bdf8", cornerradius=8),
+                    text=df_dias_agg["Cerrados"],
+                    textposition="inside",
+                    insidetextfont=dict(color="#0f172a", size=12, family="Arial Black")
+                ))
+                fig_dias.update_layout(
+                    hovermode=False,
+                    barmode="group",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    xaxis=dict(gridcolor="#1e293b"),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_dias, use_container_width=True)
+
+                color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
+                color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
                 
-                tot_prev_rec = len(df_wbr_base[
-                    (df_wbr_base["iso_year"] == sem_prev_year) & 
-                    (df_wbr_base["iso_week"] == sem_prev_num)
-                ])
-                tot_prev_cer = len(df_wbr_base[
-                    (df_wbr_base["es_cerrado"] == True) &
-                    (df_wbr_base["close_iso_year"] == sem_prev_year) & 
-                    (df_wbr_base["close_iso_week"] == sem_prev_num)
-                ])
-    
-                diff_rec_pct = round(((tot_sem_rec - tot_prev_rec) / tot_prev_rec * 100), 2) if tot_prev_rec > 0 else 0.0
-                diff_cer_pct = round(((tot_sem_cer - tot_prev_cer) / tot_prev_cer * 100), 2) if tot_prev_cer > 0 else 0.0
-    
-                s3_m1, s3_m2 = st.columns(2)
-                s3_m1.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS</div>
-                    <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+                sin_resp_count = int(
+                    df_target_cerrados["etiquetas"]
+                    .fillna("")
+                    .astype(str)
+                    .str.lower()
+                    .str.contains("sin respuesta")
+                    .sum()
+                )
+
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
+                    <div>• <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})</div>
+                    <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_cer} chats cerrados en la semana, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
                 </div>
                 """, unsafe_allow_html=True)
-    
-                s3_m2.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">CHATS CERRADOS Y EFECTIVIDAD</div>
-                    <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
-                        {tot_sem_cer:,} <span style="font-size: 1.25rem; font-weight: 600; color: #38bdf8;">({pct_sem_cer}%)</span>
+
+            with col_pie_ag:
+                st.markdown("##### Q. de chats cerrados por Agentes")
+                
+                agentes_excluir_pie = [
+                    "monica", "mónica", "monica (bot)", 
+                    "sin asignar", "none", "nan", ""
+                ]
+                
+                df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
+                es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
+                
+                cnt_cerrados_ia = int(es_cerrado_ia.sum())
+                cnt_cerrados_humanos = int((~es_omitido_torta).sum())
+                pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
+
+                df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
+                df_ag_pie.columns = ["Agente", "Cerrados"]
+
+                palette_donut = [
+                    "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
+                    "#7dd3fc", "#bae6fd", "#94a3b8", "#cbd5e1"
+                ]
+
+                fig_pie_w = go.Figure(data=[go.Pie(
+                    labels=df_ag_pie["Agente"],
+                    values=df_ag_pie["Cerrados"],
+                    hole=0.45,
+                    textinfo="label+value+percent",
+                    texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                    textposition="outside",
+                    insidetextorientation="horizontal",
+                    marker=dict(colors=palette_donut, line=dict(color="#0b1120", width=2)),
+                    showlegend=False
+                )])
+
+                fig_pie_w.update_layout(
+                    hovermode=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1", size=11),
+                    margin=dict(t=30, b=30, l=40, r=40),
+                    height=360
+                )
+                st.plotly_chart(fig_pie_w, use_container_width=True)
+
+                cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
+                empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
+                num_agentes_activos = df_ag_pie["Agente"].nunique()
+                prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
+
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                    <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Agente: <span style="color:#38bdf8; font-size:1.1rem; font-weight:700; margin-left:6px;">{prom_por_agente}</span></div>
+                    <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">
+                        <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
+                    </div>
+                    <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
+                        🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-    
-                st.markdown("<br>", unsafe_allow_html=True)
-    
-                col_dia_bar, col_pie_ag = st.columns([1.2, 1])
-    
-                with col_dia_bar:
-                    st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
-    
-                    dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
-                    df_target["creado_dia"] = df_target["created_at_dt"].dt.date
-                    df_target_cerrados["cerrado_dia"] = df_target_cerrados["fecha_cierre_dt"].dt.date
-    
-                    filas_dias = []
-                    for f_dia in dias_semana_l_d:
-                        str_dia = f_dia.strftime("%Y-%m-%d")
-                        cnt_rec = len(df_target[df_target["creado_dia"] == f_dia])
-                        cnt_cer = len(df_target_cerrados[df_target_cerrados["cerrado_dia"] == f_dia])
-                        filas_dias.append({
-                            "Fecha": str_dia,
-                            "Recibidos": cnt_rec,
-                            "Cerrados": cnt_cer
-                        })
-    
-                    df_dias_agg = pd.DataFrame(filas_dias)
-    
-                    fig_dias = go.Figure()
-                    fig_dias.add_trace(go.Bar(
-                        x=df_dias_agg["Fecha"],
-                        y=df_dias_agg["Recibidos"],
-                        name="Q. de chats recibidos",
-                        marker=dict(color="#0284c7", cornerradius=8),
-                        text=df_dias_agg["Recibidos"],
-                        textposition="inside",
-                        insidetextfont=dict(color="#ffffff", size=12, family="Arial Black")
-                    ))
-                    fig_dias.add_trace(go.Bar(
-                        x=df_dias_agg["Fecha"],
-                        y=df_dias_agg["Cerrados"],
-                        name="Q. de chats cerrados",
-                        marker=dict(color="#38bdf8", cornerradius=8),
-                        text=df_dias_agg["Cerrados"],
-                        textposition="inside",
-                        insidetextfont=dict(color="#0f172a", size=12, family="Arial Black")
-                    ))
-                    fig_dias.update_layout(
-                        hovermode=False,
-                        barmode="group",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1"),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                        xaxis=dict(gridcolor="#1e293b"),
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                        margin=dict(t=30, b=20, l=20, r=20),
-                        height=360
-                    )
-                    st.plotly_chart(fig_dias, use_container_width=True)
-    
-                    # CÓDIGO CORREGIDO: lee df_target_cerrados
-                    color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
-                    color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
-                    
-                    # Solo contabilizar la etiqueta en los chats cerrados en la semana seleccionada
-                    sin_resp_count = int(
-                        df_target_cerrados["etiquetas"]
-                        .fillna("")
-                        .astype(str)
-                        .str.lower()
-                        .str.contains("sin respuesta")
-                        .sum()
-                    )
-    
-                    st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
-                        <div>• <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})</div>
-                        <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_cer} chats cerrados en la semana, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA
+            # =========================================================================
+            st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
+
+            def calcular_metricas_tiempos_semana(df_sub):
+                if df_sub.empty:
+                    return 0.0, 0.0, 0.0, 0.0
+
+                agentes_omitir_t = ["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"]
+                
+                dt_col = df_sub["created_at_dt"]
+                dias_col = dt_col.dt.dayofweek
+                horas_col = dt_col.dt.time
+                fechas_col = dt_col.dt.strftime("%Y-%m-%d")
+
+                es_horario_1ra = (
+                    ((dias_col.isin([0, 1, 2, 3, 4])) & (horas_col >= time(8, 0)) & (horas_col <= time(17, 30))) |
+                    ((dias_col == 5) & (horas_col >= time(9, 0)) & (horas_col <= time(11, 45)))
+                ) & (~fechas_col.isin(FERIADOS))
+
+                es_agente_1ra = (
+                    (df_sub["por_agente"].fillna("").astype(str).str.lower() == "no excluido") &
+                    (~df_sub["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitir_t))
+                )
+
+                sub_1ra = df_sub[es_horario_1ra & es_agente_1ra].copy()
+                sub_1ra["p1_num"] = pd.to_numeric(sub_1ra["primera_respuesta_min"], errors="coerce")
+                s_1ra = sub_1ra["p1_num"].dropna()
+
+                prom_1ra_val = round(s_1ra.mean(), 2) if not s_1ra.empty else 0.0
+                pct_sla_1ra_val = round(((s_1ra <= 2.0).sum() / len(s_1ra) * 100), 1) if not s_1ra.empty else 0.0
+
+                etiquetas_s = df_sub["etiquetas"].fillna("").astype(str).str.lower()
+                es_sin_resp = etiquetas_s.str.contains("sin respuesta", na=False)
+                es_horario_gest = df_sub["horario_evaluado"] != "fuera de horario"
+                
+                sub_gest = df_sub[
+                    es_agente_1ra & 
+                    es_horario_gest & 
+                    (~es_sin_resp) & 
+                    (df_sub["es_cerrado"] == True)
+                ].copy()
+                
+                sub_gest["pg_num"] = pd.to_numeric(sub_gest["tiempo_resolucion_minutos"], errors="coerce")
+                s_gest = sub_gest["pg_num"].dropna()
+
+                prom_gest_val = round(s_gest.mean(), 1) if not s_gest.empty else 0.0
+                pct_sla_gest_val = round(((s_gest <= 60.0).sum() / len(s_gest) * 100), 1) if not s_gest.empty else 0.0
+
+                return prom_gest_val, prom_1ra_val, pct_sla_gest_val, pct_sla_1ra_val
+
+            evol_tiempos = []
+            for _, s_row in df_5_semanas_info.iterrows():
+                sub_w = df_wbr_base[
+                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["iso_week"] == s_row["iso_week"])
+                ]
+                p_gest_w, p_1ra_w, sla_g_w, sla_1_w = calcular_metricas_tiempos_semana(sub_w)
+                evol_tiempos.append({
+                    "Semana": s_row["etiqueta_semana"],
+                    "Prom_Gestion": p_gest_w,
+                    "Prom_1ra": p_1ra_w,
+                    "SLA_Gestion": sla_g_w,
+                    "SLA_1ra": sla_1_w
+                })
+
+            df_evol_tiempos = pd.DataFrame(evol_tiempos)
+
+            foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
+            foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
+            foco_sla_gest = df_evol_tiempos.iloc[-1]["SLA_Gestion"]
+            foco_sla_1ra = df_evol_tiempos.iloc[-1]["SLA_1ra"]
+
+            prev_gest = df_evol_tiempos.iloc[-2]["Prom_Gestion"] if len(df_evol_tiempos) >= 2 else 0.0
+            prev_1ra = df_evol_tiempos.iloc[-2]["Prom_1ra"] if len(df_evol_tiempos) >= 2 else 0.0
+
+            wow_gest_pct = round(((foco_gest - prev_gest) / prev_gest * 100), 2) if prev_gest > 0 else 0.0
+            wow_1ra_pct = round(((foco_1ra - prev_1ra) / prev_1ra * 100), 2) if prev_1ra > 0 else 0.0
+
+            col_t1, col_t2 = st.columns(2)
+            col_t1.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">TIEMPO PROMEDIO TOTAL DE GESTIÓN</div>
+                <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_gest} min</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col_t2.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">TIEMPO PROM. DE 1RA RESPUESTA</div>
+                <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_1ra} min</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_g_gest, col_g_1ra = st.columns(2)
+
+            with col_g_gest:
+                st.markdown("##### Tiempo promedio total de gestión (min)")
+                fig_bar_gest = go.Figure()
+                fig_bar_gest.add_trace(go.Bar(
+                    x=df_evol_tiempos["Semana"],
+                    y=df_evol_tiempos["Prom_Gestion"],
+                    marker=dict(color="#0284c7", cornerradius=8),
+                    text=df_evol_tiempos["Prom_Gestion"].apply(lambda v: f"{v}"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_gest.update_layout(
+                    hovermode=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_bar_gest, use_container_width=True)
+
+                color_wow_g = "#34d399" if wow_gest_pct <= 0 else "#f43f5e"
+                color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
+
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div><b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)</div>
+                    <div>SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_g_1ra:
+                st.markdown("##### Tiempo promedio primera respuesta")
+                fig_bar_1ra = go.Figure()
+                fig_bar_1ra.add_trace(go.Bar(
+                    x=df_evol_tiempos["Semana"],
+                    y=df_evol_tiempos["Prom_1ra"],
+                    marker=dict(color="#0369a1", cornerradius=8),
+                    text=df_evol_tiempos["Prom_1ra"].apply(lambda v: f"{v}"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_1ra.update_layout(
+                    hovermode=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_bar_1ra, use_container_width=True)
+
+                color_wow_1 = "#34d399" if wow_1ra_pct <= 0 else "#f43f5e"
+                color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
+
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div><b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)</div>
+                    <div>SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b> <span style="font-size: 0.74rem; color: #94a3b8;">(Sin horario extendido)</span></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO
+            # =========================================================================
+            st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
+
+            if "fecha_calificacion_dt" in df_target.columns:
+                df_target_csat = df_wbr_base[
+                    (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                    (df_wbr_base["rating"].notna()) &
+                    (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == target_year) &
+                    (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == target_week)
+                ].copy()
+            else:
+                df_target_csat = df_target[
+                    (df_target["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                    (df_target["rating"].notna())
+                ].copy()
+
+            df_target_csat["rating_num"] = pd.to_numeric(df_target_csat["rating"], errors="coerce")
+            df_target_csat = df_target_csat.dropna(subset=["rating_num"])
+
+            tot_evaluados = len(df_target_csat)
+            tot_sin_calificar = max(0, tot_sem_rec - tot_evaluados)
+            pct_calificados = round((tot_evaluados / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+            pct_sin_calificar = round((tot_sin_calificar / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+
+            cnt_5 = int((df_target_csat["rating_num"] == 5).sum())
+            cnt_4 = int((df_target_csat["rating_num"] == 4).sum())
+            cnt_3 = int((df_target_csat["rating_num"] == 3).sum())
+            cnt_2 = int((df_target_csat["rating_num"] == 2).sum())
+            cnt_1 = int((df_target_csat["rating_num"] == 1).sum())
+
+            tot_positivas = cnt_5 + cnt_4
+            tot_negativas = cnt_3 + cnt_2 + cnt_1
+
+            def f_pct(c, t):
+                return f"{round((c / t * 100), 1)}%" if t > 0 else "0.0%"
+
+            c_c1, c_c2, c_c3, c_c4 = st.columns(4)
+
+            c_c1.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
+                <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            c_c2.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">SIN CALIFICAR</div>
+                <div class="metric-card-value" style="color: #38bdf8; font-size: 2.2rem;">{pct_sin_calificar}%</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_sin_calificar:,} conversaciones</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            c_c3.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">CALIFICADOS</div>
+                <div class="metric-card-value" style="color: #34d399; font-size: 2.2rem;">{pct_calificados}%</div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_evaluados:,} encuestas recibidas</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            c_c4.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #818cf8; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                <div class="metric-card-title" style="font-size: 0.7rem; margin-bottom: 3px;">TOP CALIFICACIONES</div>
+                <div style="font-size: 0.75rem; line-height: 1.35; color: #cbd5e1;">
+                    • <b>5★:</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)}) | <b>4★:</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
+                    • <b>3★:</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)}) | <b>2★:</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
+                    • <b>1★:</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_p_niv, col_p_sent = st.columns([1.3, 1])
+
+            with col_p_niv:
+                st.markdown("##### Q. de Puntuaciones por Nivel (Solo Calificados)")
+
+                mapa_escala = {
+                    5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
+                }
+                
+                df_target["nivel_norm"] = (
+                    df_target["nivel"].fillna("Niv-L1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+                )
+                df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
+
+                df_target_calificados = df_target[df_target["rating_int"] > 0].copy()
+                df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
+
+                orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo"]
+                df_niv_grp = df_target_calificados.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
+
+                fig_niv = px.bar(
+                    df_niv_grp,
+                    x="puntuacion_str",
+                    y="Cantidad",
+                    color="nivel_norm",
+                    barmode="group",
+                    category_orders={"puntuacion_str": orden_puntuacion},
+                    color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#0369a1"},
+                    text="Cantidad"
+                )
+                fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
+                fig_niv.update_layout(
+                    hovermode=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1", size=11),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_niv, use_container_width=True)
+
+            with col_p_sent:
+                st.markdown("##### Sentimiento de Usuarios (CSAT Positivo vs Negativo)")
+
+                df_sent = pd.DataFrame([
+                    {"Sentimiento": "Positivas (≥4★)", "Cantidad": tot_positivas},
+                    {"Sentimiento": "Negativas (≤3★)", "Cantidad": tot_negativas}
+                ])
+                df_sent = df_sent[df_sent["Cantidad"] > 0]
+
+                fig_sent = go.Figure(data=[go.Pie(
+                    labels=df_sent["Sentimiento"],
+                    values=df_sent["Cantidad"],
+                    hole=0.45,
+                    textinfo="label+value+percent",
+                    texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                    textposition="outside",
+                    marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#0b1120", width=2)),
+                    showlegend=False
+                )])
+                fig_sent.update_layout(
+                    hovermode=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1", size=11),
+                    margin=dict(t=30, b=30, l=30, r=30),
+                    height=360
+                )
+                st.plotly_chart(fig_sent, use_container_width=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1
+            # =========================================================================
+            st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
+
+            df_l1_neg = df_target[
+                (df_target["nivel_norm"] == "Niv-L1") &
+                (df_target["rating_int"].isin([1, 2, 3]))
+            ].copy()
+
+            df_l3_neg = df_target[
+                (df_target["nivel_norm"] == "Niv-L3") &
+                (df_target["rating_int"].isin([1, 2, 3]))
+            ].copy()
+
+            tot_l1_neg = len(df_l1_neg)
+            pct_l1_del_total = round((tot_l1_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+
+            tot_l3_neg = len(df_l3_neg)
+            pct_l3_sobre_total_neg = round((tot_l3_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+
+            col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
+
+            with col_card_l1:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L1</div>
+                    <div class="metric-card-value" style="font-size: 3.4rem; color: #f59e0b; margin: 8px 0;">{tot_l1_neg}</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                        <b>{pct_l1_del_total}%</b> del total de reclamos ({tot_negativas} casos)
                     </div>
-                    """, unsafe_allow_html=True)
-    
-                with col_pie_ag:
-                    st.markdown("##### Q. de chats cerrados por Agentes")
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_matriz_l1:
+                if not df_l1_neg.empty:
+                    df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
                     
-                    agentes_excluir_pie = [
-                        "monica", "mónica", "monica (bot)", 
-                        "sin asignar", "none", "nan", ""
-                    ]
+                    pivot_l1 = df_l1_neg.pivot_table(
+                        index="agente_nom",
+                        columns="rating_int",
+                        values="id",
+                        aggfunc="count",
+                        fill_value=0
+                    ).reset_index()
+
+                    for col_star in [3, 2, 1]:
+                        if col_star not in pivot_l1.columns:
+                            pivot_l1[col_star] = 0
+
+                    pivot_l1["Todos los casos"] = pivot_l1[3] + pivot_l1[2] + pivot_l1[1]
+                    pivot_l1["% del Total a L1"] = pivot_l1["Todos los casos"].apply(
+                        lambda c: f"{round((c / tot_l1_neg * 100), 1)}%" if tot_l1_neg > 0 else "0%"
+                    )
+
+                    pivot_l1 = pivot_l1.rename(columns={
+                        "agente_nom": "Agente Asignado",
+                        3: "Regular (3★)",
+                        2: "Malo (2★)",
+                        1: "Muy malo (1★)"
+                    })
+
+                    cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
+                    config_matriz_l1 = {
+                        "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
+                        "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
+                        "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
+                        "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
+                        "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
+                        "% del Total a L1": st.column_config.TextColumn("% del Total a L1")
+                    }
                     
-                    df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-                    es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
-                    es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
+                    st.dataframe(
+                        pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False),
+                        column_config=config_matriz_l1,
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                else:
+                    st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
+
+            df_l1_motivos = pd.DataFrame()
+            if not df_l1_neg.empty:
+                df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
+                df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
+                    lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+                )
+                df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
+
+                filas_html_l1 = []
+                for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
+                    filas = grp.to_dict("records")
+                    rowspan_cnt = len(filas)
+                    for idx, row_item in enumerate(filas):
+                        td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>" if idx == 0 else ""
+                        filas_html_l1.append(
+                            f"<tr>{td_calif}<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_normalizado']}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center; font-weight:700; color:#38bdf8;'>{row_item['Cantidad']}</td></tr>"
+                        )
+
+                html_tabla_l1 = f"""
+                <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
+                    <thead>
+                        <tr style='background-color:#0284c7; color:white;'>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:28%;'>Calificación</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo Normalizado</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:15%;'>Cantidad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join(filas_html_l1)}
+                    </tbody>
+                </table>
+                """
+                st.markdown(html_tabla_l1, unsafe_allow_html=True)
+            else:
+                st.caption("Sin motivos registrados en L1.")
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
+            # =========================================================================
+            st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Fricción en L3")
+
+            col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
+
+            with col_card_l3:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L3</div>
+                    <div class="metric-card-value" style="font-size: 3.4rem; color: #ef4444; margin: 8px 0;">{tot_l3_neg}</div>
+                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                        <b>{pct_l3_sobre_total_neg}%</b> del total de reclamos ({tot_negativas} casos)
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_matriz_l3:
+                if not df_l3_neg.empty:
+                    df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                    pivot_l3 = df_l3_neg.pivot_table(
+                        index="agente_nom",
+                        columns="rating_int",
+                        values="id",
+                        aggfunc="count",
+                        fill_value=0
+                    ).reset_index()
+
+                    for col_star in [3, 2, 1]:
+                        if col_star not in pivot_l3.columns:
+                            pivot_l3[col_star] = 0
+
+                    pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
+                    pivot_l3["% del Total a L3"] = pivot_l3["Todos los casos"].apply(
+                        lambda c: f"{round((c / tot_l3_neg * 100), 1)}%" if tot_l3_neg > 0 else "0%"
+                    )
+
+                    pivot_l3 = pivot_l3.rename(columns={
+                        "agente_nom": "Agente Asignado",
+                        3: "Regular (3★)",
+                        2: "Malo (2★)",
+                        1: "Muy malo (1★)"
+                    })
+
+                    cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L3"]
+                    config_matriz_l3 = {
+                        "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
+                        "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
+                        "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
+                        "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
+                        "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
+                        "% del Total a L3": st.column_config.TextColumn("% del Total a L3")
+                    }
                     
-                    cnt_cerrados_ia = int(es_cerrado_ia.sum())
-                    cnt_cerrados_humanos = int((~es_omitido_torta).sum())
-                    pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
-    
-                    df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
-                    df_ag_pie.columns = ["Agente", "Cerrados"]
-    
-                    palette_donut = [
-                        "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
-                        "#7dd3fc", "#bae6fd", "#94a3b8", "#cbd5e1"
-                    ]
-    
-                    fig_pie_w = go.Figure(data=[go.Pie(
-                        labels=df_ag_pie["Agente"],
-                        values=df_ag_pie["Cerrados"],
+                    st.dataframe(
+                        pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False),
+                        column_config=config_matriz_l3,
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                else:
+                    st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 3 esta semana.")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### Detalle de Casos L3 & Tickets Relacionados")
+
+            if not df_l3_neg.empty:
+                df_l3_neg["ticket_limpio"] = (
+                    df_l3_neg["ticket_relacionado"]
+                    .fillna("")
+                    .replace(["None", "nan", ""], "Sin ticket")
+                    .astype(str)
+                    .str.strip()
+                )
+
+                try:
+                    res_tickets = supabase.table("tickets_l3").select("ticket_id, prioridad, estado").execute()
+                    df_meta_tk = pd.DataFrame(res_tickets.data or [])
+                    if not df_meta_tk.empty:
+                        df_l3_neg = df_l3_neg.merge(df_meta_tk, left_on="ticket_limpio", right_on="ticket_id", how="left")
+                except Exception:
+                    pass
+
+                if "prioridad" not in df_l3_neg.columns:
+                    df_l3_neg["prioridad"] = "Media"
+                else:
+                    df_l3_neg["prioridad"] = df_l3_neg["prioridad"].fillna("Media")
+
+                if "estado" not in df_l3_neg.columns:
+                    df_l3_neg["estado"] = "Pendiente"
+                else:
+                    df_l3_neg["estado"] = df_l3_neg["estado"].fillna("Pendiente")
+
+                df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
+                    lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+                )
+                df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
+                df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
+                df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
+
+                color_prio = {"Crítica": "#ef4444", "Alta": "#f97316", "Media": "#38bdf8", "Baja": "#94a3b8"}
+                color_est = {"Resuelto": "#34d399", "Cerrado": "#10b981", "En progreso": "#38bdf8", "Abierto": "#fbbf24", "Pendiente": "#94a3b8"}
+
+                df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
+
+                filas_html_l3 = []
+                for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
+                    filas = grp.to_dict("records")
+                    rowspan_cnt = len(filas)
+                    for idx, r_item in enumerate(filas):
+                        td_calif = (
+                            f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; "
+                            f"font-weight:700; vertical-align:middle; background-color:#1e293b; text-align:center;'>"
+                            f"{r_item['Calificación_HTML']}</td>"
+                            if idx == 0 else ""
+                        )
+                        c_p = color_prio.get(r_item['prioridad'], "#94a3b8")
+                        c_e = color_est.get(r_item['estado'], "#94a3b8")
+
+                        ticket_txt = r_item['ticket_limpio']
+                        badge_ticket = (
+                            f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600; font-family:monospace;'>{ticket_txt}</span>"
+                            if ticket_txt != "Sin ticket" else f"<span style='color:#64748b;'>{ticket_txt}</span>"
+                        )
+
+                        badge_prio = f"<span style='color:{c_p}; font-weight:600; font-size:0.8rem;'>● {r_item['prioridad']}</span>"
+                        badge_est = f"<span style='border:1px solid {c_e}; color:{c_e}; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:600;'>{r_item['estado']}</span>"
+
+                        filas_html_l3.append(
+                            f"<tr>{td_calif}"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{r_item['motivo_clean']}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155;'>{badge_ticket}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center;'>{badge_prio}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center;'>{badge_est}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{r_item['tenant_clean']}</td>"
+                            f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{r_item['agente_clean']}</td></tr>"
+                        )
+
+                html_tabla_l3 = f"""
+                <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.84rem; border:1px solid #334155;'>
+                    <thead>
+                        <tr style='background-color:#0284c7; color:white;'>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:18%;'>Calificación</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Ticket</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:11%;'>Prioridad</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:12%;'>Estado</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Tenant</th>
+                            <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:13%;'>Agente</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join(filas_html_l3)}
+                    </tbody>
+                </table>
+                """
+                st.markdown(html_tabla_l3, unsafe_allow_html=True)
+            else:
+                st.info("🟢 No hay casos escalados a L3 con calificación negativa esta semana.")
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 7: EVOLUTIVO CSAT & RATIO CONTACTOS POR EMPRESA
+            # =========================================================================
+            st.markdown(f"#### 7. WBR | {semana_seleccionada_str} — Evolutivo de Satisfacción & Frecuencia por Empresa")
+
+            evol_csat = []
+            for _, s_row in df_5_semanas_info.iterrows():
+                if "fecha_calificacion_dt" in df_wbr_base.columns:
+                    sub_csat = df_wbr_base[
+                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                        (df_wbr_base["rating"].notna()) &
+                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == s_row["iso_year"]) &
+                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == s_row["iso_week"])
+                    ].copy()
+                else:
+                    sub_csat = df_wbr_base[
+                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                        (df_wbr_base["rating"].notna()) &
+                        (df_wbr_base["iso_year"] == s_row["iso_year"]) &
+                        (df_wbr_base["iso_week"] == s_row["iso_week"])
+                    ].copy()
+
+                sub_csat["r_num"] = pd.to_numeric(sub_csat["rating"], errors="coerce")
+                sub_csat = sub_csat.dropna(subset=["r_num"])
+                tot_c = len(sub_csat)
+                pos_c = int((sub_csat["r_num"] >= 4).sum())
+                pct_c = round((pos_c / tot_c * 100), 1) if tot_c > 0 else 0.0
+
+                sub_vol = df_wbr_base[
+                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["iso_week"] == s_row["iso_week"])
+                ]
+                tot_chats_w = len(sub_vol)
+                empresas_w = sub_vol["company"].nunique() if "company" in sub_vol.columns else 0
+                ratio_empresa = round(tot_chats_w / empresas_w, 2) if empresas_w > 0 else 0.0
+
+                evol_csat.append({
+                    "Semana": s_row["etiqueta_semana"],
+                    "CSAT": pct_c,
+                    "Ratio_Empresa": ratio_empresa
+                })
+
+            df_evol_csat = pd.DataFrame(evol_csat)
+
+            foco_csat = df_evol_csat.iloc[-1]["CSAT"]
+            prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
+            diff_csat = round(foco_csat - prev_csat, 2)
+            foco_ratio = df_evol_csat.iloc[-1]["Ratio_Empresa"]
+
+            col_g_csat, col_g_ratio = st.columns(2)
+
+            with col_g_csat:
+                st.markdown("##### Satisfacción del Cliente (CSAT %)")
+                fig_bar_csat = go.Figure()
+                fig_bar_csat.add_trace(go.Bar(
+                    x=df_evol_csat["Semana"],
+                    y=df_evol_csat["CSAT"],
+                    marker=dict(color="#0284c7", cornerradius=8),
+                    text=df_evol_csat["CSAT"].apply(lambda v: f"{v}%"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_csat.update_layout(
+                    hovermode=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_bar_csat, use_container_width=True)
+
+                color_diff_csat = "#34d399" if diff_csat >= 0 else "#f43f5e"
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <b style="color: {color_diff_csat}; font-size: 1.1rem;">{diff_csat:+.2f}% CSAT</b>
+                    <span style="color: #cbd5e1; font-size: 0.85rem;">{semana_seleccionada_str.split(' ')[0]} {target_week} ({foco_csat}%) vs Semana {sem_prev_num} ({prev_csat}%)</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_g_ratio:
+                st.markdown("##### Evolución Semana a Semana (Promedio Contactos por Empresa)")
+                fig_bar_ratio = go.Figure()
+                fig_bar_ratio.add_trace(go.Bar(
+                    x=df_evol_csat["Semana"],
+                    y=df_evol_csat["Ratio_Empresa"],
+                    marker=dict(color="#0369a1", cornerradius=8),
+                    text=df_evol_csat["Ratio_Empresa"].apply(lambda v: f"{v:.2f}"),
+                    textposition="inside",
+                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                ))
+                fig_bar_ratio.update_layout(
+                    hovermode=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1"),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict( showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    height=360
+                )
+                st.plotly_chart(fig_bar_ratio, use_container_width=True)
+
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+                    <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Empresa</div>
+                    <div class="metric-card-value" style="color: #38bdf8; font-size: 1.9rem; margin: 2px 0;">{foco_ratio:.2f}</div>
+                    <div style="font-size: 0.8rem; color: #34d399; font-weight: 600;">{pct_sem_cer}% Conversaciones Cerradas</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # =========================================================================
+            # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
+            # =========================================================================
+            st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
+
+            df_ext_ingresados = df_target[df_target["horario_evaluado"] == "extendido"].copy()
+            tot_ext = len(df_ext_ingresados)
+
+            dias_num = df_ext_ingresados["created_at_dt"].dt.dayofweek
+            tot_domingo = int((dias_num == 6).sum())
+            derivados_l3_ext = int((df_ext_ingresados["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
+
+            df_ext_cerrados_semana = df_wbr_base[
+                (df_wbr_base["es_cerrado"] == True) &
+                (df_wbr_base["horario_evaluado"] == "extendido") &
+                (df_wbr_base["close_iso_year"] == target_year) &
+                (df_wbr_base["close_iso_week"] == target_week)
+            ].copy()
+
+            tot_ext_cerrados = len(df_ext_cerrados_semana)
+            pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
+
+            agentes_excluir_pie = [
+                "monica", "mónica", "monica (bot)", 
+                "sin asignar", "none", "nan", ""
+            ]
+
+            df_ext_cerrados_semana["agente_nom"] = df_ext_cerrados_semana["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+            cerrados_ia_ext = int(df_ext_cerrados_semana["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
+            cerrados_hum_ext = tot_ext_cerrados - cerrados_ia_ext
+
+            col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
+
+            with col_ext_pie:
+                st.markdown(f"""
+                <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS CERRADOS EN HORARIO EXTENDIDO</div>
+                    <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext_cerrados}</div>
+                    <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{cerrados_hum_ext}</b> por humanos | <b>{cerrados_ia_ext}</b> por Mónica</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                df_ext_ag = df_ext_cerrados_semana[
+                    ~df_ext_cerrados_semana["agente_nom"].str.lower().isin(agentes_excluir_pie)
+                ]["agente_nom"].value_counts().reset_index()
+                df_ext_ag.columns = ["Agente", "Cantidad"]
+
+                if not df_ext_ag.empty:
+                    palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
+
+                    fig_pie_ext = go.Figure(data=[go.Pie(
+                        labels=df_ext_ag["Agente"],
+                        values=df_ext_ag["Cantidad"],
                         hole=0.45,
                         textinfo="label+value+percent",
                         texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
                         textposition="outside",
                         insidetextorientation="horizontal",
-                        marker=dict(colors=palette_donut, line=dict(color="#0b1120", width=2)),
+                        marker=dict(colors=palette_pie_wbr, line=dict(color="#0b1120", width=2)),
                         showlegend=False
                     )])
-    
-                    fig_pie_w.update_layout(
-                        hovermode=False,
+                    
+                    fig_pie_ext.update_layout(
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1", size=11),
-                        margin=dict(t=30, b=30, l=40, r=40),
-                        height=360
+                        font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
+                        margin=dict(t=25, b=25, l=40, r=40),
+                        height=310
                     )
-                    st.plotly_chart(fig_pie_w, use_container_width=True)
-    
-                    cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
-                    empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
-                    num_agentes_activos = df_ag_pie["Agente"].nunique()
-                    prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
-    
+                    st.plotly_chart(fig_pie_ext, use_container_width=True)
+
                     st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
-                        <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Agente: <span style="color:#38bdf8; font-size:1.1rem; font-weight:700; margin-left:6px;">{prom_por_agente}</span></div>
-                        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">
-                            <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
-                        </div>
-                        <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
-                            🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
-                        </div>
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
+                        <span><b style="color: #38bdf8;">Obs:</b> De los {tot_ext_cerrados} cierres en horario extendido, {cerrados_hum_ext} fueron gestionados por soporte humano.</span>
                     </div>
                     """, unsafe_allow_html=True)
-    
-                st.markdown("---")
-    
-                # =========================================================================
-                # SLIDE 4: EVOLUTIVO DE TIEMPOS DE GESTIÓN Y 1RA RESPUESTA
-                # =========================================================================
-                st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
-    
-                def calcular_metricas_tiempos_semana(df_sub):
-                    if df_sub.empty:
-                        return 0.0, 0.0, 0.0, 0.0
-    
-                    agentes_omitir_t = ["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"]
-                    
-                    dt_col = df_sub["created_at_dt"]
-                    dias_col = dt_col.dt.dayofweek
-                    horas_col = dt_col.dt.time
-                    fechas_col = dt_col.dt.strftime("%Y-%m-%d")
-    
-                    es_horario_1ra = (
-                        ((dias_col.isin([0, 1, 2, 3, 4])) & (horas_col >= time(8, 0)) & (horas_col <= time(17, 30))) |
-                        ((dias_col == 5) & (horas_col >= time(9, 0)) & (horas_col <= time(11, 45)))
-                    ) & (~fechas_col.isin(FERIADOS))
-    
-                    es_agente_1ra = (
-                        (df_sub["por_agente"].fillna("").astype(str).str.lower() == "no excluido") &
-                        (~df_sub["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitir_t))
-                    )
-    
-                    sub_1ra = df_sub[es_horario_1ra & es_agente_1ra].copy()
-                    sub_1ra["p1_num"] = pd.to_numeric(sub_1ra["primera_respuesta_min"], errors="coerce")
-                    s_1ra = sub_1ra["p1_num"].dropna()
-    
-                    prom_1ra_val = round(s_1ra.mean(), 2) if not s_1ra.empty else 0.0
-                    pct_sla_1ra_val = round(((s_1ra <= 2.0).sum() / len(s_1ra) * 100), 1) if not s_1ra.empty else 0.0
-    
-                    etiquetas_s = df_sub["etiquetas"].fillna("").astype(str).str.lower()
-                    es_sin_resp = etiquetas_s.str.contains("sin respuesta", na=False)
-                    es_horario_gest = df_sub["horario_evaluado"] != "fuera de horario"
-                    
-                    sub_gest = df_sub[
-                        es_agente_1ra & 
-                        es_horario_gest & 
-                        (~es_sin_resp) & 
-                        (df_sub["es_cerrado"] == True)
-                    ].copy()
-                    
-                    sub_gest["pg_num"] = pd.to_numeric(sub_gest["tiempo_resolucion_minutos"], errors="coerce")
-                    s_gest = sub_gest["pg_num"].dropna()
-    
-                    prom_gest_val = round(s_gest.mean(), 1) if not s_gest.empty else 0.0
-                    pct_sla_gest_val = round(((s_gest <= 60.0).sum() / len(s_gest) * 100), 1) if not s_gest.empty else 0.0
-    
-                    return prom_gest_val, prom_1ra_val, pct_sla_gest_val, pct_sla_1ra_val
-    
-                evol_tiempos = []
-                for _, s_row in df_5_semanas_info.iterrows():
-                    sub_w = df_wbr_base[
-                        (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
-                        (df_wbr_base["iso_week"] == s_row["iso_week"])
-                    ]
-                    p_gest_w, p_1ra_w, sla_g_w, sla_1_w = calcular_metricas_tiempos_semana(sub_w)
-                    evol_tiempos.append({
-                        "Semana": s_row["etiqueta_semana"],
-                        "Prom_Gestion": p_gest_w,
-                        "Prom_1ra": p_1ra_w,
-                        "SLA_Gestion": sla_g_w,
-                        "SLA_1ra": sla_1_w
-                    })
-    
-                df_evol_tiempos = pd.DataFrame(evol_tiempos)
-    
-                foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
-                foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
-                foco_sla_gest = df_evol_tiempos.iloc[-1]["SLA_Gestion"]
-                foco_sla_1ra = df_evol_tiempos.iloc[-1]["SLA_1ra"]
-    
-                prev_gest = df_evol_tiempos.iloc[-2]["Prom_Gestion"] if len(df_evol_tiempos) >= 2 else 0.0
-                prev_1ra = df_evol_tiempos.iloc[-2]["Prom_1ra"] if len(df_evol_tiempos) >= 2 else 0.0
-    
-                wow_gest_pct = round(((foco_gest - prev_gest) / prev_gest * 100), 2) if prev_gest > 0 else 0.0
-                wow_1ra_pct = round(((foco_1ra - prev_1ra) / prev_1ra * 100), 2) if prev_1ra > 0 else 0.0
-    
-                col_t1, col_t2 = st.columns(2)
-                col_t1.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">TIEMPO PROMEDIO TOTAL DE GESTIÓN</div>
-                    <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_gest} min</div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                col_t2.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">TIEMPO PROM. DE 1RA RESPUESTA</div>
-                    <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_1ra} min</div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                st.markdown("<br>", unsafe_allow_html=True)
-    
-                col_g_gest, col_g_1ra = st.columns(2)
-    
-                with col_g_gest:
-                    st.markdown("##### Tiempo promedio total de gestión (min)")
-                    fig_bar_gest = go.Figure()
-                    fig_bar_gest.add_trace(go.Bar(
-                        x=df_evol_tiempos["Semana"],
-                        y=df_evol_tiempos["Prom_Gestion"],
-                        marker=dict(color="#0284c7", cornerradius=8),
-                        text=df_evol_tiempos["Prom_Gestion"].apply(lambda v: f"{v}"),
-                        textposition="inside",
-                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                    ))
-                    fig_bar_gest.update_layout(
-                        hovermode=False,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1"),
-                        xaxis=dict(gridcolor="#1e293b", title=None),
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                        margin=dict(t=30, b=20, l=20, r=20),
-                        height=360
-                    )
-                    st.plotly_chart(fig_bar_gest, use_container_width=True)
-    
-                    color_wow_g = "#34d399" if wow_gest_pct <= 0 else "#f43f5e"
-                    color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
-    
-                    st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div><b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)</div>
-                        <div>SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b></div>
-                    </div>
-                    """, unsafe_allow_html=True)
-    
-                with col_g_1ra:
-                    st.markdown("##### Tiempo promedio primera respuesta")
-                    fig_bar_1ra = go.Figure()
-                    fig_bar_1ra.add_trace(go.Bar(
-                        x=df_evol_tiempos["Semana"],
-                        y=df_evol_tiempos["Prom_1ra"],
-                        marker=dict(color="#0369a1", cornerradius=8),
-                        text=df_evol_tiempos["Prom_1ra"].apply(lambda v: f"{v}"),
-                        textposition="inside",
-                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                    ))
-                    fig_bar_1ra.update_layout(
-                        hovermode=False,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1"),
-                        xaxis=dict(gridcolor="#1e293b", title=None),
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                        margin=dict(t=30, b=20, l=20, r=20),
-                        height=360
-                    )
-                    st.plotly_chart(fig_bar_1ra, use_container_width=True)
-    
-                    color_wow_1 = "#34d399" if wow_1ra_pct <= 0 else "#f43f5e"
-                    color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
-    
-                    st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div><b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)</div>
-                        <div>SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b> <span style="font-size: 0.74rem; color: #94a3b8;">(Sin horario extendido)</span></div>
-                    </div>
-                    """, unsafe_allow_html=True)
-    
-                st.markdown("---")
-    
-                # =========================================================================
-                # SLIDE 2: EVALUACIÓN DE CSAT & SENTIMIENTO
-                # =========================================================================
-                st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
-    
-                if "fecha_calificacion_dt" in df_target.columns:
-                    df_target_csat = df_wbr_base[
-                        (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                        (df_wbr_base["rating"].notna()) &
-                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == target_year) &
-                        (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == target_week)
-                    ].copy()
                 else:
-                    df_target_csat = df_target[
-                        (df_target["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                        (df_target["rating"].notna())
-                    ].copy()
-    
-                df_target_csat["rating_num"] = pd.to_numeric(df_target_csat["rating"], errors="coerce")
-                df_target_csat = df_target_csat.dropna(subset=["rating_num"])
-    
-                tot_evaluados = len(df_target_csat)
-                tot_sin_calificar = max(0, tot_sem_rec - tot_evaluados)
-                pct_calificados = round((tot_evaluados / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
-                pct_sin_calificar = round((tot_sin_calificar / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
-    
-                cnt_5 = int((df_target_csat["rating_num"] == 5).sum())
-                cnt_4 = int((df_target_csat["rating_num"] == 4).sum())
-                cnt_3 = int((df_target_csat["rating_num"] == 3).sum())
-                cnt_2 = int((df_target_csat["rating_num"] == 2).sum())
-                cnt_1 = int((df_target_csat["rating_num"] == 1).sum())
-    
-                tot_positivas = cnt_5 + cnt_4
-                tot_negativas = cnt_3 + cnt_2 + cnt_1
-    
-                def f_pct(c, t):
-                    return f"{round((c / t * 100), 1)}%" if t > 0 else "0.0%"
-    
-                c_c1, c_c2, c_c3, c_c4 = st.columns(4)
-    
-                c_c1.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
-                    <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
-                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
+                    st.info("Sin cierres por agentes humanos en horario extendido para esta semana.")
+
+            with col_ext_dias:
+                st.markdown(f"""
+                <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS INGRESADOS EN EXTENDIDO</div>
+                    <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
+                    <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b> chats</div>
                 </div>
                 """, unsafe_allow_html=True)
-    
-                c_c2.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">SIN CALIFICAR</div>
-                    <div class="metric-card-value" style="color: #38bdf8; font-size: 2.2rem;">{pct_sin_calificar}%</div>
-                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_sin_calificar:,} conversaciones</div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                c_c3.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">CALIFICADOS</div>
-                    <div class="metric-card-value" style="color: #34d399; font-size: 2.2rem;">{pct_calificados}%</div>
-                    <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_evaluados:,} encuestas recibidas</div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                c_c4.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #818cf8; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
-                    <div class="metric-card-title" style="font-size: 0.7rem; margin-bottom: 3px;">TOP CALIFICACIONES</div>
-                    <div style="font-size: 0.75rem; line-height: 1.35; color: #cbd5e1;">
-                        • <b>5★:</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)}) | <b>4★:</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
-                        • <b>3★:</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)}) | <b>2★:</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
-                        • <b>1★:</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                st.markdown("<br>", unsafe_allow_html=True)
-    
-                col_p_niv, col_p_sent = st.columns([1.3, 1])
-    
-                with col_p_niv:
-                    st.markdown("##### Q. de Puntuaciones por Nivel (Solo Calificados)")
-    
-                    mapa_escala = {
-                        5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
+
+                if not df_ext_ingresados.empty:
+                    mapa_dias_nom = {
+                        0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
+                        4: "viernes", 5: "sábado", 6: "domingo"
                     }
+                    df_ext_ingresados["dia_nombre"] = df_ext_ingresados["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
+                    orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
                     
-                    df_target["nivel_norm"] = (
-                        df_target["nivel"].fillna("Niv-L1")
-                        .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
-                    )
-                    df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
-    
-                    df_target_calificados = df_target[df_target["rating_int"] > 0].copy()
-                    df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
-    
-                    orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo"]
-                    df_niv_grp = df_target_calificados.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
-    
-                    fig_niv = px.bar(
-                        df_niv_grp,
-                        x="puntuacion_str",
-                        y="Cantidad",
-                        color="nivel_norm",
-                        barmode="group",
-                        category_orders={"puntuacion_str": orden_puntuacion},
-                        color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#0369a1"},
-                        text="Cantidad"
-                    )
-                    fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
-                    fig_niv.update_layout(
-                        hovermode=False,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1", size=11),
-                        xaxis=dict(gridcolor="#1e293b", title=None),
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
-                        margin=dict(t=30, b=20, l=20, r=20),
-                        height=360
-                    )
-                    st.plotly_chart(fig_niv, use_container_width=True)
-    
-                with col_p_sent:
-                    st.markdown("##### Sentimiento de Usuarios (CSAT Positivo vs Negativo)")
-    
-                    df_sent = pd.DataFrame([
-                        {"Sentimiento": "Positivas (≥4★)", "Cantidad": tot_positivas},
-                        {"Sentimiento": "Negativas (≤3★)", "Cantidad": tot_negativas}
-                    ])
-                    df_sent = df_sent[df_sent["Cantidad"] > 0]
-    
-                    fig_sent = go.Figure(data=[go.Pie(
-                        labels=df_sent["Sentimiento"],
-                        values=df_sent["Cantidad"],
-                        hole=0.45,
-                        textinfo="label+value+percent",
-                        texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                    df_dias_ext_cnt = df_ext_ingresados["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
+                    df_dias_ext_cnt.columns = ["Día", "Cantidad"]
+                    df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
+
+                    fig_bar_dias_ext = go.Figure(go.Bar(
+                        x=df_dias_ext_cnt["Cantidad"],
+                        y=df_dias_ext_cnt["Día"],
+                        orientation="h",
+                        text=df_dias_ext_cnt["texto_barra"],
                         textposition="outside",
-                        marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#0b1120", width=2)),
-                        showlegend=False
-                    )])
-                    fig_sent.update_layout(
-                        hovermode=False,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1", size=11),
-                        margin=dict(t=30, b=30, l=30, r=30),
-                        height=360
-                    )
-                    st.plotly_chart(fig_sent, use_container_width=True)
-    
-                st.markdown("---")
-    
-                # =========================================================================
-                # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1
-                # =========================================================================
-                st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
-
-                # Inicialización de variables para exportación segura
-                df_l1_neg = df_target[
-                    (df_target["nivel_norm"] == "Niv-L1") &
-                    (df_target["rating_int"].isin([1, 2, 3]))
-                ].copy()
-
-                df_l3_neg = df_target[
-                    (df_target["nivel_norm"] == "Niv-L3") &
-                    (df_target["rating_int"].isin([1, 2, 3]))
-                ].copy()
-
-                tot_l1_neg = len(df_l1_neg)
-                pct_l1_del_total = round((tot_l1_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
-
-                tot_l3_neg = len(df_l3_neg)
-                pct_l3_sobre_total_neg = round((tot_l3_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
-
-                col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
-
-                with col_card_l1:
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                        <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L1</div>
-                        <div class="metric-card-value" style="font-size: 3.4rem; color: #f59e0b; margin: 8px 0;">{tot_l1_neg}</div>
-                        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
-                            <b>{pct_l1_del_total}%</b> del total de reclamos ({tot_negativas} casos)
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                with col_matriz_l1:
-                    if not df_l1_neg.empty:
-                        df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-                        
-                        pivot_l1 = df_l1_neg.pivot_table(
-                            index="agente_nom",
-                            columns="rating_int",
-                            values="id",
-                            aggfunc="count",
-                            fill_value=0
-                        ).reset_index()
-
-                        for col_star in [3, 2, 1]:
-                            if col_star not in pivot_l1.columns:
-                                pivot_l1[col_star] = 0
-
-                        pivot_l1["Todos los casos"] = pivot_l1[3] + pivot_l1[2] + pivot_l1[1]
-                        pivot_l1["% del Total a L1"] = pivot_l1["Todos los casos"].apply(
-                            lambda c: f"{round((c / tot_l1_neg * 100), 1)}%" if tot_l1_neg > 0 else "0%"
-                        )
-
-                        pivot_l1 = pivot_l1.rename(columns={
-                            "agente_nom": "Agente Asignado",
-                            3: "Regular (3★)",
-                            2: "Malo (2★)",
-                            1: "Muy malo (1★)"
-                        })
-
-                        cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
-                        config_matriz_l1 = {
-                            "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
-                            "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
-                            "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
-                            "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
-                            "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
-                            "% del Total a L1": st.column_config.TextColumn("% del Total a L1")
-                        }
-                        
-                        st.dataframe(
-                            pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False),
-                            column_config=config_matriz_l1,
-                            hide_index=True,
-                            use_container_width=True
-                        )
-                    else:
-                        st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
-
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
-
-                df_l1_motivos = pd.DataFrame()
-                if not df_l1_neg.empty:
-                    df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
-                    df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
-                        lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
-                    )
-                    df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
-
-                    filas_html_l1 = []
-                    for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
-                        filas = grp.to_dict("records")
-                        rowspan_cnt = len(filas)
-                        for idx, row_item in enumerate(filas):
-                            td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>" if idx == 0 else ""
-                            filas_html_l1.append(
-                                f"<tr>{td_calif}<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_normalizado']}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center; font-weight:700; color:#38bdf8;'>{row_item['Cantidad']}</td></tr>"
-                            )
-
-                    html_tabla_l1 = f"""
-                    <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
-                        <thead>
-                            <tr style='background-color:#0284c7; color:white;'>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:28%;'>Calificación</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo Normalizado</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:15%;'>Cantidad</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {''.join(filas_html_l1)}
-                        </tbody>
-                    </table>
-                    """
-                    st.markdown(html_tabla_l1, unsafe_allow_html=True)
-                else:
-                    st.caption("Sin motivos registrados en L1.")
-
-                st.markdown("---")
-
-                # =========================================================================
-                # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
-                # =========================================================================
-                st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Fricción en L3")
-
-                col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
-
-                with col_card_l3:
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                        <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L3</div>
-                        <div class="metric-card-value" style="font-size: 3.4rem; color: #ef4444; margin: 8px 0;">{tot_l3_neg}</div>
-                        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
-                            <b>{pct_l3_sobre_total_neg}%</b> del total de reclamos ({tot_negativas} casos)
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                with col_matriz_l3:
-                    if not df_l3_neg.empty:
-                        df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-                        pivot_l3 = df_l3_neg.pivot_table(
-                            index="agente_nom",
-                            columns="rating_int",
-                            values="id",
-                            aggfunc="count",
-                            fill_value=0
-                        ).reset_index()
-
-                        for col_star in [3, 2, 1]:
-                            if col_star not in pivot_l3.columns:
-                                pivot_l3[col_star] = 0
-
-                        pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
-                        pivot_l3["% del Total a L3"] = pivot_l3["Todos los casos"].apply(
-                            lambda c: f"{round((c / tot_l3_neg * 100), 1)}%" if tot_l3_neg > 0 else "0%"
-                        )
-
-                        pivot_l3 = pivot_l3.rename(columns={
-                            "agente_nom": "Agente Asignado",
-                            3: "Regular (3★)",
-                            2: "Malo (2★)",
-                            1: "Muy malo (1★)"
-                        })
-
-                        cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L3"]
-                        config_matriz_l3 = {
-                            "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
-                            "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
-                            "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
-                            "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
-                            "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
-                            "% del Total a L3": st.column_config.TextColumn("% del Total a L3")
-                        }
-                        
-                        st.dataframe(
-                            pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False),
-                            column_config=config_matriz_l3,
-                            hide_index=True,
-                            use_container_width=True
-                        )
-                    else:
-                        st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 3 esta semana.")
-
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("##### Detalle de Casos L3 & Tickets Relacionados")
-
-                if not df_l3_neg.empty:
-                    df_l3_neg["ticket_limpio"] = (
-                        df_l3_neg["ticket_relacionado"]
-                        .fillna("")
-                        .replace(["None", "nan", ""], "Sin ticket")
-                        .astype(str)
-                        .str.strip()
-                    )
-
-                    try:
-                        res_tickets = supabase.table("tickets_l3").select("ticket_id, prioridad, estado").execute()
-                        df_meta_tk = pd.DataFrame(res_tickets.data or [])
-                        if not df_meta_tk.empty:
-                            df_l3_neg = df_l3_neg.merge(df_meta_tk, left_on="ticket_limpio", right_on="ticket_id", how="left")
-                    except Exception:
-                        pass
-
-                    if "prioridad" not in df_l3_neg.columns:
-                        df_l3_neg["prioridad"] = "Media"
-                    else:
-                        df_l3_neg["prioridad"] = df_l3_neg["prioridad"].fillna("Media")
-
-                    if "estado" not in df_l3_neg.columns:
-                        df_l3_neg["estado"] = "Pendiente"
-                    else:
-                        df_l3_neg["estado"] = df_l3_neg["estado"].fillna("Pendiente")
-
-                    df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
-                        lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
-                    )
-                    df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
-                    df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
-                    df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
-
-                    color_prio = {"Crítica": "#ef4444", "Alta": "#f97316", "Media": "#38bdf8", "Baja": "#94a3b8"}
-                    color_est = {"Resuelto": "#34d399", "Cerrado": "#10b981", "En progreso": "#38bdf8", "Abierto": "#fbbf24", "Pendiente": "#94a3b8"}
-
-                    df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
-
-                    filas_html_l3 = []
-                    for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
-                        filas = grp.to_dict("records")
-                        rowspan_cnt = len(filas)
-                        for idx, r_item in enumerate(filas):
-                            td_calif = (
-                                f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; "
-                                f"font-weight:700; vertical-align:middle; background-color:#1e293b; text-align:center;'>"
-                                f"{r_item['Calificación_HTML']}</td>"
-                                if idx == 0 else ""
-                            )
-                            c_p = color_prio.get(r_item['prioridad'], "#94a3b8")
-                            c_e = color_est.get(r_item['estado'], "#94a3b8")
-
-                            ticket_txt = r_item['ticket_limpio']
-                            badge_ticket = (
-                                f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600; font-family:monospace;'>{ticket_txt}</span>"
-                                if ticket_txt != "Sin ticket" else f"<span style='color:#64748b;'>{ticket_txt}</span>"
-                            )
-
-                            badge_prio = f"<span style='color:{c_p}; font-weight:600; font-size:0.8rem;'>● {r_item['prioridad']}</span>"
-                            badge_est = f"<span style='border:1px solid {c_e}; color:{c_e}; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:600;'>{r_item['estado']}</span>"
-
-                            filas_html_l3.append(
-                                f"<tr>{td_calif}"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{r_item['motivo_clean']}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155;'>{badge_ticket}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center;'>{badge_prio}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center;'>{badge_est}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{r_item['tenant_clean']}</td>"
-                                f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{r_item['agente_clean']}</td></tr>"
-                            )
-
-                    html_tabla_l3 = f"""
-                    <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.84rem; border:1px solid #334155;'>
-                        <thead>
-                            <tr style='background-color:#0284c7; color:white;'>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:18%;'>Calificación</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Ticket</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:11%;'>Prioridad</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:12%;'>Estado</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Tenant</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:13%;'>Agente</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {''.join(filas_html_l3)}
-                        </tbody>
-                    </table>
-                    """
-                    st.markdown(html_tabla_l3, unsafe_allow_html=True)
-                else:
-                    st.info("🟢 No hay casos escalados a L3 con calificación negativa esta semana.")
-
-                st.markdown("---")
-    
-                # =========================================================================
-                # SLIDE 7: EVOLUTIVO CSAT & RATIO CONTACTOS POR EMPRESA
-                # =========================================================================
-                st.markdown(f"#### 7. WBR | {semana_seleccionada_str} — Evolutivo de Satisfacción & Frecuencia por Empresa")
-    
-                evol_csat = []
-                for _, s_row in df_5_semanas_info.iterrows():
-                    if "fecha_calificacion_dt" in df_wbr_base.columns:
-                        sub_csat = df_wbr_base[
-                            (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                            (df_wbr_base["rating"].notna()) &
-                            (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == s_row["iso_year"]) &
-                            (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == s_row["iso_week"])
-                        ].copy()
-                    else:
-                        sub_csat = df_wbr_base[
-                            (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
-                            (df_wbr_base["rating"].notna()) &
-                            (df_wbr_base["iso_year"] == s_row["iso_year"]) &
-                            (df_wbr_base["iso_week"] == s_row["iso_week"])
-                        ].copy()
-    
-                    sub_csat["r_num"] = pd.to_numeric(sub_csat["rating"], errors="coerce")
-                    sub_csat = sub_csat.dropna(subset=["r_num"])
-                    tot_c = len(sub_csat)
-                    pos_c = int((sub_csat["r_num"] >= 4).sum())
-                    pct_c = round((pos_c / tot_c * 100), 1) if tot_c > 0 else 0.0
-    
-                    sub_vol = df_wbr_base[
-                        (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
-                        (df_wbr_base["iso_week"] == s_row["iso_week"])
-                    ]
-                    tot_chats_w = len(sub_vol)
-                    empresas_w = sub_vol["company"].nunique() if "company" in sub_vol.columns else 0
-                    ratio_empresa = round(tot_chats_w / empresas_w, 2) if empresas_w > 0 else 0.0
-    
-                    evol_csat.append({
-                        "Semana": s_row["etiqueta_semana"],
-                        "CSAT": pct_c,
-                        "Ratio_Empresa": ratio_empresa
-                    })
-    
-                df_evol_csat = pd.DataFrame(evol_csat)
-    
-                foco_csat = df_evol_csat.iloc[-1]["CSAT"]
-                prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
-                diff_csat = round(foco_csat - prev_csat, 2)
-                foco_ratio = df_evol_csat.iloc[-1]["Ratio_Empresa"]
-    
-                col_g_csat, col_g_ratio = st.columns(2)
-    
-                with col_g_csat:
-                    st.markdown("##### Satisfacción del Cliente (CSAT %)")
-                    fig_bar_csat = go.Figure()
-                    fig_bar_csat.add_trace(go.Bar(
-                        x=df_evol_csat["Semana"],
-                        y=df_evol_csat["CSAT"],
-                        marker=dict(color="#0284c7", cornerradius=8),
-                        text=df_evol_csat["CSAT"].apply(lambda v: f"{v}%"),
-                        textposition="inside",
-                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+                        cliponaxis=False,
+                        marker=dict(
+                            color="#0284c7",
+                            cornerradius=5
+                        ),
+                        textfont=dict(color="#f8fafc", size=11, family="Segoe UI, sans-serif")
                     ))
-                    fig_bar_csat.update_layout(
-                        hovermode=False,
+
+                    fig_bar_dias_ext.update_layout(
+                        title=dict(
+                            text="<b>Q. de chats ingresados por Día</b>",
+                            font=dict(color="#f8fafc", size=13),
+                            x=0.02, y=0.96
+                        ),
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1"),
-                        xaxis=dict(gridcolor="#1e293b", title=None),
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                        margin=dict(t=30, b=20, l=20, r=20),
-                        height=360
+                        font=dict(color="#94a3b8", size=11),
+                        xaxis=dict(
+                            showgrid=False,
+                            showticklabels=False,
+                            zeroline=False
+                        ),
+                        yaxis=dict(
+                            autorange="reversed",
+                            tickfont=dict(color="#cbd5e1", size=11),
+                            showgrid=False
+                        ),
+                        margin=dict(t=35, b=10, l=10, r=25),
+                        height=310
                     )
-                    st.plotly_chart(fig_bar_csat, use_container_width=True)
-    
-                    color_diff_csat = "#34d399" if diff_csat >= 0 else "#f43f5e"
+                    st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
+
                     st.markdown(f"""
-                    <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <b style="color: {color_diff_csat}; font-size: 1.1rem;">{diff_csat:+.2f}% CSAT</b>
-                        <span style="color: #cbd5e1; font-size: 0.85rem;">{semana_seleccionada_str.split(' ')[0]} {target_week} ({foco_csat}%) vs Semana {sem_prev_num} ({prev_csat}%)</span>
+                    <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                        <div>• <b>Volumen:</b> Ingresaron {tot_ext} chats en franjas nocturnas/fin de semana.</div>
+                        <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
                     </div>
                     """, unsafe_allow_html=True)
-    
-                with col_g_ratio:
-                    st.markdown("##### Evolución Semana a Semana (Promedio Contactos por Empresa)")
-                    fig_bar_ratio = go.Figure()
-                    fig_bar_ratio.add_trace(go.Bar(
-                        x=df_evol_csat["Semana"],
-                        y=df_evol_csat["Ratio_Empresa"],
-                        marker=dict(color="#0369a1", cornerradius=8),
-                        text=df_evol_csat["Ratio_Empresa"].apply(lambda v: f"{v:.2f}"),
-                        textposition="inside",
-                        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                    ))
-                    fig_bar_ratio.update_layout(
-                        hovermode=False,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#cbd5e1"),
-                        xaxis=dict(gridcolor="#1e293b", title=None),
-                        yaxis=dict( showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                        margin=dict(t=30, b=20, l=20, r=20),
-                        height=360
+                else:
+                    st.info("Sin registros diarios de ingreso en horario extendido.")
+
+            # =========================================================================
+            # EXPORTACIÓN NATIVA A POWERPOINT
+            # =========================================================================
+            try:
+                from wbr_exporter import exportar_wbr_con_plantilla
+                
+                paquete_datos_wbr = {
+                    "semana_label": semana_seleccionada_str,
+                    "target_week": target_week,
+                    "sem_prev_num": sem_prev_num,
+                    # Slide 1
+                    "tot_5w_rec": tot_5w_recibidos,
+                    "tot_5w_cer": tot_5w_cerrados,
+                    "pct_5w_cer": pct_5w_cerrados,
+                    "df_5w": df_res_5w,
+                    # Slide 2
+                    "tot_sem_rec": tot_sem_rec,
+                    "tot_sem_cer": tot_sem_cer,
+                    "pct_sem_cer": pct_sem_cer,
+                    "diff_rec_pct": diff_rec_pct,
+                    "diff_cer_pct": diff_cer_pct,
+                    "tot_prev_rec": tot_prev_rec,
+                    "tot_prev_cer": tot_prev_cer,
+                    "sin_resp_count": sin_resp_count,
+                    "prom_por_agente": prom_por_agente,
+                    "cuentas_unicas": cuentas_unicas,
+                    "empresas_unicas": empresas_unicas,
+                    "cnt_cerrados_ia": cnt_cerrados_ia,
+                    "pct_ia": pct_ia,
+                    "df_dias": df_dias_agg,
+                    "df_agentes": df_ag_pie,
+                    # Slide 3
+                    "foco_gest": foco_gest,
+                    "foco_1ra": foco_1ra,
+                    "prev_gest": prev_gest,
+                    "prev_1ra": prev_1ra,
+                    "wow_gest_pct": wow_gest_pct,
+                    "wow_1ra_pct": wow_1ra_pct,
+                    "foco_sla_gest": foco_sla_gest,
+                    "foco_sla_1ra": foco_sla_1ra,
+                    # Slide 4
+                    "tot_sin_calificar": tot_sin_calificar,
+                    "pct_sin_calificar": pct_sin_calificar,
+                    "tot_evaluados": tot_evaluados,
+                    "pct_calificados": pct_calificados,
+                    "cnt_5": cnt_5, "pct_5": f_pct(cnt_5, tot_evaluados),
+                    "cnt_4": cnt_4, "pct_4": f_pct(cnt_4, tot_evaluados),
+                    "cnt_3": cnt_3, "pct_3": f_pct(cnt_3, tot_evaluados),
+                    "cnt_2": cnt_2, "pct_2": f_pct(cnt_2, tot_evaluados),
+                    "cnt_1": cnt_1, "pct_1": f_pct(cnt_1, tot_evaluados),
+                    # Slide 5
+                    "foco_csat": foco_csat,
+                    "diff_csat_wow": diff_csat,
+                    "foco_ratio": foco_ratio,
+                    # Slide 5 (L1)
+                    "tot_negativas": tot_negativas,
+                    "tot_l1_neg": tot_l1_neg,
+                    "pct_l1_total": pct_l1_del_total,
+                    "df_l1_agentes": pivot_l1 if ('pivot_l1' in locals() and not pivot_l1.empty) else None,
+                    "df_l1_motivos": df_l1_motivos if ('df_l1_motivos' in locals() and not df_l1_motivos.empty) else None,
+
+                    # Slide 6 (L3)
+                    "tot_l3_neg": tot_l3_neg,
+                    "pct_l3_total": pct_l3_sobre_total_neg,
+                    "df_l3_agentes": pivot_l3 if ('pivot_l3' in locals() and not pivot_l3.empty) else None,
+                    "df_l3_neg": df_l3_neg if ('df_l3_neg' in locals() and not df_l3_neg.empty) else None,
+
+                    # Gráficos
+                    "df_tiempos": df_evol_tiempos,
+                    "df_evol_csat": df_evol_csat,
+                    "df_5w": df_res_5w,
+                    "df_dias": df_dias_agg,
+                    "df_agentes": df_ag_pie,
+                
+                    # Slide 8
+                    "tot_ext": tot_ext,
+                    "tot_domingo": tot_domingo,
+                    "pct_ext_cerrados": pct_ext_cerrados,
+                    "tot_ext_cerrados": tot_ext_cerrados,
+                    "df_dias_ext": df_dias_ext_cnt if not df_ext_ingresados.empty else None,
+                    "df_agentes_ext": df_ext_ag if not df_ext_ag.empty else None,
+                }
+                
+                pptx_io = exportar_wbr_con_plantilla(paquete_datos_wbr)
+
+                with contenedor_descarga.container():
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    st.download_button(
+                        label="📥 Descargar Informe WBR (.pptx)",
+                        data=pptx_io.getvalue(),
+                        file_name=f"WBR_{semana_seleccionada_str.replace(' ', '_').replace('(', '').replace(')', '')}.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key="btn_descarga_wbr_top"
                     )
-                    st.plotly_chart(fig_bar_ratio, use_container_width=True)
-    
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
-                        <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Empresa</div>
-                        <div class="metric-card-value" style="color: #38bdf8; font-size: 1.9rem; margin: 2px 0;">{foco_ratio:.2f}</div>
-                        <div style="font-size: 0.8rem; color: #34d399; font-weight: 600;">{pct_sem_cer}% Conversaciones Cerradas</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-    
-                st.markdown("---")
-    
-                # =========================================================================
-                # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
-                # =========================================================================
-                st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
-
-                # 1. Universo de chats INGRESADOS en la semana en horario extendido
-                df_ext_ingresados = df_target[df_target["horario_evaluado"] == "extendido"].copy()
-                tot_ext = len(df_ext_ingresados)
-
-                dias_num = df_ext_ingresados["created_at_dt"].dt.dayofweek
-                tot_domingo = int((dias_num == 6).sum())
-                derivados_l3_ext = int((df_ext_ingresados["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
-
-                # 2. Universo de chats CERRADOS en la semana en horario extendido
-                df_ext_cerrados_semana = df_wbr_base[
-                    (df_wbr_base["es_cerrado"] == True) &
-                    (df_wbr_base["horario_evaluado"] == "extendido") &
-                    (df_wbr_base["close_iso_year"] == target_year) &
-                    (df_wbr_base["close_iso_week"] == target_week)
-                ].copy()
-
-                tot_ext_cerrados = len(df_ext_cerrados_semana)
-                pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
-
-                agentes_excluir_pie = [
-                    "monica", "mónica", "monica (bot)", 
-                    "sin asignar", "none", "nan", ""
-                ]
-
-                # Clasificación de cierres por IA vs Humanos
-                df_ext_cerrados_semana["agente_nom"] = df_ext_cerrados_semana["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
-                cerrados_ia_ext = int(df_ext_cerrados_semana["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
-                cerrados_hum_ext = tot_ext_cerrados - cerrados_ia_ext
-
-                col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
-
-                # -------------------------------------------------------------
-                # COLUMNA IZQUIERDA: GRÁFICO DE DONA (AGENTES QUE CERRARON CHATS)
-                # -------------------------------------------------------------
-                with col_ext_pie:
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS CERRADOS EN HORARIO EXTENDIDO</div>
-                        <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext_cerrados}</div>
-                        <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{cerrados_hum_ext}</b> por humanos | <b>{cerrados_ia_ext}</b> por Mónica</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    # Filtrar agentes humanos que efectivamente cerraron tickets
-                    df_ext_ag = df_ext_cerrados_semana[
-                        ~df_ext_cerrados_semana["agente_nom"].str.lower().isin(agentes_excluir_pie)
-                    ]["agente_nom"].value_counts().reset_index()
-                    df_ext_ag.columns = ["Agente", "Cantidad"]
-
-                    if not df_ext_ag.empty:
-                        palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
-
-                        fig_pie_ext = go.Figure(data=[go.Pie(
-                            labels=df_ext_ag["Agente"],
-                            values=df_ext_ag["Cantidad"],
-                            hole=0.45,
-                            textinfo="label+value+percent",
-                            texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
-                            textposition="outside",
-                            insidetextorientation="horizontal",
-                            marker=dict(colors=palette_pie_wbr, line=dict(color="#0b1120", width=2)),
-                            showlegend=False
-                        )])
-                        
-                        fig_pie_ext.update_layout(
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
-                            margin=dict(t=25, b=25, l=40, r=40),
-                            height=310
-                        )
-                        st.plotly_chart(fig_pie_ext, use_container_width=True)
-
-                        st.markdown(f"""
-                        <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
-                            <span><b style="color: #38bdf8;">Obs:</b> De los {tot_ext_cerrados} cierres en horario extendido, {cerrados_hum_ext} fueron gestionados por soporte humano.</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.info("Sin cierres por agentes humanos en horario extendido para esta semana.")
-
-                # -------------------------------------------------------------
-                # COLUMNA DERECHA: BARRAS HORIZONTALES (CHATS QUE INGRESARON)
-                # -------------------------------------------------------------
-                with col_ext_dias:
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS INGRESADOS EN EXTENDIDO</div>
-                        <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
-                        <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b> chats</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    if not df_ext_ingresados.empty:
-                        mapa_dias_nom = {
-                            0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
-                            4: "viernes", 5: "sábado", 6: "domingo"
-                        }
-                        df_ext_ingresados["dia_nombre"] = df_ext_ingresados["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
-                        orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
-                        
-                        df_dias_ext_cnt = df_ext_ingresados["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
-                        df_dias_ext_cnt.columns = ["Día", "Cantidad"]
-                        df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
-
-                        fig_bar_dias_ext = go.Figure(go.Bar(
-                            x=df_dias_ext_cnt["Cantidad"],
-                            y=df_dias_ext_cnt["Día"],
-                            orientation="h",
-                            text=df_dias_ext_cnt["texto_barra"],
-                            textposition="outside",
-                            cliponaxis=False,
-                            marker=dict(
-                                color="#0284c7",
-                                cornerradius=5
-                            ),
-                            textfont=dict(color="#f8fafc", size=11, family="Segoe UI, sans-serif")
-                        ))
-
-                        fig_bar_dias_ext.update_layout(
-                            title=dict(
-                                text="<b>Q. de chats ingresados por Día</b>",
-                                font=dict(color="#f8fafc", size=13),
-                                x=0.02, y=0.96
-                            ),
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            font=dict(color="#94a3b8", size=11),
-                            xaxis=dict(
-                                showgrid=False,
-                                showticklabels=False,
-                                zeroline=False
-                            ),
-                            yaxis=dict(
-                                autorange="reversed",
-                                tickfont=dict(color="#cbd5e1", size=11),
-                                showgrid=False
-                            ),
-                            margin=dict(t=35, b=10, l=10, r=25),
-                            height=310
-                        )
-                        st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
-
-                        st.markdown(f"""
-                        <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                            <div>• <b>Volumen:</b> Ingresaron {tot_ext} chats en franjas nocturnas/fin de semana.</div>
-                            <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.info("Sin registros diarios de ingreso en horario extendido.")
-
-                # =========================================================================
-                # EXPORTACIÓN NATIVA A POWERPOINT
-                # =========================================================================
-                try:
-                    from wbr_exporter import exportar_wbr_con_plantilla
-                    
-                    paquete_datos_wbr = {
-                        "semana_label": semana_seleccionada_str,
-                        "target_week": target_week,
-                        "sem_prev_num": sem_prev_num,
-                        # Slide 1
-                        "tot_5w_rec": tot_5w_recibidos,
-                        "tot_5w_cer": tot_5w_cerrados,
-                        "pct_5w_cer": pct_5w_cerrados,
-                        "df_5w": df_res_5w,
-                        # Slide 2
-                        "tot_sem_rec": tot_sem_rec,
-                        "tot_sem_cer": tot_sem_cer,
-                        "pct_sem_cer": pct_sem_cer,
-                        "diff_rec_pct": diff_rec_pct,
-                        "diff_cer_pct": diff_cer_pct,
-                        "tot_prev_rec": tot_prev_rec,
-                        "tot_prev_cer": tot_prev_cer,
-                        "sin_resp_count": sin_resp_count,
-                        "prom_por_agente": prom_por_agente,
-                        "cuentas_unicas": cuentas_unicas,
-                        "empresas_unicas": empresas_unicas,
-                        "cnt_cerrados_ia": cnt_cerrados_ia,
-                        "pct_ia": pct_ia,
-                        "df_dias": df_dias_agg,
-                        "df_agentes": df_ag_pie,
-                        # Slide 3
-                        "foco_gest": foco_gest,
-                        "foco_1ra": foco_1ra,
-                        "prev_gest": prev_gest,
-                        "prev_1ra": prev_1ra,
-                        "wow_gest_pct": wow_gest_pct,
-                        "wow_1ra_pct": wow_1ra_pct,
-                        "foco_sla_gest": foco_sla_gest,
-                        "foco_sla_1ra": foco_sla_1ra,
-                        # Slide 4
-                        "tot_sin_calificar": tot_sin_calificar,
-                        "pct_sin_calificar": pct_sin_calificar,
-                        "tot_evaluados": tot_evaluados,
-                        "pct_calificados": pct_calificados,
-                        "cnt_5": cnt_5, "pct_5": f_pct(cnt_5, tot_evaluados),
-                        "cnt_4": cnt_4, "pct_4": f_pct(cnt_4, tot_evaluados),
-                        "cnt_3": cnt_3, "pct_3": f_pct(cnt_3, tot_evaluados),
-                        "cnt_2": cnt_2, "pct_2": f_pct(cnt_2, tot_evaluados),
-                        "cnt_1": cnt_1, "pct_1": f_pct(cnt_1, tot_evaluados),
-                        # Slide 5
-                        "foco_csat": foco_csat,
-                        "diff_csat_wow": diff_csat,
-                        "foco_ratio": foco_ratio,
-                        # Slide 5 (L1)
-                        "tot_negativas": tot_negativas,
-                        "tot_l1_neg": tot_l1_neg,
-                        "pct_l1_total": pct_l1_del_total,
-                        "df_l1_agentes": pivot_l1 if ('pivot_l1' in locals() and not pivot_l1.empty) else None,
-                        "df_l1_motivos": df_l1_motivos if ('df_l1_motivos' in locals() and not df_l1_motivos.empty) else None,
-
-                        # Slide 6 (L3)
-                        "tot_l3_neg": tot_l3_neg,
-                        "pct_l3_total": pct_l3_sobre_total_neg,
-                        "df_l3_agentes": pivot_l3 if ('pivot_l3' in locals() and not pivot_l3.empty) else None,
-                        "df_l3_neg": df_l3_neg if ('df_l3_neg' in locals() and not df_l3_neg.empty) else None,
-
-                        # Gráficos
-                        "df_tiempos": df_evol_tiempos,
-                        "df_evol_csat": df_evol_csat,
-                        "df_5w": df_res_5w,
-                        "df_dias": df_dias_agg,
-                        "df_agentes": df_ag_pie,
-                    
-                        # Slide 8
-                        "tot_ext": tot_ext,
-                        "tot_domingo": tot_domingo,
-                        "pct_ext_cerrados": pct_ext_cerrados,
-                        "tot_ext_cerrados": tot_ext_cerrados,
-                        "df_dias_ext": df_dias_ext_cnt if not df_ext_ingresados.empty else None,
-                        "df_agentes_ext": df_ext_ag if not df_ext_ag.empty else None,
-                    }
-                    
-                    pptx_io = exportar_wbr_con_plantilla(paquete_datos_wbr)
-    
-                    with contenedor_descarga.container():
-                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                        st.download_button(
-                            label="📥 Descargar Informe WBR (.pptx)",
-                            data=pptx_io.getvalue(),
-                            file_name=f"WBR_{semana_seleccionada_str.replace(' ', '_').replace('(', '').replace(')', '')}.pptx",
-                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                            key="btn_descarga_wbr_top"
-                        )
-                except Exception as e_pptx:
-                    with contenedor_descarga.container():
-                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                        st.caption(f"⚠️ Error generando PPTX: {e_pptx}")
+            except Exception as e_pptx:
+                with contenedor_descarga.container():
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    st.caption(f"⚠️ Error generando PPTX: {e_pptx}")
         else:
             st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
-        
+
+
 # Y en la asignación de la pestaña solo llamas a la función:
 if tab_wbr is not None:
     with tab_wbr:
         renderizar_informe_wbr(df_all)
-
 if tab_admin is not None:
     with tab_admin:
         st.markdown("### Panel de Administración y Configuración")
