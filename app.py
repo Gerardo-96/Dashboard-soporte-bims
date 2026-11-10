@@ -157,7 +157,7 @@ def obtener_permisos_usuario(identificador_usuario):
     return {"acceso_wbr": False, "acceso_admin": False}
 
 # ==========================================
-# PANTALLA DE LOGIN UNIFICADA Y COMPACTA
+# PANTALLA DE LOGIN UNIFICADA Y CENTRADA (FIJA)
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
@@ -175,7 +175,6 @@ if not st.session_state["user_authenticated"]:
             display: none !important;
         }
 
-        /* Ocultar elementos superiores de desarrollo */
         .stAppDeployButton, 
         header[data-testid="stHeader"] [data-testid="stToolbarActions"],
         #MainMenu, 
@@ -184,20 +183,27 @@ if not st.session_state["user_authenticated"]:
             visibility: hidden !important;
         }
 
-        /* Contenedor estricto para centrar la tarjeta */
+        /* Ajuste de altura superior para centrado equilibrado */
+        div[data-testid="stAppViewBlockContainer"] {
+            padding-top: 3.5rem !important;
+            padding-bottom: 2rem !important;
+        }
+
+        /* Tarjeta de login fijada al 100% de su columna contenedora */
         div[data-testid="stForm"] {
+            width: 100% !important;
             max-width: 440px !important;
-            margin: 12vh auto 0 auto !important;
+            margin: 0 auto !important;
             background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
             border: 1px solid #334155 !important;
             border-radius: 16px !important;
-            padding: 28px 30px 32px 30px !important;
+            padding: 26px 28px 30px 28px !important;
             box-shadow: 0 20px 30px -8px rgba(0, 0, 0, 0.6) !important;
         }
 
         .login-logo-circle {
-            width: 56px;
-            height: 56px;
+            width: 54px;
+            height: 54px;
             margin: 0 auto 12px auto;
             border-radius: 50%;
             background: rgba(56, 189, 248, 0.12);
@@ -205,12 +211,12 @@ if not st.session_state["user_authenticated"]:
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.7rem;
+            font-size: 1.65rem;
         }
 
         .login-title-txt {
             color: #f8fafc;
-            font-size: 1.4rem;
+            font-size: 1.35rem;
             font-weight: 700;
             text-align: center;
             letter-spacing: -0.3px;
@@ -219,12 +225,11 @@ if not st.session_state["user_authenticated"]:
 
         .login-sub-txt {
             color: #94a3b8;
-            font-size: 0.85rem;
+            font-size: 0.84rem;
             text-align: center;
-            margin-bottom: 22px;
+            margin-bottom: 20px;
         }
 
-        /* Inputs limpios */
         div[data-testid="stTextInput"] input {
             background-color: #0b1120 !important;
             color: #f8fafc !important;
@@ -242,7 +247,6 @@ if not st.session_state["user_authenticated"]:
             display: none !important;
         }
 
-        /* Botón de acceso con color azul vivo */
         .stButton>button { 
             background: #0284c7 !important; 
             color: white !important; 
@@ -250,10 +254,11 @@ if not st.session_state["user_authenticated"]:
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 12px !important;
+            margin-top: 10px !important;
             box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35) !important;
             transition: all 0.2s ease !important;
         }
+
         .stButton>button:hover {
             background: #0369a1 !important;
             transform: translateY(-1px);
@@ -261,26 +266,33 @@ if not st.session_state["user_authenticated"]:
     </style>
     """, unsafe_allow_html=True)
 
-    with st.form("form_login_global", clear_on_submit=False):
-        # Cabecera integrada dentro del mismo recuadro
-        st.markdown("""
-        <div class="login-logo-circle">📈</div>
-        <div class="login-title-txt">Dashboard Soporte BIMS</div>
-        <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
-        """, unsafe_allow_html=True)
+    # El centrado físico en pantalla lo garantizan las columnas Streamlit
+    col_izq, col_centro, col_der = st.columns([1, 1.15, 1])
 
-        input_user_email = st.text_input("Correo Electrónico", placeholder="usuario@bims.com")
-        input_user_pass = st.text_input("Contraseña", type="password", placeholder="••••••••")
-        
-        btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
+    with col_centro:
+        with st.form("form_login_global", clear_on_submit=False):
+            st.markdown("""
+            <div class="login-logo-circle">📈</div>
+            <div class="login-title-txt">Dashboard Soporte BIMS</div>
+            <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
+            """, unsafe_allow_html=True)
+
+            input_user_email = st.text_input("Correo Electrónico", placeholder="usuario@bims.com")
+            input_user_pass = st.text_input("Contraseña", type="password", placeholder="••••••••")
+            
+            btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
+
+        # Contenedor de estado externo al form para no romper el layout durante la validación
+        login_status = st.empty()
 
         if btn_login_user:
             if not input_user_email.strip() or not input_user_pass.strip():
-                st.warning("Completa tu correo y contraseña.")
+                login_status.warning("Completa tu correo y contraseña.")
             else:
-                with st.spinner("Verificando credenciales..."):
-                    valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
-                    
+                with login_status:
+                    with st.spinner("Verificando credenciales..."):
+                        valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
+                        
                 if valido:
                     email_user = datos_user.get("email")
                     st.session_state["user_authenticated"] = True
@@ -296,7 +308,7 @@ if not st.session_state["user_authenticated"]:
 
                     st.rerun()
                 else:
-                    st.error("Credenciales incorrectas o usuario inactivo.")
+                    login_status.error("Credenciales incorrectas o usuario inactivo.")
 
     st.stop()
     
@@ -1551,58 +1563,81 @@ st.sidebar.markdown("---")
 if st.sidebar.button("Exportar Reporte a Excel", use_container_width=True):
     modal_exportar_excel()
 
-if st.sidebar.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
-    # Overlay visual con animación suave
-    st.markdown("""
-    <style>
-        .logout-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(11, 17, 32, 0.85);
-            backdrop-filter: blur(6px);
-            z-index: 999999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .logout-box {
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-            border: 1px solid #334155;
-            border-radius: 14px;
-            padding: 24px 32px;
-            text-align: center;
-            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.5);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-        }
-        .logout-spinner {
-            width: 28px;
-            height: 28px;
-            border: 3px solid rgba(56, 189, 248, 0.2);
-            border-top: 3px solid #38bdf8;
-            border-radius: 50%;
-            animation: spinRing 0.7s linear infinite;
-        }
-        @keyframes spinRing {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-    <div class="logout-overlay">
-        <div class="logout-box">
-            <div class="logout-spinner"></div>
-            <div style="color:#f8fafc; font-weight:700; font-size:1rem;">Cerrando sesión...</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+# -------------------------------------------------------------------------
+# BOTÓN DE LOGOUT CON MODAL INSTANTÁNEO EN EL FRONTEND
+# -------------------------------------------------------------------------
+st.sidebar.markdown("""
+<style>
+    /* Overlay oculto por defecto */
+    #logout-instant-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(11, 17, 32, 0.88);
+        backdrop-filter: blur(8px);
+        z-index: 99999999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .logout-card-pop {
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+        border: 1px solid #334155;
+        border-radius: 16px;
+        padding: 24px 34px;
+        text-align: center;
+        box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.6);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+    }
+    .logout-ring-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(56, 189, 248, 0.2);
+        border-top: 3px solid #38bdf8;
+        border-radius: 50%;
+        animation: spinLogout 0.75s linear infinite;
+    }
+    @keyframes spinLogout {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
 
-    # Limpieza estándar y directa (la que no falla)
+<!-- Modal inyectado en el DOM listo para mostrarse -->
+<div id="logout-instant-modal">
+    <div class="logout-card-pop">
+        <div class="logout-ring-spinner"></div>
+        <div style="color:#f8fafc; font-weight:700; font-size:1.05rem;">Cerrando sesión de forma segura...</div>
+        <div style="color:#94a3b8; font-size:0.82rem;">Limpiando credenciales y caché</div>
+    </div>
+</div>
+
+<script>
+    // Escuchar el clic sobre el botón de cerrar sesión en la barra lateral
+    setTimeout(() => {
+        const btnLogout = window.parent.document.querySelector('button[key="btn_logout_sidebar"]') 
+                       || window.parent.document.querySelector('button:has(div:contains("Cerrar Sesión"))');
+        if (btnLogout) {
+            btnLogout.addEventListener('click', () => {
+                const modal = window.parent.document.getElementById('logout-instant-modal') 
+                           || document.getElementById('logout-instant-modal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                }
+            });
+        }
+    }, 400);
+</script>
+""", unsafe_allow_html=True)
+
+if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
+    # Limpieza inmediata de credenciales
     st.query_params.clear()
     st.components.v1.html("""
     <script>
@@ -1615,9 +1650,7 @@ if st.sidebar.button("Cerrar Sesión", use_container_width=True, key="btn_logout
     if "admin_authenticated" in st.session_state:
         st.session_state["admin_authenticated"] = False
         
-    time_lib.sleep(0.4)
     st.rerun()
-
 # ==========================================
 # INDICADOR DE ESTADO EN VIVO (CABECERA)
 # ==========================================
