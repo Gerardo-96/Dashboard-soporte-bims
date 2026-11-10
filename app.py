@@ -4389,22 +4389,18 @@ def renderizar_informe_wbr(df_base_in):
         else:
             st.info("Sin registros diarios de ingreso en horario extendido.")
 
-    # =========================================================================
-    # EXPORTACIÓN NATIVA A POWERPOINT
-    # =========================================================================
+    # CÓDIGO OPTIMIZADO: Genera el archivo solo si el usuario pulsa descargar
     try:
         from wbr_exporter import exportar_wbr_con_plantilla
-        
+    
         paquete_datos_wbr = {
             "semana_label": semana_seleccionada_str,
             "target_week": target_week,
             "sem_prev_num": sem_prev_num,
-            # Slide 1
             "tot_5w_rec": tot_5w_recibidos,
             "tot_5w_cer": tot_5w_cerrados,
             "pct_5w_cer": pct_5w_cerrados,
             "df_5w": df_res_5w,
-            # Slide 2
             "tot_sem_rec": tot_sem_rec,
             "tot_sem_cer": tot_sem_cer,
             "pct_sem_cer": pct_sem_cer,
@@ -4420,7 +4416,6 @@ def renderizar_informe_wbr(df_base_in):
             "pct_ia": pct_ia,
             "df_dias": df_dias_agg,
             "df_agentes": df_ag_pie,
-            # Slide 3
             "foco_gest": foco_gest,
             "foco_1ra": foco_1ra,
             "prev_gest": prev_gest,
@@ -4429,7 +4424,6 @@ def renderizar_informe_wbr(df_base_in):
             "wow_1ra_pct": wow_1ra_pct,
             "foco_sla_gest": foco_sla_gest,
             "foco_sla_1ra": foco_sla_1ra,
-            # Slide 4
             "tot_sin_calificar": tot_sin_calificar,
             "pct_sin_calificar": pct_sin_calificar,
             "tot_evaluados": tot_evaluados,
@@ -4439,31 +4433,20 @@ def renderizar_informe_wbr(df_base_in):
             "cnt_3": cnt_3, "pct_3": f_pct(cnt_3, tot_evaluados),
             "cnt_2": cnt_2, "pct_2": f_pct(cnt_2, tot_evaluados),
             "cnt_1": cnt_1, "pct_1": f_pct(cnt_1, tot_evaluados),
-            # Slide 5
             "foco_csat": foco_csat,
             "diff_csat_wow": diff_csat,
             "foco_ratio": foco_ratio,
-            # Slide 5 (L1)
             "tot_negativas": tot_negativas,
             "tot_l1_neg": tot_l1_neg,
             "pct_l1_total": pct_l1_del_total,
             "df_l1_agentes": pivot_l1 if ('pivot_l1' in locals() and not pivot_l1.empty) else None,
             "df_l1_motivos": df_l1_motivos if ('df_l1_motivos' in locals() and not df_l1_motivos.empty) else None,
-
-            # Slide 6 (L3)
             "tot_l3_neg": tot_l3_neg,
             "pct_l3_total": pct_l3_sobre_total_neg,
             "df_l3_agentes": pivot_l3 if ('pivot_l3' in locals() and not pivot_l3.empty) else None,
             "df_l3_neg": df_l3_neg if ('df_l3_neg' in locals() and not df_l3_neg.empty) else None,
-
-            # Gráficos
             "df_tiempos": df_evol_tiempos,
             "df_evol_csat": df_evol_csat,
-            "df_5w": df_res_5w,
-            "df_dias": df_dias_agg,
-            "df_agentes": df_ag_pie,
-        
-            # Slide 8
             "tot_ext": tot_ext,
             "tot_domingo": tot_domingo,
             "pct_ext_cerrados": pct_ext_cerrados,
@@ -4471,22 +4454,24 @@ def renderizar_informe_wbr(df_base_in):
             "df_dias_ext": df_dias_ext_cnt if not df_ext_ingresados.empty else None,
             "df_agentes_ext": df_ext_ag if not df_ext_ag.empty else None,
         }
-        
-        pptx_io = exportar_wbr_con_plantilla(paquete_datos_wbr)
-
+    
+        # Función generadora diferida: solo se invoca cuando el usuario hace clic en Descargar
+        def obtener_pptx_en_demanda():
+            return exportar_wbr_con_plantilla(paquete_datos_wbr).getvalue()
+    
         with contenedor_descarga.container():
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
             st.download_button(
                 label="📥 Descargar Informe WBR (.pptx)",
-                data=pptx_io.getvalue(),
+                data=obtener_pptx_en_demanda,  # Se pasa la función sin paréntesis
                 file_name=f"WBR_{semana_seleccionada_str.replace(' ', '_').replace('(', '').replace(')', '')}.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                key="btn_descarga_wbr_top"
+                key=f"btn_descarga_wbr_{target_week}_{target_year}"
             )
     except Exception as e_pptx:
         with contenedor_descarga.container():
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            st.caption(f"⚠️ Error generando PPTX: {e_pptx}")
+            st.caption(f"⚠️ Error en descarga PPTX: {e_pptx}")
 
 
 # Llamada limpia en la pestaña
