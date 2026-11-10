@@ -157,78 +157,95 @@ def obtener_permisos_usuario(identificador_usuario):
     return {"acceso_wbr": False, "acceso_admin": False}
 
 # ==========================================
-# PANTALLA DE LOGIN CENTRADA Y ACOTADA
+# PANTALLA DE LOGIN COMPACTA Y CENTRADA (ZERO-STRETCH)
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
-        .stApp { background-color: #0f172a; color: #f8fafc; }
+        /* Fondo general oscuro */
+        .stApp { 
+            background-color: #0b1120 !important; 
+            color: #f8fafc; 
+        }
 
         header[data-testid="stHeader"] {
-            background-color: #0f172a !important;
+            background-color: #0b1120 !important;
         }
 
-        .block-container {
-            max-width: 520px !important;
-            padding-top: 5rem !important;
-            margin: 0 auto !important;
+        /* Ocultar sidebar completamente durante el login */
+        [data-testid="stSidebar"] {
+            display: none !important;
         }
 
-        .login-card-header {
-            background-color: #1e293b;
+        /* Forzar contenedor central compacto sin importar layout="wide" */
+        div[data-testid="stAppViewBlockContainer"] {
+            max-width: 460px !important;
+            margin: 8vh auto 0 auto !important;
+            padding: 1rem !important;
+        }
+
+        /* Tarjeta visual de Login */
+        .login-box-card {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
             border: 1px solid #334155;
             border-bottom: none;
             border-top-left-radius: 16px;
             border-top-right-radius: 16px;
             padding: 28px 24px 10px 24px;
             text-align: center;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
         }
 
-        .login-title {
-            color: #38bdf8;
-            font-size: 1.45rem;
+        .login-logo-circle {
+            width: 52px;
+            height: 52px;
+            margin: 0 auto 10px auto;
+            border-radius: 50%;
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+        }
+
+        .login-title-txt {
+            color: #f8fafc;
+            font-size: 1.35rem;
             font-weight: 700;
+            letter-spacing: -0.3px;
             margin-bottom: 4px;
         }
 
-        .login-subtitle {
+        .login-sub-txt {
             color: #94a3b8;
-            font-size: 0.85rem;
+            font-size: 0.84rem;
         }
 
+        /* Ancho estricto del formulario para que NUNCA se estire */
         div[data-testid="stForm"] {
-            background-color: #1e293b !important;
+            max-width: 460px !important;
+            margin: 0 auto !important;
+            background: #1e293b !important;
             border: 1px solid #334155 !important;
             border-top: none !important;
             border-bottom-left-radius: 16px !important;
             border-bottom-right-radius: 16px !important;
-            padding: 0 24px 28px 24px !important;
-            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4);
+            padding: 10px 24px 28px 24px !important;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4) !important;
         }
 
+        /* Inputs estilizados */
         div[data-testid="stTextInput"] {
             width: 100% !important;
         }
 
-        div[data-testid="stTextInput"] small, 
-        div[data-testid="stInputInstructions"], 
-        .st-emotion-cache-12w0q3e, 
-        [data-testid="stFormSubmitButton"] + div {
-            display: none !important;
-            visibility: hidden !important;
-        }
-
         div[data-testid="stTextInput"] input {
-            background-color: #0f172a !important;
+            background-color: #0b1120 !important;
             color: #f8fafc !important;
             border: 1px solid #334155 !important;
             border-radius: 8px !important;
             padding: 10px 12px !important;
-        }
-
-        input::-ms-reveal,
-        input::-ms-clear {
-            display: none !important;
         }
 
         div[data-testid="stTextInput"] input:focus {
@@ -236,54 +253,48 @@ if not st.session_state["user_authenticated"]:
             box-shadow: 0 0 0 1px #38bdf8 !important;
         }
 
+        /* Ocultar instrucciones nativas ("Press Enter to submit") */
+        div[data-testid="stInputInstructions"] {
+            display: none !important;
+        }
+
+        /* Botón de acceso */
         .stButton>button { 
-            background-color: #0284c7 !important; 
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; 
             color: white !important; 
-            font-weight: bold !important; 
+            font-weight: 700 !important; 
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 8px !important;
+            margin-top: 10px !important;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3) !important;
+            transition: all 0.2s ease !important;
         }
 
-        .loading-badge {
-            background-color: #0f172a;
-            border: 1px solid #0284c7;
-            border-radius: 8px;
-            padding: 10px;
-            color: #38bdf8;
-            font-size: 0.88rem;
-            font-weight: 600;
-            text-align: center;
-            margin-top: 10px;
+        .stButton>button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.45) !important;
         }
     </style>
 
-    <div class="login-card-header">
-        <div class="login-title">Dashboard Soporte BIMS</div>
-        <div class="login-subtitle">Ingresa tus credenciales autorizadas para acceder.</div>
+    <div class="login-box-card">
+        <div class="login-logo-circle">📈</div>
+        <div class="login-title-txt">Dashboard Soporte BIMS</div>
+        <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
     </div>
     """, unsafe_allow_html=True)
 
     with st.form("form_login_global", clear_on_submit=False):
-        input_user_email = st.text_input("Correo Electrónico")
-        input_user_pass = st.text_input("Contraseña", type="password")
+        input_user_email = st.text_input("Correo Electrónico", placeholder="usuario@bims.com")
+        input_user_pass = st.text_input("Contraseña", type="password", placeholder="••••••••")
         
-        status_box = st.empty()
         btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
 
         if btn_login_user:
             if not input_user_email.strip() or not input_user_pass.strip():
-                status_box.warning("Por favor ingresa tu correo y contraseña.")
+                st.warning("Completa tu correo y contraseña.")
             else:
-                with status_box.container():
-                    st.markdown("""
-                    <div class="loading-badge">
-                        ⏳ Verificando credenciales...
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    time_lib.sleep(0.5)
+                with st.spinner("Verificando credenciales..."):
                     valido, datos_user = verificar_credenciales_supabase(input_user_email, input_user_pass)
                     
                 if valido:
@@ -291,23 +302,20 @@ if not st.session_state["user_authenticated"]:
                     st.session_state["user_authenticated"] = True
                     st.session_state["user_email"] = email_user
                     st.session_state["user_name"] = datos_user.get("nombre")
-    
-                    # Guardar en URL y LocalStorage simultáneamente
+
                     st.query_params["session_token"] = email_user
                     st.components.v1.html(f"""
                     <script>
                         localStorage.setItem('bims_user_session', '{email_user}');
                     </script>
                     """, height=0)
-    
-                    status_box.success("Acceso concedido.")
-                    time_lib.sleep(0.3)
+
                     st.rerun()
                 else:
-                    status_box.error("Credenciales incorrectas o usuario no activo.")
+                    st.error("Credenciales incorrectas o usuario inactivo.")
 
     st.stop()
-
+    
 # ==========================================
 # FUNCIONES AUXILIARES DE TIEMPOS Y REGLAS DE NEGOCIO
 # ==========================================
@@ -1560,89 +1568,70 @@ if st.sidebar.button("Exportar Reporte a Excel", use_container_width=True):
     modal_exportar_excel()
 
 if st.sidebar.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
-    # 1. Overlay visual oscuro con animación de fade y spinner de despedida
+    # Overlay visual con animación suave
     st.markdown("""
     <style>
-        @keyframes fadeInOverlay {
-            from { opacity: 0; backdrop-filter: blur(0px); }
-            to { opacity: 1; backdrop-filter: blur(8px); }
-        }
-        @keyframes spinRing {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
         .logout-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: rgba(11, 17, 32, 0.88);
+            background: rgba(11, 17, 32, 0.85);
+            backdrop-filter: blur(6px);
             z-index: 999999;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            animation: fadeInOverlay 0.25s ease-out forwards;
         }
         .logout-box {
             background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
             border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 28px 36px;
+            border-radius: 14px;
+            padding: 24px 32px;
             text-align: center;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.5);
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
         .logout-spinner {
-            width: 32px;
-            height: 32px;
+            width: 28px;
+            height: 28px;
             border: 3px solid rgba(56, 189, 248, 0.2);
             border-top: 3px solid #38bdf8;
             border-radius: 50%;
-            animation: spinRing 0.75s linear infinite;
+            animation: spinRing 0.7s linear infinite;
         }
-        .logout-txt-principal {
-            color: #f8fafc;
-            font-size: 1.05rem;
-            font-weight: 700;
-            letter-spacing: -0.2px;
-        }
-        .logout-txt-sub {
-            color: #94a3b8;
-            font-size: 0.82rem;
+        @keyframes spinRing {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
     <div class="logout-overlay">
         <div class="logout-box">
             <div class="logout-spinner"></div>
-            <div class="logout-txt-principal">Cerrando sesión de forma segura...</div>
-            <div class="logout-txt-sub">Limpiando credenciales y caché</div>
+            <div style="color:#f8fafc; font-weight:700; font-size:1rem;">Cerrando sesión...</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. Limpieza de credenciales en LocalStorage y parámetros de URL
+    # Limpieza estándar y directa (la que no falla)
     st.query_params.clear()
-    st.html("""
+    st.components.v1.html("""
     <script>
-        sessionStorage.setItem('bims_just_logged_out', 'true');
         localStorage.removeItem('bims_user_session');
     </script>
-    """)
-
-    # 3. Breve pausa para completar la animación de salida
-    time_lib.sleep(0.7)
-
-    # 4. Reseteo de sesión y recarga limpia
+    """, height=0)
+    
     st.session_state["user_authenticated"] = False
     st.session_state["user_email"] = ""
     if "admin_authenticated" in st.session_state:
         st.session_state["admin_authenticated"] = False
-    
+        
+    time_lib.sleep(0.4)
     st.rerun()
 
 # ==========================================
