@@ -1731,7 +1731,7 @@ st.iframe("""
 </script>
 """, width=1, height=1)
 
-if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
+if st.sidebar.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
     # El listener muestra el overlay de inmediato. Esta limpieza adicional
     # evita que una sesión antigua de localStorage vuelva a autenticarse.
     st.query_params.clear()
@@ -3507,7 +3507,7 @@ if tab_wbr is not None:
                             <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
                         </div>
                         <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
-                            🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA (Mónica).
+                            🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -3961,7 +3961,7 @@ if tab_wbr is not None:
                 # =========================================================================
                 # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
                 # =========================================================================
-                st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 3 (L3 / Jira)")
+                st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Fricción en L3")
 
                 col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
 
@@ -4023,7 +4023,7 @@ if tab_wbr is not None:
                         st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 3 esta semana.")
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("##### Detalle de Casos L3 & Tickets Jira Relacionados")
+                st.markdown("##### Detalle de Casos L3 & Tickets Relacionados")
 
                 if not df_l3_neg.empty:
                     df_l3_neg["ticket_limpio"] = (
@@ -4103,7 +4103,7 @@ if tab_wbr is not None:
                             <tr style='background-color:#0284c7; color:white;'>
                                 <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:18%;'>Calificación</th>
                                 <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
-                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Ticket Jira</th>
+                                <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Ticket</th>
                                 <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:11%;'>Prioridad</th>
                                 <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:12%;'>Estado</th>
                                 <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Tenant</th>
@@ -4278,7 +4278,7 @@ if tab_wbr is not None:
                 with col_ext_pie:
                     st.markdown(f"""
                     <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS CERRADOS EN EXTENDIDO</div>
+                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS CERRADOS EN HORARIO EXTENDIDO</div>
                         <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext_cerrados}</div>
                         <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{cerrados_hum_ext}</b> por humanos | <b>{cerrados_ia_ext}</b> por Mónica</div>
                     </div>
@@ -4498,99 +4498,71 @@ if tab_wbr is not None:
 if tab_admin is not None:
     with tab_admin:
         st.markdown("### Panel de Administración y Configuración")
-    
-        if not st.session_state["admin_authenticated"]:
-            col_pass1, col_pass2 = st.columns([2, 1])
-            with col_pass1:
-                with st.form("form_login_admin"):
-                    input_pass = st.text_input("Contraseña de Administrador", type="password")
-                    btn_login = st.form_submit_button("Acceder al Panel", use_container_width=True)
-                    
-                    if btn_login:
-                        if input_pass == ADMIN_PASSWORD:
-                            st.session_state["admin_authenticated"] = True
-                            st.success("Acceso concedido.")
-                            st.rerun()
-                        else:
-                            st.error("Contraseña incorrecta.")
-        else:
-            st.success("Sesión de administración activa.")
-            if st.button("Cerrar Sesión Admin"):
-                st.session_state["admin_authenticated"] = False
-                st.rerun()
-    
-            st.markdown("<br>", unsafe_allow_html=True)
-    
-            # ==========================================
-            # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
-            # ==========================================
-            USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital"
-            es_super_usuario = (
-                st.session_state.get("user_email", "").strip().lower() == USUARIO_ADMIN_EMAIL.lower()
-                or st.session_state.get("admin_authenticated", False)
-            )
-    
-            if es_super_usuario:
-                with st.container():
-                    st.markdown("""
-                    <div class="admin-card">
-                        <h4 style="margin-top:0; color:#38bdf8;">🤖 Estado y Control de Evolución API (WhatsApp Bot)</h4>
-                        <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                            Monitoreo del servicio de notificaciones y reinicio forzado en Render.
-                        </p>
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ==========================================
+        # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
+        # ==========================================
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">🤖 Estado y Control de Evolución API (WhatsApp Bot)</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Monitoreo del servicio de notificaciones y reinicio forzado en Render.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col_status1, col_status2 = st.columns([2, 1])
+
+            # Consulta de salud del servicio en FastAPI
+            estado_bot = "CRITICAL"
+            wa_state = "disconnected"
+            try:
+                res_health = requests.get(f"{NOTIFICADOR_API_URL.rstrip('/')}/health-status", timeout=4)
+                if res_health.status_code == 200:
+                    data_h = res_health.json()
+                    estado_bot = data_h.get("status_general", "CRITICAL")
+                    wa_state = data_h.get("whatsapp_state", "disconnected")
+            except Exception as e:
+                estado_bot = "CRITICAL"
+                wa_state = "offline"
+
+            with col_status1:
+                if estado_bot == "OK":
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #10b981;">
+                        <div class="metric-card-title">Estado del Bot WhatsApp</div>
+                        <div class="metric-card-value" style="color: #34d399;">🟢 Operativo ({wa_state})</div>
+                        <div class="metric-card-sub">Sesión activa y conectada</div>
                     </div>
                     """, unsafe_allow_html=True)
-    
-                    col_status1, col_status2 = st.columns([2, 1])
-    
-                    # Consulta de salud del servicio en FastAPI
-                    estado_bot = "CRITICAL"
-                    wa_state = "disconnected"
-                    try:
-                        res_health = requests.get(f"{NOTIFICADOR_API_URL.rstrip('/')}/health-status", timeout=4)
-                        if res_health.status_code == 200:
-                            data_h = res_health.json()
-                            estado_bot = data_h.get("status_general", "CRITICAL")
-                            wa_state = data_h.get("whatsapp_state", "disconnected")
-                    except Exception as e:
-                        estado_bot = "CRITICAL"
-                        wa_state = "offline"
-    
-                    with col_status1:
-                        if estado_bot == "OK":
-                            st.markdown(f"""
-                            <div class="metric-card" style="border-left: 4px solid #10b981;">
-                                <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                                <div class="metric-card-value" style="color: #34d399;">🟢 Operativo ({wa_state})</div>
-                                <div class="metric-card-sub">Sesión activa y conectada</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                            <div class="metric-card" style="border-left: 4px solid #ef4444;">
-                                <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                                <div class="metric-card-value" style="color: #f87171;">🔴 Desconectado ({wa_state})</div>
-                                <div class="metric-card-sub">El Auto-Healing intentará reconectar automáticamente</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-    
-                    with col_status2:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
-                            with st.spinner("Enviando orden de reinicio a Render..."):
-                                try:
-                                    headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
-                                    res_req = requests.post(f"{NOTIFICADOR_API_URL.rstrip('/')}/reiniciar-servicio", headers=headers, timeout=10)
-                                    res_json = res_req.json()
-    
-                                    if res_json.get("status") == "success":
-                                        st.success("✅ Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
-                                    else:
-                                        st.error(f"❌ Error: {res_json.get('message')}")
-                                except Exception as ex_r:
-                                    st.error(f"❌ Error al comunicar con la API: {ex_r}")
-    
+                else:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #ef4444;">
+                        <div class="metric-card-title">Estado del Bot WhatsApp</div>
+                        <div class="metric-card-value" style="color: #f87171;">🔴 Desconectado ({wa_state})</div>
+                        <div class="metric-card-sub">El Auto-Healing intentará reconectar automáticamente</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            with col_status2:
                 st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
+                    with st.spinner("Enviando orden de reinicio a Render..."):
+                        try:
+                            headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
+                            res_req = requests.post(f"{NOTIFICADOR_API_URL.rstrip('/')}/reiniciar-servicio", headers=headers, timeout=10)
+                            res_json = res_req.json()
+
+                            if res_json.get("status") == "success":
+                                st.success("✅ Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
+                            else:
+                                st.error(f"❌ Error: {res_json.get('message')}")
+                        except Exception as ex_r:
+                            st.error(f"❌ Error al comunicar con la API: {ex_r}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
     
             with st.container():
                 st.markdown("""
