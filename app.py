@@ -157,12 +157,11 @@ def obtener_permisos_usuario(identificador_usuario):
     return {"acceso_wbr": False, "acceso_admin": False}
 
 # ==========================================
-# PANTALLA DE LOGIN COMPACTA Y CENTRADA (ZERO-STRETCH)
+# PANTALLA DE LOGIN UNIFICADA Y COMPACTA
 # ==========================================
 if not st.session_state["user_authenticated"]:
     st.markdown("""
     <style>
-        /* Fondo general oscuro */
         .stApp { 
             background-color: #0b1120 !important; 
             color: #f8fafc; 
@@ -172,80 +171,66 @@ if not st.session_state["user_authenticated"]:
             background-color: #0b1120 !important;
         }
 
-        /* Ocultar sidebar completamente durante el login */
         [data-testid="stSidebar"] {
             display: none !important;
         }
 
-        /* Forzar contenedor central compacto sin importar layout="wide" */
-        div[data-testid="stAppViewBlockContainer"] {
-            max-width: 460px !important;
-            margin: 8vh auto 0 auto !important;
-            padding: 1rem !important;
+        /* Ocultar elementos superiores de desarrollo */
+        .stAppDeployButton, 
+        header[data-testid="stHeader"] [data-testid="stToolbarActions"],
+        #MainMenu, 
+        footer {
+            display: none !important;
+            visibility: hidden !important;
         }
 
-        /* Tarjeta visual de Login */
-        .login-box-card {
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-            border: 1px solid #334155;
-            border-bottom: none;
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-            padding: 28px 24px 10px 24px;
-            text-align: center;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        /* Contenedor estricto para centrar la tarjeta */
+        div[data-testid="stForm"] {
+            max-width: 440px !important;
+            margin: 12vh auto 0 auto !important;
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+            border: 1px solid #334155 !important;
+            border-radius: 16px !important;
+            padding: 28px 30px 32px 30px !important;
+            box-shadow: 0 20px 30px -8px rgba(0, 0, 0, 0.6) !important;
         }
 
         .login-logo-circle {
-            width: 52px;
-            height: 52px;
-            margin: 0 auto 10px auto;
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 12px auto;
             border-radius: 50%;
             background: rgba(56, 189, 248, 0.12);
             border: 1px solid rgba(56, 189, 248, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.6rem;
+            font-size: 1.7rem;
         }
 
         .login-title-txt {
             color: #f8fafc;
-            font-size: 1.35rem;
+            font-size: 1.4rem;
             font-weight: 700;
+            text-align: center;
             letter-spacing: -0.3px;
             margin-bottom: 4px;
         }
 
         .login-sub-txt {
             color: #94a3b8;
-            font-size: 0.84rem;
+            font-size: 0.85rem;
+            text-align: center;
+            margin-bottom: 22px;
         }
 
-        /* Ancho estricto del formulario para que NUNCA se estire */
-        div[data-testid="stForm"] {
-            max-width: 460px !important;
-            margin: 0 auto !important;
-            background: #1e293b !important;
-            border: 1px solid #334155 !important;
-            border-top: none !important;
-            border-bottom-left-radius: 16px !important;
-            border-bottom-right-radius: 16px !important;
-            padding: 10px 24px 28px 24px !important;
-            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.4) !important;
-        }
-
-        /* Inputs estilizados */
-        div[data-testid="stTextInput"] {
-            width: 100% !important;
-        }
-
+        /* Inputs limpios */
         div[data-testid="stTextInput"] input {
             background-color: #0b1120 !important;
             color: #f8fafc !important;
             border: 1px solid #334155 !important;
             border-radius: 8px !important;
-            padding: 10px 12px !important;
+            padding: 10px 14px !important;
         }
 
         div[data-testid="stTextInput"] input:focus {
@@ -253,38 +238,37 @@ if not st.session_state["user_authenticated"]:
             box-shadow: 0 0 0 1px #38bdf8 !important;
         }
 
-        /* Ocultar instrucciones nativas ("Press Enter to submit") */
         div[data-testid="stInputInstructions"] {
             display: none !important;
         }
 
-        /* Botón de acceso */
+        /* Botón de acceso con color azul vivo */
         .stButton>button { 
-            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; 
+            background: #0284c7 !important; 
             color: white !important; 
             font-weight: 700 !important; 
             border-radius: 8px !important; 
             border: none !important;
             height: 44px !important;
-            margin-top: 10px !important;
-            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3) !important;
+            margin-top: 12px !important;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35) !important;
             transition: all 0.2s ease !important;
         }
-
         .stButton>button:hover {
+            background: #0369a1 !important;
             transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.45) !important;
         }
     </style>
-
-    <div class="login-box-card">
-        <div class="login-logo-circle">📈</div>
-        <div class="login-title-txt">Dashboard Soporte BIMS</div>
-        <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
-    </div>
     """, unsafe_allow_html=True)
 
     with st.form("form_login_global", clear_on_submit=False):
+        # Cabecera integrada dentro del mismo recuadro
+        st.markdown("""
+        <div class="login-logo-circle">📈</div>
+        <div class="login-title-txt">Dashboard Soporte BIMS</div>
+        <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
+        """, unsafe_allow_html=True)
+
         input_user_email = st.text_input("Correo Electrónico", placeholder="usuario@bims.com")
         input_user_pass = st.text_input("Contraseña", type="password", placeholder="••••••••")
         
