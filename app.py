@@ -4563,434 +4563,433 @@ if tab_admin is not None:
                             st.error(f"❌ Error al comunicar con la API: {ex_r}")
 
         st.markdown("<br>", unsafe_allow_html=True)
-    
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">Criterios de Cálculo de Tiempos y SLA</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
-                        <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
-                        <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
-                    </p>
+
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">Criterios de Cálculo de Tiempos y SLA</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
+                    <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
+                    <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas (Segundo Plano)</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    El proceso se ejecuta en un <b>hilo paralelo libre de desconexión</b>.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            try:
+                res_count = supabase.table("conversaciones").select("id", count="exact").execute()
+                total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
+            except Exception:
+                total_registros_db = 0
+
+            c_meta1, c_meta2 = st.columns([1, 2])
+            with c_meta1:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #10b981;">
+                    <div class="metric-card-title">Total Registros en Supabase</div>
+                    <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
+                    <div class="metric-card-sub">Conversaciones guardadas</div>
                 </div>
                 """, unsafe_allow_html=True)
-    
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas (Segundo Plano)</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                        El proceso se ejecuta en un <b>hilo paralelo libre de desconexión</b>.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                try:
-                    res_count = supabase.table("conversaciones").select("id", count="exact").execute()
-                    total_registros_db = res_count.count if res_count.count is not None else len(res_count.data)
-                except Exception:
-                    total_registros_db = 0
-    
-                c_meta1, c_meta2 = st.columns([1, 2])
-                with c_meta1:
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #10b981;">
-                        <div class="metric-card-title">Total Registros en Supabase</div>
-                        <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
-                        <div class="metric-card-sub">Conversaciones guardadas</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with c_meta2:
-                    if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
-                        st.cache_data.clear()
-                        st.rerun()
-    
-                st.markdown("<br>", unsafe_allow_html=True)
-    
-                sync_info = GLOBAL_SYNC_STATE
-    
-                if sync_info["status"] == "running":
-                    st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
-                    time_lib.sleep(2)
+
+            with c_meta2:
+                if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
+                    st.cache_data.clear()
                     st.rerun()
-                elif sync_info["status"] == "completed":
-                    st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
-                    if st.button("Limpiar Mensaje de Confirmación"):
-                        GLOBAL_SYNC_STATE["status"] = "idle"
-                        st.cache_data.clear()
-                        st.rerun()
-                elif sync_info["status"] == "error":
-                    st.error(f"❌ Error en la sincronización: {sync_info['error']}")
-                    if st.button("Reintentar / Limpiar Error"):
-                        GLOBAL_SYNC_STATE["status"] = "idle"
-                        st.rerun()
-    
-                col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
-                f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
-                f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
-                
-                btn_bloqueado = (sync_info["status"] == "running")
-                
-                if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
-                    if SYNC_AVAILABLE:
-                        GLOBAL_SYNC_STATE["status"] = "running"
-                        GLOBAL_SYNC_STATE["processed"] = 0
-                        GLOBAL_SYNC_STATE["log"] = ""
-                        GLOBAL_SYNC_STATE["error"] = None
-    
-                        def tarea_sync_paralela(f_inicio, f_final):
-                            try:
-                                def cb_progreso(proc, tot):
-                                    GLOBAL_SYNC_STATE["processed"] = proc
-    
-                                tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
-                                GLOBAL_SYNC_STATE["status"] = "completed"
-                                tz_py = timezone(timedelta(hours=-3))
-                                hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
-    
-                                GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
-                            except Exception as ex_thread:
-                                GLOBAL_SYNC_STATE["status"] = "error"
-                                GLOBAL_SYNC_STATE["error"] = str(ex_thread)
-    
-                        hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta), daemon=True)
-                        hilo_sync.start()
-                        st.rerun()
-                    else:
-                        st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
-                        
+
             st.markdown("<br>", unsafe_allow_html=True)
-    
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
-                
-                with col_cfg1:
-                    st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
-                    cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
-                    cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
-                
-                with col_cfg2:
-                    st.markdown("<b>Umbrales de SLA (Minutos)</b>", unsafe_allow_html=True)
-                    cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
-                    cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
-    
-                with col_cfg3:
-                    st.markdown("<b>Alerta de Chat Nuevo</b>", unsafe_allow_html=True)
-                    cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
-    
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("Guardar Configuración de Parámetros", use_container_width=True):
-                    st.session_state["auto_refresh"] = cfg_auto
-                    st.session_state["refresh_interval"] = cfg_interval
-                    st.session_state["sla_1ra_th"] = cfg_sla_1ra
-                    st.session_state["sla_gest_th"] = cfg_sla_gest
-                    st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
-                    st.success("Configuración actualizada correctamente.")
+
+            sync_info = GLOBAL_SYNC_STATE
+
+            if sync_info["status"] == "running":
+                st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
+                time_lib.sleep(2)
+                st.rerun()
+            elif sync_info["status"] == "completed":
+                st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
+                if st.button("Limpiar Mensaje de Confirmación"):
+                    GLOBAL_SYNC_STATE["status"] = "idle"
+                    st.cache_data.clear()
                     st.rerun()
-    
-            st.markdown("<br>", unsafe_allow_html=True)
-    
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">3. Gestion de Usuarios Autorizados</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
-                    with st.form("form_nuevo_usuario"):
-                        col_u1, col_u2, col_u3 = st.columns(3)
-                        n_nombre = col_u1.text_input("Nombre / Agente:")
-                        n_email = col_u2.text_input("Correo Electronico:")
-                        n_pass = col_u3.text_input("Contraseña de Acceso:")
-                        btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
-    
-                        if btn_crear_u:
-                            if n_email.strip() and n_pass.strip() and n_nombre.strip():
-                                try:
-                                    supabase.table("usuarios_autorizados").insert({
-                                        "email": n_email.strip().lower(),
-                                        "password": n_pass.strip(),
-                                        "nombre": n_nombre.strip(),
-                                        "activo": True
-                                    }).execute()
-                                    st.success(f"Usuario {n_email} creado exitosamente.")
-                                    st.rerun()
-                                except Exception as ex:
-                                    st.error(f"Error al registrar usuario: {str(ex)}")
-                            else:
-                                st.warning("Completa todos los campos obligatorios.")
-    
-                try:
-                    res_users = supabase.table("usuarios_autorizados").select("*").order("created_at", desc=True).execute()
-                    df_users = pd.DataFrame(res_users.data)
-                    
-                    if not df_users.empty:
-                        st.markdown("<b>Listado de Usuarios Registrados:</b>", unsafe_allow_html=True)
-                        st.dataframe(
-                            df_users[["id", "nombre", "email", "password", "activo", "created_at"]],
-                            column_config={
-                                "id": "ID",
-                                "nombre": "Nombre",
-                                "email": "Correo",
-                                "password": "Contraseña",
-                                "activo": st.column_config.CheckboxColumn("Acceso Activo"),
-                                "created_at": "Fecha Alta"
-                            },
-                            hide_index=True,
-                            use_container_width=True
-                        )
-    
-                        col_edit1, col_edit2 = st.columns(2)
-                        id_toggle = col_edit1.number_input("ID de usuario a activar/desactivar:", min_value=1, step=1)
-                        if col_edit2.button("Alternar Estado (Activo/Inactivo)", use_container_width=True):
-                            usr_actual = df_users[df_users["id"] == id_toggle]
-                            if not usr_actual.empty:
-                                nuevo_estado = not bool(usr_actual.iloc[0]["activo"])
-                                supabase.table("usuarios_autorizados").update({"activo": nuevo_estado}).eq("id", id_toggle).execute()
-                                st.success(f"Estado del usuario ID {id_toggle} actualizado.")
-                                st.rerun()
-                            else:
-                                st.error("ID de usuario no encontrado.")
-                    else:
-                        st.info("No hay usuarios registrados aún en la base de datos.")
-                except Exception as e:
-                    st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
-    
-            # GESTIÓN DINÁMICA DE MOTIVOS CSAT
-            st.markdown("<br>", unsafe_allow_html=True)
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">4. Gestión de Motivos Normalizados (CSAT)</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                        Crea y desactiva los motivos que se muestran al categorizar chats negativos.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                # Formulario para agregar nuevo motivo
-                with st.form("form_nuevo_motivo_csat"):
-                    col_m1, col_m2 = st.columns([3, 1])
-                    nuevo_motivo_input = col_m1.text_input("Nuevo Motivo:")
-                    btn_guardar_motivo = col_m2.form_submit_button("Agregar Motivo", use_container_width=True)
-    
-                    if btn_guardar_motivo:
-                        txt_motivo = nuevo_motivo_input.strip()
-                        if txt_motivo:
-                            try:
-                                supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
-                                st.success(f"Motivo '{txt_motivo}' creado con éxito.")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as ex:
-                                st.error(f"Error o motivo duplicado: {ex}")
-                        else:
-                            st.warning("Escribe un nombre para el motivo.")
-    
-                # Listado de motivos con opción de Cambiar Estado
-                try:
-                    res_mot = supabase.table("motivos_csat").select("*").order("id", desc=False).execute()
-                    df_motivos = pd.DataFrame(res_mot.data or [])
-                    
-                    if not df_motivos.empty:
-                        st.markdown("<b>Motivos Configurados Actualmente:</b>", unsafe_allow_html=True)
-                        st.dataframe(
-                            df_motivos[["id", "nombre", "activo"]],
-                            column_config={
-                                "id": "ID",
-                                "nombre": "Nombre del Motivo",
-                                "activo": st.column_config.CheckboxColumn("Estado Activo")
-                            },
-                            hide_index=True,
-                            use_container_width=True
-                        )
-    
-                        col_dis1, col_dis2 = st.columns([2, 1])
-                        
-                        motivos_dict = {f"ID {r['id']}: {r['nombre']} ({'Activo' if r['activo'] else 'Inactivo'})": r['id'] for _, r in df_motivos.iterrows()}
-                        motivo_seleccionado_str = col_dis1.selectbox("Seleccionar Motivo a Cambiar Estado:", options=list(motivos_dict.keys()))
-                        
-                        if col_dis2.button("Alternar Estado (Activar/Deshabilitar)", use_container_width=True):
-                            id_motivo_sel = motivos_dict[motivo_seleccionado_str]
-                            motivo_row = df_motivos[df_motivos["id"] == id_motivo_sel].iloc[0]
-                            nuevo_estado = not bool(motivo_row["activo"])
-                            
-                            try:
-                                supabase.table("motivos_csat")\
-                                    .update({"activo": nuevo_estado})\
-                                    .eq("id", id_motivo_sel)\
-                                    .execute()
-                                
-                                st.success(f"El motivo ID {id_motivo_sel} ahora está {'Activo' if nuevo_estado else 'Deshabilitado'}.")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as ex:
-                                st.error(f"Error al actualizar motivo: {ex}")
-                    else:
-                        st.info("No hay motivos registrados en la base de datos.")
-                except Exception as e:
-                    st.error(f"No se pudieron cargar los motivos: {e}")
-    
-            # GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES
-            st.markdown("<br>", unsafe_allow_html=True)
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">5. Configuración de Notificaciones & Alertas (WhatsApp / Email)</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                        Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                # Cargar configuración actual desde Supabase
-                try:
-                    res_cfg = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
-                    cfg_data = res_cfg.data[0] if res_cfg.data else {}
-                except Exception:
-                    cfg_data = {}
-    
-                # Parseo seguro de la hora de envío
-                try:
-                    hora_val = datetime.strptime(str(cfg_data.get("hora_reporte_diario", "18:00:00")), "%H:%M:%S").time()
-                except Exception:
-                    hora_val = time(18, 0)
-    
-                with st.form("form_config_notificaciones"):
-                    st.markdown("##### 📧 Reporte Diario por Correo")
-                    col_e1, col_e2 = st.columns(2)
-                    v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
-                    v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
-    
-                    st.markdown("---")
-                    st.markdown("##### 📲 Alerta Individual de Chat Sin Responder")
-                    col_w1, col_w2 = st.columns(2)
-                    v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
-                    v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
-    
-                    st.markdown("---")
-                    st.markdown("##### 👥 Alerta Grupal por Antigüedad de Chats")
-                    col_g1, col_g2 = st.columns(2)
-                    v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
-                    v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
-    
-                    btn_guardar_notif = st.form_submit_button("Guardar Parámetros de Notificación", use_container_width=True)
-    
-                    if btn_guardar_notif:
+            elif sync_info["status"] == "error":
+                st.error(f"❌ Error en la sincronización: {sync_info['error']}")
+                if st.button("Reintentar / Limpiar Error"):
+                    GLOBAL_SYNC_STATE["status"] = "idle"
+                    st.cache_data.clear()
+                    st.rerun()
+
+            col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
+            f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
+            f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
+
+            btn_bloqueado = (sync_info["status"] == "running")
+
+            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
+                if SYNC_AVAILABLE:
+                    GLOBAL_SYNC_STATE["status"] = "running"
+                    GLOBAL_SYNC_STATE["processed"] = 0
+                    GLOBAL_SYNC_STATE["log"] = ""
+                    GLOBAL_SYNC_STATE["error"] = None
+
+                    def tarea_sync_paralela(f_inicio, f_final):
                         try:
-                            supabase.table("config_notificaciones").upsert({
-                                "id": 1,
-                                "hora_reporte_diario": v_hora_rep.strftime("%H:%M:%S"),
-                                "email_destino_reporte": v_email_dest.strip(),
-                                "minutos_alerta_individual": v_min_indiv,
-                                "telefono_alerta_individual": v_tel_indiv.strip(),
-                                "horas_alerta_grupo": v_hs_grupo,
-                                "jid_grupo_whatsapp": v_jid_grupo.strip(),
-                                "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
-                            }).execute()
-                            st.success("✅ Configuración de notificaciones guardada en Supabase.")
-                            st.rerun()
-                        except Exception as ex_g:
-                            st.error(f"Error al guardar configuración: {ex_g}")
-    
-            # ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
+                            def cb_progreso(proc, tot):
+                                GLOBAL_SYNC_STATE["processed"] = proc
+
+                            tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
+                            GLOBAL_SYNC_STATE["status"] = "completed"
+                            tz_py = timezone(timedelta(hours=-3))
+                            hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
+
+                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
+                        except Exception as ex_thread:
+                            GLOBAL_SYNC_STATE["status"] = "error"
+                            GLOBAL_SYNC_STATE["error"] = str(ex_thread)
+
+                    hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta), daemon=True)
+                    hilo_sync.start()
+                    st.rerun()
+                else:
+                    st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+
+            with col_cfg1:
+                st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
+                cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
+                cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
+
+            with col_cfg2:
+                st.markdown("<b>Umbrales de SLA (Minutos)</b>", unsafe_allow_html=True)
+                cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
+                cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
+
+            with col_cfg3:
+                st.markdown("<b>Alerta de Chat Nuevo</b>", unsafe_allow_html=True)
+                cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
+
             st.markdown("<br>", unsafe_allow_html=True)
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">6. Mapeo de Agentes y Teléfonos de WhatsApp</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                        Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                try:
-                    res_usrs = supabase.table("usuarios_autorizados").select("id, nombre, email, telefono_whatsapp").order("nombre").execute()
-                    df_usrs = pd.DataFrame(res_usrs.data or [])
-    
-                    if not df_usrs.empty:
-                        with st.form("form_telefonos_agentes"):
-                            edited_usrs = st.data_editor(
-                                df_usrs,
-                                column_config={
-                                    "id": None,
-                                    "nombre": st.column_config.TextColumn("Agente / Usuario", disabled=True),
-                                    "email": st.column_config.TextColumn("Correo", disabled=True),
-                                    "telefono_whatsapp": st.column_config.TextColumn("Teléfono WhatsApp (ej: 595981xxxxxx)", required=True)
-                                },
-                                hide_index=True,
-                                use_container_width=True,
-                                key="editor_telefonos_agentes"
-                            )
-                            btn_save_tels = st.form_submit_button("Guardar Teléfonos de Agentes", use_container_width=True)
-    
-                            if btn_save_tels:
-                                cambios = st.session_state.get("editor_telefonos_agentes", {}).get("edited_rows", {})
-                                if cambios:
-                                    for fila_idx, datos_ed in cambios.items():
-                                        if "telefono_whatsapp" in datos_ed:
-                                            u_id = df_usrs.iloc[int(fila_idx)]["id"]
-                                            supabase.table("usuarios_autorizados")\
-                                                .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
-                                                .eq("id", u_id)\
-                                                .execute()
-                                    st.success("✅ Teléfonos de agentes actualizados.")
-                                    st.rerun()
-                    else:
-                        st.info("No hay usuarios registrados aún.")
-                except Exception as ex_u:
-                    st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
-    
-            # GESTIÓN DINÁMICA DE FERIADOS
-            st.markdown("<br>", unsafe_allow_html=True)
-            with st.container():
-                st.markdown("""
-                <div class="admin-card">
-                    <h4 style="margin-top:0; color:#38bdf8;">📅 Calendario de Feriados Oficiales & Móviles</h4>
-                    <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                        Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                feriados_actuales = obtener_feriados_activos()
-    
-                col_add1, col_add2 = st.columns([2, 1])
-                fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
-                
-                if col_add2.button("➕ Agregar Feriado", use_container_width=True):
-                    str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
-                    if str_f not in feriados_actuales:
-                        feriados_actuales.append(str_f)
-                        if guardar_feriados_db(feriados_actuales):
-                            st.success(f"Feriado {str_f} agregado correctamente.")
+            if st.button("Guardar Configuración de Parámetros", use_container_width=True):
+                st.session_state["auto_refresh"] = cfg_auto
+                st.session_state["refresh_interval"] = cfg_interval
+                st.session_state["sla_1ra_th"] = cfg_sla_1ra
+                st.session_state["sla_gest_th"] = cfg_sla_gest
+                st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
+                st.success("Configuración actualizada correctamente.")
+                st.rerun()
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">3. Gestion de Usuarios Autorizados</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
+                with st.form("form_nuevo_usuario"):
+                    col_u1, col_u2, col_u3 = st.columns(3)
+                    n_nombre = col_u1.text_input("Nombre / Agente:")
+                    n_email = col_u2.text_input("Correo Electronico:")
+                    n_pass = col_u3.text_input("Contraseña de Acceso:")
+                    btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
+
+                    if btn_crear_u:
+                        if n_email.strip() and n_pass.strip() and n_nombre.strip():
+                            try:
+                                supabase.table("usuarios_autorizados").insert({
+                                    "email": n_email.strip().lower(),
+                                    "password": n_pass.strip(),
+                                    "nombre": n_nombre.strip(),
+                                    "activo": True
+                                }).execute()
+                                st.success(f"Usuario {n_email} creado exitosamente.")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"Error al registrar usuario: {str(ex)}")
+                        else:
+                            st.warning("Completa todos los campos obligatorios.")
+
+            try:
+                res_users = supabase.table("usuarios_autorizados").select("*").order("created_at", desc=True).execute()
+                df_users = pd.DataFrame(res_users.data)
+
+                if not df_users.empty:
+                    st.markdown("<b>Listado de Usuarios Registrados:</b>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df_users[["id", "nombre", "email", "password", "activo", "created_at"]],
+                        column_config={
+                            "id": "ID",
+                            "nombre": "Nombre",
+                            "email": "Correo",
+                            "password": "Contraseña",
+                            "activo": st.column_config.CheckboxColumn("Acceso Activo"),
+                            "created_at": "Fecha Alta"
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    col_edit1, col_edit2 = st.columns(2)
+                    id_toggle = col_edit1.number_input("ID de usuario a activar/desactivar:", min_value=1, step=1)
+                    if col_edit2.button("Alternar Estado (Activo/Inactivo)", use_container_width=True):
+                        usr_actual = df_users[df_users["id"] == id_toggle]
+                        if not usr_actual.empty:
+                            nuevo_estado = not bool(usr_actual.iloc[0]["activo"])
+                            supabase.table("usuarios_autorizados").update({"activo": nuevo_estado}).eq("id", id_toggle).execute()
+                            st.success(f"Estado del usuario ID {id_toggle} actualizado.")
                             st.rerun()
+                        else:
+                            st.error("ID de usuario no encontrado.")
+                else:
+                    st.info("No hay usuarios registrados aún en la base de datos.")
+            except Exception as e:
+                st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
+
+        # GESTIÓN DINÁMICA DE MOTIVOS CSAT
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">4. Gestión de Motivos Normalizados (CSAT)</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Crea y desactiva los motivos que se muestran al categorizar chats negativos.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Formulario para agregar nuevo motivo
+            with st.form("form_nuevo_motivo_csat"):
+                col_m1, col_m2 = st.columns([3, 1])
+                nuevo_motivo_input = col_m1.text_input("Nuevo Motivo:")
+                btn_guardar_motivo = col_m2.form_submit_button("Agregar Motivo", use_container_width=True)
+
+                if btn_guardar_motivo:
+                    txt_motivo = nuevo_motivo_input.strip()
+                    if txt_motivo:
+                        try:
+                            supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
+                            st.success(f"Motivo '{txt_motivo}' creado con éxito.")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error o motivo duplicado: {ex}")
                     else:
-                        st.info("Esa fecha ya se encuentra registrada como feriado.")
-    
-                df_feriados_adm = pd.DataFrame({"Fecha Feriado (YYYY-MM-DD)": feriados_actuales})
-                st.dataframe(df_feriados_adm, use_container_width=True, hide_index=True)
-    
-                col_del1, col_del2 = st.columns([2, 1])
-                feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
-                if col_del2.button("🗑️ Eliminar Feriado Seleccionado", use_container_width=True):
-                    feriados_actuales.remove(feriado_a_borrar)
-                    if guardar_feriados_db(feriados_actuales):
-                        st.success(f"Feriado {feriado_a_borrar} eliminado.")
+                        st.warning("Escribe un nombre para el motivo.")
+
+            # Listado de motivos con opción de Cambiar Estado
+            try:
+                res_mot = supabase.table("motivos_csat").select("*").order("id", desc=False).execute()
+                df_motivos = pd.DataFrame(res_mot.data or [])
+
+                if not df_motivos.empty:
+                    st.markdown("<b>Motivos Configurados Actualmente:</b>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df_motivos[["id", "nombre", "activo"]],
+                        column_config={
+                            "id": "ID",
+                            "nombre": "Nombre del Motivo",
+                            "activo": st.column_config.CheckboxColumn("Estado Activo")
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    col_dis1, col_dis2 = st.columns([2, 1])
+
+                    motivos_dict = {f"ID {r['id']}: {r['nombre']} ({'Activo' if r['activo'] else 'Inactivo'})": r['id'] for _, r in df_motivos.iterrows()}
+                    motivo_seleccionado_str = col_dis1.selectbox("Seleccionar Motivo a Cambiar Estado:", options=list(motivos_dict.keys()))
+
+                    if col_dis2.button("Alternar Estado (Activar/Deshabilitar)", use_container_width=True):
+                        id_motivo_sel = motivos_dict[motivo_seleccionado_str]
+                        motivo_row = df_motivos[df_motivos["id"] == id_motivo_sel].iloc[0]
+                        nuevo_estado = not bool(motivo_row["activo"])
+
+                        try:
+                            supabase.table("motivos_csat")\
+                                .update({"activo": nuevo_estado})\
+                                .eq("id", id_motivo_sel)\
+                                .execute()
+
+                            st.success(f"El motivo ID {id_motivo_sel} ahora está {'Activo' if nuevo_estado else 'Deshabilitado'}.")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error al actualizar motivo: {ex}")
+                else:
+                    st.info("No hay motivos registrados en la base de datos.")
+            except Exception as e:
+                st.error(f"No se pudieron cargar los motivos: {e}")
+
+        # GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">5. Configuración de Notificaciones & Alertas (WhatsApp / Email)</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            try:
+                res_cfg = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
+                cfg_data = res_cfg.data[0] if res_cfg.data else {}
+            except Exception:
+                cfg_data = {}
+
+            try:
+                hora_val = datetime.strptime(str(cfg_data.get("hora_reporte_diario", "18:00:00")), "%H:%M:%S").time()
+            except Exception:
+                hora_val = time(18, 0)
+
+            with st.form("form_config_notificaciones"):
+                st.markdown("##### 📧 Reporte Diario por Correo")
+                col_e1, col_e2 = st.columns(2)
+                v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
+                v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
+
+                st.markdown("---")
+                st.markdown("##### 📲 Alerta Individual de Chat Sin Responder")
+                col_w1, col_w2 = st.columns(2)
+                v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
+                v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
+
+                st.markdown("---")
+                st.markdown("##### 👥 Alerta Grupal por Antigüedad de Chats")
+                col_g1, col_g2 = st.columns(2)
+                v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
+                v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
+
+                btn_guardar_notif = st.form_submit_button("Guardar Parámetros de Notificación", use_container_width=True)
+
+                if btn_guardar_notif:
+                    try:
+                        supabase.table("config_notificaciones").upsert({
+                            "id": 1,
+                            "hora_reporte_diario": v_hora_rep.strftime("%H:%M:%S"),
+                            "email_destino_reporte": v_email_dest.strip(),
+                            "minutos_alerta_individual": v_min_indiv,
+                            "telefono_alerta_individual": v_tel_indiv.strip(),
+                            "horas_alerta_grupo": v_hs_grupo,
+                            "jid_grupo_whatsapp": v_jid_grupo.strip(),
+                            "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
+                        }).execute()
+                        st.success("✅ Configuración de notificaciones guardada en Supabase.")
                         st.rerun()
+                    except Exception as ex_g:
+                        st.error(f"Error al guardar configuración: {ex_g}")
+
+        # ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">6. Mapeo de Agentes y Teléfonos de WhatsApp</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            try:
+                res_usrs = supabase.table("usuarios_autorizados").select("id, nombre, email, telefono_whatsapp").order("nombre").execute()
+                df_usrs = pd.DataFrame(res_usrs.data or [])
+
+                if not df_usrs.empty:
+                    with st.form("form_telefonos_agentes"):
+                        edited_usrs = st.data_editor(
+                            df_usrs,
+                            column_config={
+                                "id": None,
+                                "nombre": st.column_config.TextColumn("Agente / Usuario", disabled=True),
+                                "email": st.column_config.TextColumn("Correo", disabled=True),
+                                "telefono_whatsapp": st.column_config.TextColumn("Teléfono WhatsApp (ej: 595981xxxxxx)", required=True)
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="editor_telefonos_agentes"
+                        )
+                        btn_save_tels = st.form_submit_button("Guardar Teléfonos de Agentes", use_container_width=True)
+
+                        if btn_save_tels:
+                            cambios = st.session_state.get("editor_telefonos_agentes", {}).get("edited_rows", {})
+                            if cambios:
+                                for fila_idx, datos_ed in cambios.items():
+                                    if "telefono_whatsapp" in datos_ed:
+                                        u_id = df_usrs.iloc[int(fila_idx)]["id"]
+                                        supabase.table("usuarios_autorizados")\
+                                            .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
+                                            .eq("id", u_id)\
+                                            .execute()
+                                st.success("✅ Teléfonos de agentes actualizados.")
+                                st.rerun()
+                else:
+                    st.info("No hay usuarios registrados aún.")
+            except Exception as ex_u:
+                st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
+
+        # GESTIÓN DINÁMICA DE FERIADOS
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <div class="admin-card">
+                <h4 style="margin-top:0; color:#38bdf8;">📅 Calendario de Feriados Oficiales & Móviles</h4>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
+                    Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            feriados_actuales = obtener_feriados_activos()
+
+            col_add1, col_add2 = st.columns([2, 1])
+            fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
+
+            if col_add2.button("➕ Agregar Feriado", use_container_width=True):
+                str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
+                if str_f not in feriados_actuales:
+                    feriados_actuales.append(str_f)
+                    if guardar_feriados_db(feriados_actuales):
+                        st.success(f"Feriado {str_f} agregado correctamente.")
+                        st.rerun()
+                else:
+                    st.info("Esa fecha ya se encuentra registrada como feriado.")
+
+            df_feriados_adm = pd.DataFrame({"Fecha Feriado (YYYY-MM-DD)": feriados_actuales})
+            st.dataframe(df_feriados_adm, use_container_width=True, hide_index=True)
+
+            col_del1, col_del2 = st.columns([2, 1])
+            feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
+            if col_del2.button("🗑️ Eliminar Feriado Seleccionado", use_container_width=True):
+                feriados_actuales.remove(feriado_a_borrar)
+                if guardar_feriados_db(feriados_actuales):
+                    st.success(f"Feriado {feriado_a_borrar} eliminado.")
+                    st.rerun()
         pass
 
 with tab_faq:
