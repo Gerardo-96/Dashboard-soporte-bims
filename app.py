@@ -1262,11 +1262,16 @@ def evaluar_horario_estricto(dt_objeto):
     dia_semana = dt_objeto.weekday()
     hora_actual = dt_objeto.time()
 
-    if fecha_str in FERIADOS:
+    if fecha_str in FERIADOS or dia_semana == 6:
         return False
-    
-    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 0, 0):
+
+    # Lunes a Viernes: 08:00 a 17:30 hs
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(18, 0, 0):
         return True
+    # Sábados: 09:00 a 11:45 hs
+    if dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(12, 0, 0):
+        return True
+
     return False
 
 # ==========================================
@@ -1938,7 +1943,7 @@ def renderizar_alertas_en_vivo():
                     # Marcador invisible que activa las reglas CSS del banner sobre este expander
                     st.markdown('<div class="alerta-ancla-activa" style="display:none;"></div>', unsafe_allow_html=True)
 
-                    if act_sonido:
+                    if act_sonido and evaluar_horario_estricto(now_dt):
                         html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
                         st.components.v1.html(html_con_ts, height=0)
 
