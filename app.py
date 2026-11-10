@@ -3211,64 +3211,75 @@ def renderizar_informe_wbr(df_base_in):
         contenedor_descarga = col_boton_slot.empty()
 
         if semana_seleccionada_str:
-    
-                # =========================================================================
-                # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
-                # =========================================================================
-                st.markdown("#### 1. WBR | Soporte & Experiencia — Evolutivo de Volumen")
-    
-                s1_col1, s1_col2 = st.columns(2)
-                s1_col1.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS (5 SEMANAS)</div>
-                    <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_5w_recibidos:,}</div>
+            fila_sem = semanas_disponibles[semanas_disponibles["semana_str"] == semana_seleccionada_str].iloc[0]
+            target_year = int(fila_sem["iso_year"])
+            target_week = int(fila_sem["iso_week"])
+
+            from datetime import datetime as dt_calc
+            fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
+            
+            semanas_5 = []
+            for i in range(4, -1, -1):
+                f_s = fecha_ref_sem - timedelta(weeks=i)
+                iso_y, iso_w, _ = f_s.isocalendar()
+                semanas_5.append((iso_y, iso_w, f"Semana {iso_w}"))
+
+            df_5_semanas_info = pd.DataFrame(semanas_5, columns=["iso_year", "iso_week", "etiqueta_semana"])
+
+            # =========================================================================
+            # CALCULO OBLIGATORIO PREVIO A LAS TARJETAS (EVITA EL NameError)
+            # =========================================================================
+            res_5w = []
+            tot_5w_recibidos = 0
+            tot_5w_cerrados = 0
+
+            for _, s_row in df_5_semanas_info.iterrows():
+                sub_rec = df_wbr_base[
+                    (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["iso_week"] == s_row["iso_week"])
+                ]
+                rec = len(sub_rec)
+
+                sub_cer = df_wbr_base[
+                    (df_wbr_base["es_cerrado"] == True) &
+                    (df_wbr_base["close_iso_year"] == s_row["iso_year"]) & 
+                    (df_wbr_base["close_iso_week"] == s_row["iso_week"])
+                ]
+                cer = len(sub_cer)
+
+                tot_5w_recibidos += rec
+                tot_5w_cerrados += cer
+
+                res_5w.append({
+                    "Semana": s_row["etiqueta_semana"],
+                    "Recibidos": rec,
+                    "Cerrados": cer
+                })
+
+            df_res_5w = pd.DataFrame(res_5w)
+            pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
+
+            # =========================================================================
+            # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
+            # =========================================================================
+            st.markdown("#### 1. WBR | Soporte & Experiencia — Evolutivo de Volumen")
+
+            s1_col1, s1_col2 = st.columns(2)
+            s1_col1.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS (5 SEMANAS)</div>
+                <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_5w_recibidos:,}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            s1_col2.markdown(f"""
+            <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
+                <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+                    {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
                 </div>
-                """, unsafe_allow_html=True)
-    
-                s1_col2.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
-                    <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
-                        {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-                st.markdown("<br>", unsafe_allow_html=True)
-    
-                fig_5w = go.Figure()
-                fig_5w.add_trace(go.Bar(
-                    x=df_res_5w["Semana"],
-                    y=df_res_5w["Recibidos"],
-                    name="Q. de chats recibidos",
-                    marker=dict(color="#0284c7", cornerradius=8),
-                    text=df_res_5w["Recibidos"],
-                    textposition="inside",
-                    insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
-                ))
-                fig_5w.add_trace(go.Bar(
-                    x=df_res_5w["Semana"],
-                    y=df_res_5w["Cerrados"],
-                    name="Q. de chats cerrados",
-                    marker=dict(color="#38bdf8", cornerradius=8),
-                    text=df_res_5w["Cerrados"],
-                    textposition="inside",
-                    insidetextfont=dict(color="#0f172a", size=13, family="Arial Black")
-                ))
-                fig_5w.update_layout(
-                    hovermode=False,
-                    barmode="group",
-                    title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1"),
-                    xaxis=dict(gridcolor="#1e293b"),
-                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    margin=dict(t=50, b=20, l=30, r=20),
-                    height=380
-                )
-                st.plotly_chart(fig_5w, use_container_width=True)
+            </div>
+            """, unsafe_allow_html=True)
     
                 st.markdown("---")
     
