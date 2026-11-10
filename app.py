@@ -1745,8 +1745,8 @@ if st.sidebar.button("Cerrar Sesión", use_container_width=True, key="btn_logout
 # ==========================================
 # INDICADOR DE ESTADO EN VIVO (CABECERA)
 # ==========================================
+@st.cache_data(ttl=60, show_spinner=False)
 def obtener_estado_bot_salud():
-    """Consulta rápida del estado de conexión con WhatsApp para el título principal."""
     try:
         url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
         url_salud = f"{url_base}/health-status"
@@ -3158,105 +3158,59 @@ with tab_resumen:
 
         st.markdown("---")
 
-if tab_wbr is not None:
-    with tab_wbr:
-        # 1. Encabezado Ejecutivo con diseño estilizado
-        st.markdown("""
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <div>
-                    <h3 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
-                        Informe Ejecutivo Semanal
-                    </h3>
-                </div>
+# ==========================================
+# FUNCIÓN AISLADA DEL WBR CON ST.FRAGMENT
+# ==========================================
+@st.fragment
+def renderizar_informe_wbr(df_base_in):
+    # 1. Encabezado Ejecutivo con diseño estilizado
+    st.markdown("""
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div>
+                <h3 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
+                    Informe Ejecutivo Semanal
+                </h3>
             </div>
-        """, unsafe_allow_html=True)
-    
-        if not df_all.empty and "created_at_dt" in df_all.columns:
-            df_wbr_base = df_all.copy()
-    
-            # Normalizaciones de fechas de cierre y creación
-            if "fecha_cierre_dt" not in df_wbr_base.columns:
-                df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
-                ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
-                df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
-    
-            df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
-            df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
-            df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
-    
-            df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
-            df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
-    
-            semanas_disponibles = (
-                df_wbr_base[["iso_year", "iso_week", "semana_str"]]
-                .drop_duplicates()
-                .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
+        </div>
+    """, unsafe_allow_html=True)
+
+    if not df_base_in.empty and "created_at_dt" in df_base_in.columns:
+        df_wbr_base = df_base_in.copy()
+
+        # Normalizaciones de fechas de cierre y creación
+        if "fecha_cierre_dt" not in df_wbr_base.columns:
+            df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
+            ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
+            df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
+
+        df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
+        df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
+        df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
+
+        df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
+        df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
+
+        semanas_disponibles = (
+            df_wbr_base[["iso_year", "iso_week", "semana_str"]]
+            .drop_duplicates()
+            .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
+        )
+
+        opciones_semanas = semanas_disponibles["semana_str"].tolist()
+
+        col_selector, col_separador, col_boton_slot = st.columns([2.2, 0.8, 1.8])
+        
+        with col_selector:
+            semana_seleccionada_str = st.selectbox(
+                "Seleccionar Semana del Reporte WBR:",
+                options=opciones_semanas,
+                index=0 if len(opciones_semanas) > 0 else 0,
+                key="sel_wbr_week"
             )
-    
-            opciones_semanas = semanas_disponibles["semana_str"].tolist()
-    
-            # Fila de Control Superior: Selector a la izquierda + Botón de Descarga a la derecha
-            col_selector, col_separador, col_boton_slot = st.columns([2.2, 0.8, 1.8])
-            
-            with col_selector:
-                semana_seleccionada_str = st.selectbox(
-                    "Seleccionar Semana del Reporte WBR:",
-                    options=opciones_semanas,
-                    index=0 if len(opciones_semanas) > 0 else 0,
-                    key="sel_wbr_week"
-                )
-    
-            # Contenedor dinámico reservado arriba para el botón de descarga
-            contenedor_descarga = col_boton_slot.empty()
-    
-            if semana_seleccionada_str:
-                fila_sem = semanas_disponibles[semanas_disponibles["semana_str"] == semana_seleccionada_str].iloc[0]
-                target_year = int(fila_sem["iso_year"])
-                target_week = int(fila_sem["iso_week"])
-    
-                from datetime import datetime as dt_calc
-                fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
-                
-                semanas_5 = []
-                for i in range(4, -1, -1):
-                    f_s = fecha_ref_sem - timedelta(weeks=i)
-                    iso_y, iso_w, _ = f_s.isocalendar()
-                    semanas_5.append((iso_y, iso_w, f"Semana {iso_w}"))
-    
-                df_5_semanas_info = pd.DataFrame(semanas_5, columns=["iso_year", "iso_week", "etiqueta_semana"])
-    
-                # Evolutivo de 5 semanas
-                res_5w = []
-                tot_5w_recibidos = 0
-                tot_5w_cerrados = 0
-    
-                for _, s_row in df_5_semanas_info.iterrows():
-                    sub_rec = df_wbr_base[
-                        (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
-                        (df_wbr_base["iso_week"] == s_row["iso_week"])
-                    ]
-                    rec = len(sub_rec)
-    
-                    sub_cer = df_wbr_base[
-                        (df_wbr_base["es_cerrado"] == True) &
-                        (df_wbr_base["close_iso_year"] == s_row["iso_year"]) & 
-                        (df_wbr_base["close_iso_week"] == s_row["iso_week"])
-                    ]
-                    cer = len(sub_cer)
-    
-                    tot_5w_recibidos += rec
-                    tot_5w_cerrados += cer
-    
-                    res_5w.append({
-                        "Semana": s_row["etiqueta_semana"],
-                        "Recibidos": rec,
-                        "Cerrados": cer
-                    })
-    
-                df_res_5w = pd.DataFrame(res_5w)
-                pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
-    
-                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+        contenedor_descarga = col_boton_slot.empty()
+
+        if semana_seleccionada_str:
     
                 # =========================================================================
                 # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
@@ -4493,7 +4447,11 @@ if tab_wbr is not None:
                         st.caption(f"⚠️ Error generando PPTX: {e_pptx}")
         else:
             st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
-        pass
+        
+# Y en la asignación de la pestaña solo llamas a la función:
+if tab_wbr is not None:
+    with tab_wbr:
+        renderizar_informe_wbr(df_all)
 
 if tab_admin is not None:
     with tab_admin:
