@@ -3898,7 +3898,21 @@ if tab_wbr is not None:
                         })
 
                         cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
-                        st.dataframe(pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
+                        config_matriz_l1 = {
+                            "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
+                            "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
+                            "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
+                            "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
+                            "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
+                            "% del Total a L1": st.column_config.TextColumn("% del Total a L1")
+                        }
+                        
+                        st.dataframe(
+                            pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False),
+                            column_config=config_matriz_l1,
+                            hide_index=True,
+                            use_container_width=True
+                        )
                     else:
                         st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
 
@@ -3990,7 +4004,21 @@ if tab_wbr is not None:
                         })
 
                         cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L3"]
-                        st.dataframe(pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False), hide_index=True, use_container_width=True)
+                        config_matriz_l3 = {
+                            "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
+                            "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
+                            "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
+                            "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
+                            "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
+                            "% del Total a L3": st.column_config.TextColumn("% del Total a L3")
+                        }
+                        
+                        st.dataframe(
+                            pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False),
+                            column_config=config_matriz_l3,
+                            hide_index=True,
+                            use_container_width=True
+                        )
                     else:
                         st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 3 esta semana.")
 
@@ -4212,50 +4240,72 @@ if tab_wbr is not None:
                 # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
                 # =========================================================================
                 st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
-    
-                df_ext = df_target[df_target["horario_evaluado"] == "extendido"].copy()
-                tot_ext = len(df_ext)
-                tot_ext_cerrados = int(df_ext["es_cerrado"].sum())
-                pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
-    
-                dias_num = df_ext["created_at_dt"].dt.dayofweek
+
+                # 1. Universo de chats INGRESADOS en la semana en horario extendido
+                df_ext_ingresados = df_target[df_target["horario_evaluado"] == "extendido"].copy()
+                tot_ext = len(df_ext_ingresados)
+
+                dias_num = df_ext_ingresados["created_at_dt"].dt.dayofweek
                 tot_domingo = int((dias_num == 6).sum())
-                derivados_l3_ext = int((df_ext["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
-                cerrados_ia_ext = int(df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
-                cerrados_hum_ext = tot_ext - cerrados_ia_ext
-    
+                derivados_l3_ext = int((df_ext_ingresados["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
+
+                # 2. Universo de chats CERRADOS en la semana en horario extendido
+                df_ext_cerrados_semana = df_wbr_base[
+                    (df_wbr_base["es_cerrado"] == True) &
+                    (df_wbr_base["horario_evaluado"] == "extendido") &
+                    (df_wbr_base["close_iso_year"] == target_year) &
+                    (df_wbr_base["close_iso_week"] == target_week)
+                ].copy()
+
+                tot_ext_cerrados = len(df_ext_cerrados_semana)
+                pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
+
+                agentes_excluir_pie = [
+                    "monica", "mónica", "monica (bot)", 
+                    "sin asignar", "none", "nan", ""
+                ]
+
+                # Clasificación de cierres por IA vs Humanos
+                df_ext_cerrados_semana["agente_nom"] = df_ext_cerrados_semana["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+                cerrados_ia_ext = int(df_ext_cerrados_semana["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
+                cerrados_hum_ext = tot_ext_cerrados - cerrados_ia_ext
+
                 col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
-    
+
+                # -------------------------------------------------------------
+                # COLUMNA IZQUIERDA: GRÁFICO DE DONA (AGENTES QUE CERRARON CHATS)
+                # -------------------------------------------------------------
                 with col_ext_pie:
                     st.markdown(f"""
                     <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS EN HORARIO EXTENDIDO</div>
-                        <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
-                        <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b></div>
+                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS CERRADOS EN EXTENDIDO</div>
+                        <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext_cerrados}</div>
+                        <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{cerrados_hum_ext}</b> por humanos | <b>{cerrados_ia_ext}</b> por Mónica</div>
                     </div>
                     """, unsafe_allow_html=True)
-    
-                    if not df_ext.empty:
-                        df_ext_ag = df_ext[~df_ext["agente_asignado"].fillna("").astype(str).str.lower().isin(agentes_excluir_pie)]["agente_asignado"].value_counts().reset_index()
-                        df_ext_ag.columns = ["Agente", "Cantidad"]
-    
+
+                    # Filtrar agentes humanos que efectivamente cerraron tickets
+                    df_ext_ag = df_ext_cerrados_semana[
+                        ~df_ext_cerrados_semana["agente_nom"].str.lower().isin(agentes_excluir_pie)
+                    ]["agente_nom"].value_counts().reset_index()
+                    df_ext_ag.columns = ["Agente", "Cantidad"]
+
+                    if not df_ext_ag.empty:
                         palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
-    
+
                         fig_pie_ext = go.Figure(data=[go.Pie(
                             labels=df_ext_ag["Agente"],
                             values=df_ext_ag["Cantidad"],
-                            hole=0.35,
-                            textinfo="label+percent",
-                            texttemplate="<b>%{label}</b><br>%{percent}",
+                            hole=0.45,
+                            textinfo="label+value+percent",
+                            texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
                             textposition="outside",
                             insidetextorientation="horizontal",
-                            pull=[0.02] * len(df_ext_ag),
                             marker=dict(colors=palette_pie_wbr, line=dict(color="#0b1120", width=2)),
                             showlegend=False
                         )])
                         
                         fig_pie_ext.update_layout(
-                            hovermode=False,
                             paper_bgcolor="rgba(0,0,0,0)",
                             plot_bgcolor="rgba(0,0,0,0)",
                             font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
@@ -4263,37 +4313,39 @@ if tab_wbr is not None:
                             height=310
                         )
                         st.plotly_chart(fig_pie_ext, use_container_width=True)
-    
+
                         st.markdown(f"""
                         <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
-                            <span><b style="color: #38bdf8;">Obs:</b> {cerrados_ia_ext} chats cerrados por IA, {cerrados_hum_ext} cerrados por agentes asignados.</span>
+                            <span><b style="color: #38bdf8;">Obs:</b> De los {tot_ext_cerrados} cierres en horario extendido, {cerrados_hum_ext} fueron gestionados por soporte humano.</span>
                         </div>
                         """, unsafe_allow_html=True)
                     else:
-                        st.info("Sin chats registrados en horario extendido para esta semana.")
-    
+                        st.info("Sin cierres por agentes humanos en horario extendido para esta semana.")
+
+                # -------------------------------------------------------------
+                # COLUMNA DERECHA: BARRAS HORIZONTALES (CHATS QUE INGRESARON)
+                # -------------------------------------------------------------
                 with col_ext_dias:
                     st.markdown(f"""
                     <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">EFECTIVIDAD DE GESTIÓN EXTENDIDA</div>
-                        <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{pct_ext_cerrados}%</div>
-                        <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{tot_ext_cerrados}</b> cerrados de <b>{tot_ext}</b> recibidos</div>
+                        <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS INGRESADOS EN EXTENDIDO</div>
+                        <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
+                        <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b> chats</div>
                     </div>
                     """, unsafe_allow_html=True)
-    
-                    if not df_ext.empty:
+
+                    if not df_ext_ingresados.empty:
                         mapa_dias_nom = {
                             0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
                             4: "viernes", 5: "sábado", 6: "domingo"
                         }
-                        df_ext["dia_nombre"] = df_ext["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
+                        df_ext_ingresados["dia_nombre"] = df_ext_ingresados["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
                         orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
                         
-                        df_dias_ext_cnt = df_ext["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
+                        df_dias_ext_cnt = df_ext_ingresados["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
                         df_dias_ext_cnt.columns = ["Día", "Cantidad"]
-    
                         df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
-    
+
                         fig_bar_dias_ext = go.Figure(go.Bar(
                             x=df_dias_ext_cnt["Cantidad"],
                             y=df_dias_ext_cnt["Día"],
@@ -4307,9 +4359,8 @@ if tab_wbr is not None:
                             ),
                             textfont=dict(color="#f8fafc", size=11, family="Segoe UI, sans-serif")
                         ))
-    
+
                         fig_bar_dias_ext.update_layout(
-                            hovermode=False,
                             title=dict(
                                 text="<b>Q. de chats ingresados por Día</b>",
                                 font=dict(color="#f8fafc", size=13),
@@ -4332,15 +4383,15 @@ if tab_wbr is not None:
                             height=310
                         )
                         st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
-    
+
                         st.markdown(f"""
                         <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
-                            <div>• <b>Cierres:</b> {tot_ext_cerrados} de los {tot_ext} chats ingresados lograron cerrarse.</div>
+                            <div>• <b>Volumen:</b> Ingresaron {tot_ext} chats en franjas nocturnas/fin de semana.</div>
                             <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
                         </div>
                         """, unsafe_allow_html=True)
                     else:
-                        st.info("Sin registros diarios de horario extendido.")
+                        st.info("Sin registros diarios de ingreso en horario extendido.")
 
                 # =========================================================================
                 # EXPORTACIÓN NATIVA A POWERPOINT
@@ -4421,6 +4472,8 @@ if tab_wbr is not None:
                         "tot_domingo": tot_domingo,
                         "pct_ext_cerrados": pct_ext_cerrados,
                         "tot_ext_cerrados": tot_ext_cerrados,
+                        "df_dias_ext": df_dias_ext_cnt if not df_ext_ingresados.empty else None,
+                        "df_agentes_ext": df_ext_ag if not df_ext_ag.empty else None,
                     }
                     
                     pptx_io = exportar_wbr_con_plantilla(paquete_datos_wbr)
