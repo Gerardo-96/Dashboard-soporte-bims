@@ -3302,6 +3302,7 @@ if tab_wbr is not None:
                     insidetextfont=dict(color="#0f172a", size=13, family="Arial Black")
                 ))
                 fig_5w.update_layout(
+                    hovermode=False,
                     barmode="group",
                     title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -3413,6 +3414,7 @@ if tab_wbr is not None:
                         insidetextfont=dict(color="#0f172a", size=12, family="Arial Black")
                     ))
                     fig_dias.update_layout(
+                        hovermode=False,
                         barmode="group",
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
@@ -3425,15 +3427,25 @@ if tab_wbr is not None:
                     )
                     st.plotly_chart(fig_dias, use_container_width=True)
     
+                    # CÓDIGO CORREGIDO: lee df_target_cerrados
                     color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
                     color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
-                    sin_resp_count = int(df_target["etiquetas"].fillna("").astype(str).str.lower().str.contains("sin respuesta").sum())
+                    
+                    # Solo contabilizar la etiqueta en los chats cerrados en la semana seleccionada
+                    sin_resp_count = int(
+                        df_target_cerrados["etiquetas"]
+                        .fillna("")
+                        .astype(str)
+                        .str.lower()
+                        .str.contains("sin respuesta")
+                        .sum()
+                    )
     
                     st.markdown(f"""
                     <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
                         <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
                         <div>• <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})</div>
-                        <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_rec} chats ingresados, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
+                        <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_cer} chats cerrados en la semana, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
                     </div>
                     """, unsafe_allow_html=True)
     
@@ -3474,6 +3486,7 @@ if tab_wbr is not None:
                     )])
     
                     fig_pie_w.update_layout(
+                        hovermode=False,
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#cbd5e1", size=11),
@@ -3612,6 +3625,7 @@ if tab_wbr is not None:
                         insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                     ))
                     fig_bar_gest.update_layout(
+                        hovermode=False,
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#cbd5e1"),
@@ -3644,6 +3658,7 @@ if tab_wbr is not None:
                         insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                     ))
                     fig_bar_1ra.update_layout(
+                        hovermode=False,
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#cbd5e1"),
@@ -3776,6 +3791,7 @@ if tab_wbr is not None:
                     )
                     fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
                     fig_niv.update_layout(
+                        hovermode=False,
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#cbd5e1", size=11),
@@ -3807,6 +3823,7 @@ if tab_wbr is not None:
                         showlegend=False
                     )])
                     fig_sent.update_layout(
+                        hovermode=False,
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#cbd5e1", size=11),
@@ -4139,6 +4156,7 @@ if tab_wbr is not None:
                         insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                     ))
                     fig_bar_csat.update_layout(
+                        hovermode=False,
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#cbd5e1"),
@@ -4169,6 +4187,7 @@ if tab_wbr is not None:
                         insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
                     ))
                     fig_bar_ratio.update_layout(
+                        hovermode=False,
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#cbd5e1"),
@@ -4236,6 +4255,7 @@ if tab_wbr is not None:
                         )])
                         
                         fig_pie_ext.update_layout(
+                            hovermode=False,
                             paper_bgcolor="rgba(0,0,0,0)",
                             plot_bgcolor="rgba(0,0,0,0)",
                             font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
@@ -4289,6 +4309,7 @@ if tab_wbr is not None:
                         ))
     
                         fig_bar_dias_ext.update_layout(
+                            hovermode=False,
                             title=dict(
                                 text="<b>Q. de chats ingresados por Día</b>",
                                 font=dict(color="#f8fafc", size=13),
