@@ -131,7 +131,8 @@ def extraer_agente_de_etiquetas(tags):
 def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None):
     """
     Sincroniza conversaciones de Intercom hacia Supabase.
-    Ignora cualquier actualización previa a hoy 11/11/2026 15:00 hs (PY) para proteger la cuota.
+    Aplica corte estricto infranqueable: ignora cualquier registro modificado antes
+    de hoy 11/11/2026 a las 15:00 hs (PY) para blindar la cuota de Supabase.
     """
     ahora_local = datetime.now(tz=tz_local)
     es_rango_manual = bool(fecha_desde and fecha_hasta)
@@ -149,8 +150,12 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
         dt_inicio = datetime.combine(fecha_desde, datetime.min.time()).replace(tzinfo=tz_local)
         dt_fin = datetime.combine(fecha_hasta, datetime.max.time()).replace(tzinfo=tz_local)
+
+        # PISO INFRANQUEABLE: Si el rango incluye hoy (o arranca hoy), jamás permitir inicio antes de las 15:00 hs PY
+        if fecha_desde == DT_CORTE_LOCAL.date():
+            dt_inicio = max(dt_inicio, DT_CORTE_LOCAL)
     else:
-        # Modo continuo: nunca retroceder antes de las 15:00 hs del 11/11/2026
+        # Modo continuo: jamás consultar antes de las 15:00 hs del 11/11/2026
         dt_inicio = max(DT_CORTE_LOCAL, ahora_local - timedelta(days=(dias or 1)))
         dt_fin = ahora_local
 
@@ -197,16 +202,22 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             if canal == "Correo electrónico":
                 continue
 
+            # Timestamp de actualización del sumario
+            updated_at_orig = conv_summary.get("updated_at")
+
+            # FILTRO INFRANQUEABLE: Si el chat se actualizó antes de las 15:00 hs de hoy, descartar de inmediato
+            if updated_at_orig and updated_at_orig < TS_CORTE_LOCAL:
+                continue
+
             conv_id = str(conv_summary.get("id"))
             conv = get_conversation_detail(conv_id) or conv_summary
 
-            created_at_orig = conv.get("created_at")
-            updated_at_orig = conv.get("updated_at") or conv_summary.get("updated_at")
-
-            # Protección de cuota: Si no es rango manual forzado, descartar todo lo anterior a las 15:00 hs de hoy
-            if not es_rango_manual and updated_at_orig and updated_at_orig < TS_CORTE_LOCAL:
+            # Re-validación con el objeto completo
+            updated_at_detail = conv.get("updated_at") or updated_at_orig
+            if updated_at_detail and updated_at_detail < TS_CORTE_LOCAL:
                 continue
 
+            created_at_orig = conv.get("created_at")
             statistics = conv.get("statistics", {}) or {}
 
             # =========================================================================
@@ -372,7 +383,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                     company = get_attr(c_data, "Company")
                     nombre_contacto = c_data.get("name") or c_data.get("email") or "Sin nombre"
 
-            fecha_actualizacion_iso = datetime.fromtimestamp(updated_at_orig, tz=tz_local).isoformat() if updated_at_orig else datetime.now(tz=tz_local).isoformat()
+            fecha_actualizacion_iso = datetime.fromtimestamp(updated_at_detail, tz=tz_local).isoformat() if updated_at_detail else datetime.now(tz=tz_local).isoformat()
 
             registro = {
                 "id": conv_id,
