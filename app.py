@@ -845,6 +845,42 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas VECTORIZADAS."""
     if df.empty or "created_at" not in df.columns:
+        # Normalización del agente por etiquetas desde el 11/11/2026 15:00 hs
+        if "etiquetas" in df.columns and "created_at_dt" in df.columns:
+            dt_corte_15hs = pd.Timestamp("2026-11-11 15:00:00", tz="America/Asuncion")
+            
+            def resolver_agente_hibrido(r):
+                ag_orig = str(r.get("agente_asignado", "")).strip()
+                # Si el chat ingresó a partir de las 15:00 hs de hoy o está asignado a la cuenta general
+                if (pd.notna(r.get("created_at_dt")) and r["created_at_dt"] >= dt_corte_15hs) or ag_orig.lower() in ["soporte bims", "soporte"]:
+                    etiquetas_str = str(r.get("etiquetas", ""))
+                    tags = [t.strip() for t in etiquetas_str.split(",") if t.strip()]
+                    
+                    ag_encontrado = None
+                    es_agendamiento = False
+                    
+                    for t in tags:
+                        t_lower = t.lower()
+                        if t_lower.startswith("agente:"):
+                            partes = t.split(":", 1)
+                            if len(partes) > 1 and partes[1].strip():
+                                return partes[1].strip()
+                        elif t_lower.startswith("l2:"):
+                            partes = t.split(":", 1)
+                            if len(partes) > 1 and partes[1].strip():
+                                ag_encontrado = f"L2 - {partes[1].strip()}"
+                        elif t_lower == "agendamiento" or "agendamiento" in t_lower:
+                            es_agendamiento = True
+    
+                    if ag_encontrado:
+                        return ag_encontrado
+                    if es_agendamiento:
+                        return "Agendamiento"
+    
+                return ag_orig if ag_orig else "Sin asignar"
+    
+            df["agente_asignado"] = df.apply(resolver_agente_hibrido, axis=1)
+        
         return df
 
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
