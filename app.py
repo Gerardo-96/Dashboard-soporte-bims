@@ -1767,43 +1767,84 @@ def obtener_estado_bot_salud():
 
 bot_online, bot_state = obtener_estado_bot_salud()
 
-# Renderizado del Título con Badge / Círculo indicador
+# Estilos CSS de pulso sutil tipo "radar"
+st.html("""
+<style>
+@keyframes bimsPing {
+    75%, 100% {
+        transform: scale(2.2);
+        opacity: 0;
+    }
+}
+.bims-pulse-container {
+    position: relative;
+    display: inline-flex;
+    width: 9px;
+    height: 9px;
+    margin-right: 3px;
+}
+.bims-pulse-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    animation: bimsPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.bims-pulse-dot {
+    position: relative;
+    display: inline-flex;
+    border-radius: 50%;
+    width: 9px;
+    height: 9px;
+}
+</style>
+""")
+
 if bot_online:
     badge_html = f"""
-    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 1rem;">
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 1rem;">
         <h1 style="margin: 0; padding: 0;">Dashboard Soporte BIMS</h1>
         <span style="
-            background-color: #065f46; 
+            background: rgba(6, 95, 70, 0.35); 
             color: #34d399; 
-            border: 1px solid #059669; 
+            border: 1px solid rgba(5, 150, 105, 0.6); 
             padding: 4px 12px; 
             border-radius: 20px; 
-            font-size: 0.85rem; 
+            font-size: 0.82rem; 
             font-weight: 600; 
-            display: flex; 
+            display: inline-flex; 
             align-items: center; 
-            gap: 6px;" 
+            gap: 7px;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);" 
             title="Conexión de WhatsApp Activa ({bot_state})">
+            <span class="bims-pulse-container">
+                <span class="bims-pulse-ring" style="background-color: #34d399;"></span>
+                <span class="bims-pulse-dot" style="background-color: #10b981;"></span>
+            </span>
             Bot Operativo
         </span>
     </div>
     """
 else:
     badge_html = f"""
-    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 1rem;">
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 1rem;">
         <h1 style="margin: 0; padding: 0;">Dashboard Soporte BIMS</h1>
         <span style="
-            background-color: #7f1d1d; 
+            background: rgba(127, 29, 29, 0.35); 
             color: #f87171; 
-            border: 1px solid #dc2626; 
+            border: 1px solid rgba(220, 38, 38, 0.6); 
             padding: 4px 12px; 
             border-radius: 20px; 
-            font-size: 0.85rem; 
+            font-size: 0.82rem; 
             font-weight: 600; 
-            display: flex; 
+            display: inline-flex; 
             align-items: center; 
-            gap: 6px;" 
+            gap: 7px;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);" 
             title="Conexión de WhatsApp Caída ({bot_state})">
+            <span class="bims-pulse-container">
+                <span class="bims-pulse-ring" style="background-color: #f87171;"></span>
+                <span class="bims-pulse-dot" style="background-color: #ef4444;"></span>
+            </span>
             Bot Desconectado
         </span>
     </div>
