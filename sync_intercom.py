@@ -24,6 +24,11 @@ headers = {
 
 contact_cache = {}
 
+# Fecha límite para blindar cuota Supabase: Mañana 12 de Noviembre de 2026
+FECHA_CORTE_NUEVO_MODELO = date(2026, 11, 12)
+DT_CORTE_LOCAL = datetime(2026, 11, 12, 0, 0, 0, tzinfo=tz_local)
+TS_CORTE_LOCAL = int(DT_CORTE_LOCAL.timestamp())
+
 def get_contact(contact_id):
     if contact_id in contact_cache:
         return contact_cache[contact_id]
@@ -57,47 +62,20 @@ def get_attr(contact, key):
 
 def obtener_agentes():
     """
-    1. Consulta la API de Admins de Intercom.
-    2. Actualiza la presencia (away mode) de cada agente en la tabla 'estado_agentes' de Supabase.
-    3. Retorna el diccionario id -> nombre para resolver asignaciones en el script.
+    Retorna el diccionario id -> nombre para resolver asignaciones históricas.
+    Ya NO sobreescribe estado_agentes para permitir el control manual interno.
     """
     url = "https://api.intercom.io/admins"
     agentes_dict = {}
-    registros_estado = []
-
     try:
         resp = requests.get(url, headers=headers)
         if resp.status_code == 200:
             data = resp.json()
             admins = data.get("admins", [])
-            
             for a in admins:
-                admin_id = str(a.get("id")).strip()
-                admin_name = a.get("name", "Desconocido")
-                
-                # Mapeo id -> nombre para el funcionamiento interno de sync_intercom.py
-                agentes_dict[admin_id] = admin_name
-
-                # Registro de presencia para la tabla estado_agentes
-                registros_estado.append({
-                    "id": admin_id,
-                    "nombre": admin_name,
-                    "email": a.get("email", ""),
-                    "away": bool(a.get("away_mode_enabled", False)),
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                })
-
-            # Guardar o actualizar la presencia de los agentes en Supabase
-            if registros_estado:
-                try:
-                    supabase.table("estado_agentes").upsert(registros_estado, on_conflict="id").execute()
-                except Exception as ex_db:
-                    print(f"⚠️ Error actualizando estado_agentes en Supabase: {ex_db}")
-
-            return agentes_dict
+                agentes_dict[str(a.get("id")).strip()] = a.get("name", "Desconocido")
     except Exception as e:
-        print(f"❌ Error al consultar admins de Intercom: {e}")
-
+        print(f"⚠️ Error al consultar admins de Intercom: {e}")
     return agentes_dict
 
 def obtener_canal(conv):
@@ -111,15 +89,29 @@ def obtener_canal(conv):
     else:
         return "Chat (conversation)"
 
+def extraer_agente_de_etiquetas(tags):
+    """
+    Busca una etiqueta con el prefijo 'agente:' (sin importar mayúsculas)
+    y retorna el nombre limpio del agente.
+    """
+    for t in tags:
+        t_str = str(t).strip()
+        if t_str.lower().startswith("agente:"):
+            partes = t_str.split(":", 1)
+            if len(partes) > 1 and partes[1].strip():
+                return partes[1].strip()
+    return None
+
 def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None):
     """
     Sincroniza conversaciones de Intercom hacia Supabase.
-    Soporta el cálculo por 'dias' o por rango explícito con 'fecha_desde' y 'fecha_hasta'.
+    Ignora todo updated_at anterior a mañana (12/11/2026) a menos que se fuerce un rango manual explícito.
     """
     ahora_local = datetime.now(tz=tz_local)
     
-    # Evaluar si se recibió rango explícito de fechas
-    if fecha_desde and fecha_hasta:
+    es_rango_manual = bool(fecha_desde and fecha_hasta)
+
+    if es_rango_manual:
         if isinstance(fecha_desde, str):
             fecha_desde = datetime.strptime(fecha_desde, "%Y-%m-%d").date()
         elif isinstance(fecha_desde, datetime):
@@ -133,9 +125,8 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
         dt_inicio = datetime.combine(fecha_desde, datetime.min.time()).replace(tzinfo=tz_local)
         dt_fin = datetime.combine(fecha_hasta, datetime.max.time()).replace(tzinfo=tz_local)
     else:
-        # Modo por días
-        dias_val = dias if dias is not None else 3
-        dt_inicio = (ahora_local - timedelta(days=dias_val)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Modo por defecto: IGNORAR TODO LO ANTERIOR A MAÑANA (12/11/2026)
+        dt_inicio = max(DT_CORTE_LOCAL, ahora_local - timedelta(days=(dias or 1)))
         dt_fin = ahora_local
 
     start_ts = int(dt_inicio.timestamp())
@@ -148,29 +139,11 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
     print(f"🔄 Sincronizando conversaciones de Intercom desde {dt_inicio.strftime('%Y-%m-%d %H:%M:%S')} hasta {dt_fin.strftime('%Y-%m-%d %H:%M:%S')}...")
 
-    # Definimos la ventana exacta del día 2026-11-10 en tu zona horaria local (UTC-3)
-    dt_excluir_inicio = datetime(2026, 11, 10, 0, 0, 0, tzinfo=tz_local)
-    dt_excluir_fin = datetime(2026, 11, 10, 23, 59, 59, tzinfo=tz_local)
-    ts_excluir_inicio = int(dt_excluir_inicio.timestamp())
-    ts_excluir_fin = int(dt_excluir_fin.timestamp())
-
     while True:
-        # Construimos las condiciones base del rango solicitado
         query_conditions = [
             {"field": "updated_at", "operator": ">=", "value": start_ts},
             {"field": "updated_at", "operator": "<=", "value": end_ts}
         ]
-
-        # Si el rango incluye el 2026-11-10, excluimos esa ventana de timestamps
-        # Agregamos: updated_at < inicio_del_dia OR updated_at > fin_del_dia
-        if not (end_ts < ts_excluir_inicio or start_ts > ts_excluir_fin):
-            query_conditions.append({
-                "operator": "OR",
-                "value": [
-                    {"field": "updated_at", "operator": "<", "value": ts_excluir_inicio},
-                    {"field": "updated_at", "operator": ">", "value": ts_excluir_fin}
-                ]
-            })
 
         payload = {
             "query": {
@@ -203,62 +176,35 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             conv = get_conversation_detail(conv_id) or conv_summary
 
             created_at_orig = conv.get("created_at")
-            # Extraemos la marca de tiempo de actualización nativa de Intercom
             updated_at_orig = conv.get("updated_at") or conv_summary.get("updated_at")
 
-            # Protección estricta: Si updated_at pertenece al 2026-11-10, ignorar completamente
-            if updated_at_orig:
-                dt_updated_conv = datetime.fromtimestamp(updated_at_orig, tz=tz_local)
-                if dt_updated_conv.date() == date(2026, 11, 10):
-                    continue
-            
-            statistics = conv.get("statistics", {}) or {}
+            # Protección de cuota: Si no es rango manual y updated_at es anterior a mañana, se ignora
+            if not es_rango_manual and updated_at_orig and updated_at_orig < TS_CORTE_LOCAL:
+                continue
 
-            # =========================================================================
-            # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA HUMANA (DERIVACIÓN A 'SIN ASIGNAR')
-            # =========================================================================
+            statistics = conv.get("statistics", {}) or {}
             ts_inicio_ref = None
-            
-            # Obtenemos la fecha de cierre de antemano para validar que la asignación no sea posterior
             first_close_at = statistics.get("first_close_at") or statistics.get("last_close_at")
 
-            # Recorremos conversation_parts buscando la primera derivación/asignación a la fila humana
             parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
             for p in parts:
-                part_type = p.get("part_type")
-                
-                # Ignoramos reasignaciones masivas administrativas
-                if part_type == "bulk_reassignment":
+                if p.get("part_type") == "bulk_reassignment":
                     continue
-                
-                # Detectamos cuando pasó a un equipo/team o a 'Sin Asignar' (unassigned)
-                if part_type == "assignment":
+                if p.get("part_type") == "assignment":
                     ts_inicio_ref = p.get("created_at")
-                    break  # Tomamos la marca de tiempo de la primera derivación humana
+                    break
 
-            # Si no hubo evento 'assignment' en las partes, buscamos en statistics
-            # SOLO si ocurrió antes de que el ticket fuera cerrado
             if not ts_inicio_ref:
                 first_assign_stat = statistics.get("first_assignment_at") or statistics.get("first_assignment_to_team_at")
                 if first_assign_stat and (not first_close_at or first_assign_stat <= first_close_at):
                     ts_inicio_ref = first_assign_stat
 
-            # Fallback final: Si el cliente nunca interactuó con la IA y entró directo, usamos created_at
             if not ts_inicio_ref:
                 ts_inicio_ref = created_at_orig
 
             inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
 
-            hace_7_meses = ahora_local - timedelta(days=210)
-            if inicio_real < hace_7_meses:
-                continue
-
-            # =========================================================================
-            # 2. PRIMERA RESPUESTA HUMANA (CALCULADA DESDE LA DERIVACIÓN)
-            # =========================================================================
             first_admin_reply = statistics.get("first_admin_reply_at")
-
-            # Si no viene en statistics, buscamos el primer comentario de un Admin humano en las partes
             if not first_admin_reply and parts:
                 for p in parts:
                     if p.get("part_type") == "comment" and p.get("author", {}).get("type") in ["admin", "user_admin"]:
@@ -266,20 +212,13 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                             first_admin_reply = p.get("created_at")
                             break
 
-            # CÁLCULO EXACTO: Marca de tiempo 1er respuesta humana MINUS Marca de tiempo derivación
             if first_admin_reply and first_admin_reply >= ts_inicio_ref:
                 secs_espera = first_admin_reply - ts_inicio_ref
                 primera_respuesta_min = round(secs_espera / 60.0, 2)
             else:
-                # Sigue en espera sin responder por un humano
                 primera_respuesta_min = None
 
-            # =========================================================================
-            # 3. TIEMPO DE GESTIÓN Y CIERRE
-            # =========================================================================
             state_intercom = str(conv.get("state", "")).lower()
-            first_close_at = statistics.get("first_close_at") or statistics.get("last_close_at")
-            
             fecha_cierre = datetime.fromtimestamp(first_close_at, tz=tz_local) if first_close_at else None
             estado = "Cerrado" if (state_intercom in ["closed", "resolved"] or fecha_cierre is not None) else "Abierto"
 
@@ -289,96 +228,44 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 tiempo_res_hrs = round(secs / 3600, 2)
                 tiempo_res_min = round(secs / 60, 2)
 
-
-            """
             # =========================================================================
-            # 4. AGENTE Y CSAT / RATING (BÚSQUEDA EN CASCADA Y FILTRADO DE BOTS)
+            # ETIQUETAS Y DETECCIÓN DEL AGENTE (MODELO ETIQUETA "Agente: Nombre")
             # =========================================================================
-            agente = "Sin asignar"
-            assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
-            
-            # 1. Prioridad: Asignación explícita a un Admin/Humano
-            if isinstance(assigned_to, dict) and assigned_to.get("type") == "admin":
-                admin_id = str(assigned_to.get("id", "")).strip()
-                agente = assigned_to.get("name") or agentes_dict.get(admin_id, f"Agente ({admin_id})")
-            
-            # 2. Respaldo: Si no está asignado o está a un equipo, buscar el último admin HUMANO que intervino
-            if agente == "Sin asignar":
-                parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
-                admin_parts = [
-                    p.get("author") for p in parts 
-                    if p.get("author", {}).get("type") in ["admin", "user_admin"] and 
-                       p.get("author", {}).get("name") and 
-                       p.get("author", {}).get("name", "").strip().lower() not in ["fin", "monica (bot)", "mónica (bot)"] and
-                       not p.get("author", {}).get("from_ai_agent", False)
-                ]
-                if admin_parts:
-                    agente = admin_parts[-1].get("name")
-                else:
-                    # 3. Respaldo por ID plano
-                    agente_id = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
-                    if agente_id and str(agente_id).strip() not in ["", "None", "0"]:
-                        agente = agentes_dict.get(str(agente_id).strip(), f"Agente ({agente_id})")
-                    # 4. Si solo está asignado a un Equipo
-                    elif isinstance(assigned_to, dict) and assigned_to.get("type") == "team":
-                        agente = assigned_to.get("name", "Sin asignar")
+            tags = [tag.get("name") for tag in conv.get("tags", {}).get("tags", [])]
+            agente_por_tag = extraer_agente_de_etiquetas(tags)
 
-            # Regla de exclusión
-            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica", "Mónica"] or "Bot" in agente else "no excluido"
-            """
+            dt_creacion = datetime.fromtimestamp(created_at_orig, tz=tz_local)
 
-            # =========================================================================
-            # 4. AGENTE Y CSAT (DETECCIÓN DE ASIGNACIÓN EN TIEMPO REAL / TRANSFERENCIAS)
-            # =========================================================================
-            agente = "Sin asignar"
+            if dt_creacion.date() >= FECHA_CORTE_NUEVO_MODELO and agente_por_tag:
+                agente = agente_por_tag
+            else:
+                # Fallback al modelo de asignación nativa para tickets previos o sin tag
+                agente = "Sin asignar"
+                admin_id_directo = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
+                if admin_id_directo and str(admin_id_directo).strip() not in ["", "None", "0", "null"]:
+                    agente = agentes_dict.get(str(admin_id_directo).strip(), f"Agente ({admin_id_directo})")
 
-            # 1. Prioridad Principal: Revisa el admin_assignee_id directo del objeto principal (siempre actualizado en reasignaciones)
-            admin_id_directo = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
-            if admin_id_directo and str(admin_id_directo).strip() not in ["", "None", "0", "null"]:
-                agente = agentes_dict.get(str(admin_id_directo).strip(), f"Agente ({admin_id_directo})")
+                if agente == "Sin asignar":
+                    assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
+                    if isinstance(assigned_to, dict) and assigned_to.get("type") == "admin":
+                        a_id = str(assigned_to.get("id", "")).strip()
+                        agente = assigned_to.get("name") or agentes_dict.get(a_id, f"Agente ({a_id})")
 
-            # 2. Segunda opción: Objeto assigned_to si es un admin explícito
-            if agente == "Sin asignar":
-                assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
-                if isinstance(assigned_to, dict) and assigned_to.get("type") == "admin":
-                    admin_id = str(assigned_to.get("id", "")).strip()
-                    agente = assigned_to.get("name") or agentes_dict.get(admin_id, f"Agente ({admin_id})")
+                if agente == "Sin asignar" and parts:
+                    assignments_admin = [
+                        p.get("assigned_to") for p in parts 
+                        if p.get("part_type") == "assignment" and isinstance(p.get("assigned_to"), dict) and p.get("assigned_to", {}).get("type") == "admin"
+                    ]
+                    if assignments_admin:
+                        last_assign = assignments_admin[-1]
+                        a_id = str(last_assign.get("id", "")).strip()
+                        agente = last_assign.get("name") or agentes_dict.get(a_id, f"Agente ({a_id})")
 
-            # 3. Tercera opción: Inspeccionar el historial (conversation_parts) buscando la ÚLTIMA asignación (assignment)
-            parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
-            if agente == "Sin asignar" and parts:
-                # Buscar partes de tipo 'assignment' asignadas a un admin
-                assignments_admin = [
-                p.get("assigned_to") for p in parts 
-                    if p.get("part_type") == "assignment" and isinstance(p.get("assigned_to"), dict) and p.get("assigned_to", {}).get("type") == "admin"
-                ]
-                if assignments_admin:
-                    last_assign = assignments_admin[-1]
-                    a_id = str(last_assign.get("id", "")).strip()
-                    agente = last_assign.get("name") or agentes_dict.get(a_id, f"Agente ({a_id})")
+                if agente == "Sin asignar" and agente_por_tag:
+                    agente = agente_por_tag
 
-            # 4. Cuarta opción: Si sigue sin asignar pero hay respuestas de agentes humanos
-            if agente == "Sin asignar" and parts:
-                admin_parts = [
-                    p.get("author") for p in parts 
-                    if p.get("author", {}).get("type") in ["admin", "user_admin"] and 
-                       p.get("author", {}).get("name") and 
-                       p.get("author", {}).get("name", "").strip().lower() not in ["fin", "monica (bot)", "mónica (bot)"] and
-                       not p.get("author", {}).get("from_ai_agent", False)
-                ]
-                if admin_parts:
-                    agente = admin_parts[-1].get("name")
-
-            # 5. Quinta opción: Asignado a un Equipo
-            if agente == "Sin asignar":
-                assigned_to = conv.get("assigned_to") or conv_summary.get("assigned_to")
-                if isinstance(assigned_to, dict) and assigned_to.get("type") == "team":
-                    agente = assigned_to.get("name", "Sin asignar")
-
-            # Regla de exclusión
             por_agente = "excluido" if agente in ["Sin asignar", "", "Monica", "Mónica"] or "Bot" in agente else "no excluido"
 
-            # Extracción de CSAT / Rating (Filtrado estricto: Solo evaluaciones a Agentes Humanos)
             rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
             teammate_data = rating_data.get("teammate") or {}
             rating_type = teammate_data.get("type")
@@ -388,14 +275,9 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 calificacion = str(rating) if rating is not None else ""
                 feedback = rating_data.get("remark") or ""
                 cx_explanation = rating_data.get("remark") or ""
-
                 ts_rating = rating_data.get("created_at")
-                if ts_rating:
-                    fecha_calificacion_iso = datetime.fromtimestamp(ts_rating, tz=tz_local).isoformat()
-                else:
-                    fecha_calificacion_iso = None
+                fecha_calificacion_iso = datetime.fromtimestamp(ts_rating, tz=tz_local).isoformat() if ts_rating else None
             else:
-                # Se descarta si fue evaluado un Bot o un Equipo
                 rating = None
                 calificacion = ""
                 feedback = ""
@@ -406,17 +288,12 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             admin_eval_id = str(teaser_admin.get("id", "")).strip() if teaser_admin else ""
             agente_evaluado = agentes_dict.get(admin_eval_id, agente)
 
-            # =========================================================================
-            # 5. ETIQUETAS
-            # =========================================================================
-            tags = [tag.get("name") for tag in conv.get("tags", {}).get("tags", [])]
             modulo = next((t for t in tags if t.startswith("mod-")), "")
             cliente = next((t for t in tags if t.startswith("cli-")), "")
             tipo_contacto = next((t for t in tags if t.startswith("tipo-")), "")
             nivel = next((t for t in tags if t.startswith("Niv-")), "")
             etiquetas_str = ", ".join(tags)
 
-            # Extracción de AI Title desde custom_attributes
             custom_attrs = conv.get("custom_attributes", {}) or {}
             ai_title_raw = custom_attrs.get("AI Title")
             ai_title = str(ai_title_raw).strip() if (ai_title_raw and str(ai_title_raw).strip() != "") else "No Generado"
@@ -430,11 +307,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                     company = get_attr(c_data, "Company")
                     nombre_contacto = c_data.get("name") or c_data.get("email") or "Sin nombre"
 
-            # Formateamos la marca de tiempo REAL de actualización desde Intercom
-            if updated_at_orig:
-                fecha_actualizacion_iso = datetime.fromtimestamp(updated_at_orig, tz=tz_local).isoformat()
-            else:
-                fecha_actualizacion_iso = datetime.now(tz=tz_local).isoformat()
+            fecha_actualizacion_iso = datetime.fromtimestamp(updated_at_orig, tz=tz_local).isoformat() if updated_at_orig else datetime.now(tz=tz_local).isoformat()
 
             registro = {
                 "id": conv_id,
@@ -486,7 +359,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sincronizador incremental Intercom -> Supabase")
-    parser.add_argument("--dias", type=int, default=3, help="Días a sincronizar hacia atrás")
+    parser.add_argument("--dias", type=int, default=1, help="Días a sincronizar hacia atrás")
     parser.add_argument("--desde", type=str, default=None, help="Fecha inicio en formato YYYY-MM-DD")
     parser.add_argument("--hasta", type=str, default=None, help="Fecha fin en formato YYYY-MM-DD")
     args = parser.parse_args()
