@@ -148,14 +148,34 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
     print(f"🔄 Sincronizando conversaciones de Intercom desde {dt_inicio.strftime('%Y-%m-%d %H:%M:%S')} hasta {dt_fin.strftime('%Y-%m-%d %H:%M:%S')}...")
 
+    # Definimos la ventana exacta del día 2026-11-10 en tu zona horaria local (UTC-3)
+    dt_excluir_inicio = datetime(2026, 11, 10, 0, 0, 0, tzinfo=tz_local)
+    dt_excluir_fin = datetime(2026, 11, 10, 23, 59, 59, tzinfo=tz_local)
+    ts_excluir_inicio = int(dt_excluir_inicio.timestamp())
+    ts_excluir_fin = int(dt_excluir_fin.timestamp())
+
     while True:
+        # Construimos las condiciones base del rango solicitado
+        query_conditions = [
+            {"field": "updated_at", "operator": ">=", "value": start_ts},
+            {"field": "updated_at", "operator": "<=", "value": end_ts}
+        ]
+
+        # Si el rango incluye el 2026-11-10, excluimos esa ventana de timestamps
+        # Agregamos: updated_at < inicio_del_dia OR updated_at > fin_del_dia
+        if not (end_ts < ts_excluir_inicio or start_ts > ts_excluir_fin):
+            query_conditions.append({
+                "operator": "OR",
+                "value": [
+                    {"field": "updated_at", "operator": "<", "value": ts_excluir_inicio},
+                    {"field": "updated_at", "operator": ">", "value": ts_excluir_fin}
+                ]
+            })
+
         payload = {
             "query": {
                 "operator": "AND",
-                "value": [
-                    {"field": "updated_at", "operator": ">=", "value": start_ts},
-                    {"field": "updated_at", "operator": "<=", "value": end_ts}
-                ]
+                "value": query_conditions
             },
             "pagination": {"per_page": 100}
         }
