@@ -24,9 +24,11 @@ headers = {
 
 contact_cache = {}
 
-# Fecha límite para blindar cuota Supabase: Mañana 12 de Noviembre de 2026
-FECHA_CORTE_NUEVO_MODELO = date(2026, 11, 12)
-DT_CORTE_LOCAL = datetime(2026, 11, 12, 0, 0, 0, tzinfo=tz_local)
+# ==========================================
+# PISO ESTÁTICO DE SEGURIDAD (CORTE TRANSICIÓN)
+# 11 de Noviembre de 2026 a las 15:00:00 hs (PY) -> 18:00:00Z en UTC
+# ==========================================
+DT_CORTE_LOCAL = datetime(2026, 11, 11, 15, 0, 0, tzinfo=tz_local)
 TS_CORTE_LOCAL = int(DT_CORTE_LOCAL.timestamp())
 
 def get_contact(contact_id):
@@ -45,7 +47,7 @@ def get_contact(contact_id):
     return None
 
 def get_conversation_detail(conv_id):
-    """Obtiene el detalle individual completo de una conversación para asegurar rating y estadísticas"""
+    """Obtiene el detalle individual completo de una conversación para asegurar rating y estadísticas."""
     url = f"https://api.intercom.io/conversations/{conv_id}"
     try:
         r = requests.get(url, headers=headers)
@@ -62,8 +64,8 @@ def get_attr(contact, key):
 
 def obtener_agentes():
     """
-    Retorna el diccionario id -> nombre para resolver asignaciones históricas.
-    Ya NO sobreescribe estado_agentes para permitir el control manual interno.
+    Retorna el diccionario id -> nombre para resolver asignaciones históricas de Intercom.
+    Ya NO sobreescribe estado_agentes para permitir el control manual interno desde Streamlit.
     """
     url = "https://api.intercom.io/admins"
     agentes_dict = {}
@@ -91,24 +93,47 @@ def obtener_canal(conv):
 
 def extraer_agente_de_etiquetas(tags):
     """
-    Busca una etiqueta con el prefijo 'agente:' (sin importar mayúsculas)
-    y retorna el nombre limpio del agente.
+    Evalúa las etiquetas de la conversación con el siguiente orden de prioridad:
+    1. 'Agente: Nombre' -> 'Nombre'
+    2. 'L2: Nombre'     -> 'L2 - Nombre' (para distinguir métricas de Nivel 2)
+    3. 'agendamiento'   -> 'Agendamiento'
     """
+    agente_detectado = None
+    es_agendamiento = False
+
     for t in tags:
         t_str = str(t).strip()
-        if t_str.lower().startswith("agente:"):
+        t_lower = t_str.lower()
+
+        # 1. Prioridad: Etiqueta directa de Agente
+        if t_lower.startswith("agente:"):
             partes = t_str.split(":", 1)
             if len(partes) > 1 and partes[1].strip():
                 return partes[1].strip()
+
+        # 2. Prioridad: Etiqueta de Nivel 2
+        elif t_lower.startswith("l2:"):
+            partes = t_str.split(":", 1)
+            if len(partes) > 1 and partes[1].strip():
+                agente_detectado = f"L2 - {partes[1].strip()}"
+
+        # 3. Detección de agendamiento
+        elif t_lower == "agendamiento" or "agendamiento" in t_lower:
+            es_agendamiento = True
+
+    if agente_detectado:
+        return agente_detectado
+    if es_agendamiento:
+        return "Agendamiento"
+
     return None
 
 def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None):
     """
     Sincroniza conversaciones de Intercom hacia Supabase.
-    Ignora todo updated_at anterior a mañana (12/11/2026) a menos que se fuerce un rango manual explícito.
+    Ignora cualquier actualización previa a hoy 11/11/2026 15:00 hs (PY) para proteger la cuota.
     """
     ahora_local = datetime.now(tz=tz_local)
-    
     es_rango_manual = bool(fecha_desde and fecha_hasta)
 
     if es_rango_manual:
@@ -125,7 +150,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
         dt_inicio = datetime.combine(fecha_desde, datetime.min.time()).replace(tzinfo=tz_local)
         dt_fin = datetime.combine(fecha_hasta, datetime.max.time()).replace(tzinfo=tz_local)
     else:
-        # Modo por defecto: IGNORAR TODO LO ANTERIOR A MAÑANA (12/11/2026)
+        # Modo continuo: nunca retroceder antes de las 15:00 hs del 11/11/2026
         dt_inicio = max(DT_CORTE_LOCAL, ahora_local - timedelta(days=(dias or 1)))
         dt_fin = ahora_local
 
@@ -178,15 +203,19 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             created_at_orig = conv.get("created_at")
             updated_at_orig = conv.get("updated_at") or conv_summary.get("updated_at")
 
-            # Protección de cuota: Si no es rango manual y updated_at es anterior a mañana, se ignora
+            # Protección de cuota: Si no es rango manual forzado, descartar todo lo anterior a las 15:00 hs de hoy
             if not es_rango_manual and updated_at_orig and updated_at_orig < TS_CORTE_LOCAL:
                 continue
 
             statistics = conv.get("statistics", {}) or {}
+
+            # =========================================================================
+            # 1. DEDUCCIÓN DE INICIO REAL EN BANDEJA HUMANA
+            # =========================================================================
             ts_inicio_ref = None
             first_close_at = statistics.get("first_close_at") or statistics.get("last_close_at")
-
             parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
+
             for p in parts:
                 if p.get("part_type") == "bulk_reassignment":
                     continue
@@ -204,7 +233,15 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
             inicio_real = datetime.fromtimestamp(ts_inicio_ref, tz=tz_local)
 
+            hace_7_meses = ahora_local - timedelta(days=210)
+            if inicio_real < hace_7_meses:
+                continue
+
+            # =========================================================================
+            # 2. PRIMERA RESPUESTA HUMANA
+            # =========================================================================
             first_admin_reply = statistics.get("first_admin_reply_at")
+
             if not first_admin_reply and parts:
                 for p in parts:
                     if p.get("part_type") == "comment" and p.get("author", {}).get("type") in ["admin", "user_admin"]:
@@ -218,6 +255,9 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             else:
                 primera_respuesta_min = None
 
+            # =========================================================================
+            # 3. TIEMPO DE GESTIÓN Y CIERRE
+            # =========================================================================
             state_intercom = str(conv.get("state", "")).lower()
             fecha_cierre = datetime.fromtimestamp(first_close_at, tz=tz_local) if first_close_at else None
             estado = "Cerrado" if (state_intercom in ["closed", "resolved"] or fecha_cierre is not None) else "Abierto"
@@ -229,17 +269,18 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 tiempo_res_min = round(secs / 60, 2)
 
             # =========================================================================
-            # ETIQUETAS Y DETECCIÓN DEL AGENTE (MODELO ETIQUETA "Agente: Nombre")
+            # 4. RESOLUCIÓN DE AGENTE: ETIQUETAS (Agente: / L2: / agendamiento)
             # =========================================================================
             tags = [tag.get("name") for tag in conv.get("tags", {}).get("tags", [])]
             agente_por_tag = extraer_agente_de_etiquetas(tags)
 
             dt_creacion = datetime.fromtimestamp(created_at_orig, tz=tz_local)
 
-            if dt_creacion.date() >= FECHA_CORTE_NUEVO_MODELO and agente_por_tag:
+            # A partir de hoy 11/11/2026 15:00 hs (PY), se prioriza la etiqueta
+            if dt_creacion >= DT_CORTE_LOCAL and agente_por_tag:
                 agente = agente_por_tag
             else:
-                # Fallback al modelo de asignación nativa para tickets previos o sin tag
+                # Fallback al esquema tradicional para chats anteriores o sin etiqueta
                 agente = "Sin asignar"
                 admin_id_directo = conv.get("admin_assignee_id") or conv_summary.get("admin_assignee_id")
                 if admin_id_directo and str(admin_id_directo).strip() not in ["", "None", "0", "null"]:
@@ -261,11 +302,32 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                         a_id = str(last_assign.get("id", "")).strip()
                         agente = last_assign.get("name") or agentes_dict.get(a_id, f"Agente ({a_id})")
 
+                if agente == "Sin asignar" and parts:
+                    admin_parts = [
+                        p.get("author") for p in parts 
+                        if p.get("author", {}).get("type") in ["admin", "user_admin"] and 
+                           p.get("author", {}).get("name") and 
+                           p.get("author", {}).get("name", "").strip().lower() not in ["fin", "monica (bot)", "mónica (bot)"] and
+                           not p.get("author", {}).get("from_ai_agent", False)
+                    ]
+                    if admin_parts:
+                        agente = admin_parts[-1].get("name")
+
                 if agente == "Sin asignar" and agente_por_tag:
                     agente = agente_por_tag
 
-            por_agente = "excluido" if agente in ["Sin asignar", "", "Monica", "Mónica"] or "Bot" in agente else "no excluido"
+            # Validación de por_agente: Humanos (L1, L2 y Agendamiento) entran a medición
+            agente_clean_check = agente.strip().lower()
+            es_excluido = (
+                agente_clean_check in ["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)"]
+                or "bot" in agente_clean_check
+                or agente_clean_check == "soporte"
+            )
+            por_agente = "excluido" if es_excluido else "no excluido"
 
+            # =========================================================================
+            # 5. CSAT / RATING
+            # =========================================================================
             rating_data = conv.get("conversation_rating") or conv_summary.get("conversation_rating") or {}
             teammate_data = rating_data.get("teammate") or {}
             rating_type = teammate_data.get("type")
@@ -288,6 +350,9 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             admin_eval_id = str(teaser_admin.get("id", "")).strip() if teaser_admin else ""
             agente_evaluado = agentes_dict.get(admin_eval_id, agente)
 
+            # =========================================================================
+            # 6. ETIQUETAS Y METADATOS
+            # =========================================================================
             modulo = next((t for t in tags if t.startswith("mod-")), "")
             cliente = next((t for t in tags if t.startswith("cli-")), "")
             tipo_contacto = next((t for t in tags if t.startswith("tipo-")), "")
