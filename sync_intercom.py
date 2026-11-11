@@ -193,11 +193,17 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             # =========================================================================
             ts_inicio_ref = None
             
+            # Obtenemos la fecha de cierre de antemano para validar que la asignación no sea posterior
+            first_close_at = statistics.get("first_close_at") or statistics.get("last_close_at")
+
             # Recorremos conversation_parts buscando la primera derivación/asignación a la fila humana
             parts = conv.get("conversation_parts", {}).get("conversation_parts", [])
             for p in parts:
                 part_type = p.get("part_type")
-                assigned_to_type = p.get("assigned_to", {}).get("type") if isinstance(p.get("assigned_to"), dict) else ""
+                
+                # Ignoramos reasignaciones masivas administrativas
+                if part_type == "bulk_reassignment":
+                    continue
                 
                 # Detectamos cuando pasó a un equipo/team o a 'Sin Asignar' (unassigned)
                 if part_type == "assignment":
@@ -205,8 +211,11 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                     break  # Tomamos la marca de tiempo de la primera derivación humana
 
             # Si no hubo evento 'assignment' en las partes, buscamos en statistics
+            # SOLO si ocurrió antes de que el ticket fuera cerrado
             if not ts_inicio_ref:
-                ts_inicio_ref = statistics.get("first_assignment_at") or statistics.get("first_assignment_to_team_at")
+                first_assign_stat = statistics.get("first_assignment_at") or statistics.get("first_assignment_to_team_at")
+                if first_assign_stat and (not first_close_at or first_assign_stat <= first_close_at):
+                    ts_inicio_ref = first_assign_stat
 
             # Fallback final: Si el cliente nunca interactuó con la IA y entró directo, usamos created_at
             if not ts_inicio_ref:
