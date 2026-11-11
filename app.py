@@ -902,6 +902,49 @@ def procesar_fechas_df(df):
             lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
         )
 
+    # Normalización del agente por etiquetas para tickets a partir del 12/11/2026
+    if "etiquetas" in df.columns and "created_at_dt" in df.columns:
+        fecha_cambio = date(2026, 11, 12)
+        
+        def resolver_agente_hibrido(r):
+            ag_orig = str(r.get("agente_asignado", "")).strip()
+            if pd.notna(r.get("created_at_dt")) and r["created_at_dt"].date() >= fecha_cambio:
+                etiquetas_str = str(r.get("etiquetas", ""))
+                tags = [t.strip() for t in etiquetas_str.split(",") if t.strip()]
+                
+                ag_encontrado = None
+                es_agendamiento = False
+                
+                for t in tags:
+                    t_lower = t.lower()
+                    if t_lower.startswith("agente:"):
+                        partes = t.split(":", 1)
+                        if len(partes) > 1 and partes[1].strip():
+                            return partes[1].strip()
+                    elif t_lower.startswith("l2:"):
+                        partes = t.split(":", 1)
+                        if len(partes) > 1 and partes[1].strip():
+                            ag_encontrado = f"L2 - {partes[1].strip()}"
+                    elif t_lower == "agendamiento" or "agendamiento" in t_lower:
+                        es_agendamiento = True
+
+                if ag_encontrado:
+                    return ag_encontrado
+                if es_agendamiento:
+                    return "Agendamiento"
+
+            return ag_orig if ag_orig else "Sin asignar"
+
+        df["agente_asignado"] = df.apply(resolver_agente_hibrido, axis=1)
+        
+        # Recalcular exclusión
+        ag_clean = df["agente_asignado"].str.lower().fillna("")
+        df["por_agente"] = np.where(
+            ag_clean.isin(["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)", "soporte"]) | ag_clean.str.contains("bot"),
+            "excluido",
+            "no excluido"
+        )
+
     return df
 
 COLUMNAS_DASHBOARD = (
@@ -991,22 +1034,24 @@ def obtener_timestamp_sync():
 
 @st.cache_data(ttl=900, show_spinner=False)
 def obtener_datos_hoy():
-    """Descarga conversaciones recientes (últimas 36h) Y todos los chats actualmente abiertos."""
+    """Descarga conversaciones desde el 11/11/2026 a las 15:00 hs PY en adelante Y todos los chats abiertos."""
     tz_py = timezone(timedelta(hours=-3))
-    ahora_py = datetime.now(tz_py)
-    hace_36h_utc = (ahora_py - timedelta(hours=36)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # Piso ESTÁTICO fijo: 11 de Noviembre de 2026 a las 15:00:00 hs (PY) -> 18:00:00Z en UTC
+    piso_fijo_py = datetime(2026, 11, 11, 15, 0, 0, tzinfo=tz_py)
+    piso_fijo_utc = piso_fijo_py.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
 
     try:
-        # 1. Traer chats con actividad en las últimas 36 horas
-        res_36h = supabase.table("conversaciones")\
+        # 1. Traer chats con actividad desde el 11/11/2026 15:00 hs PY en adelante
+        res_hoy = supabase.table("conversaciones")\
             .select(COLUMNAS_DASHBOARD)\
-            .gte("updated_at", hace_36h_utc)\
+            .gte("updated_at", piso_fijo_utc)\
             .execute()
-        datos = res_36h.data or []
+        datos = res_hoy.data or []
         
-        # 2. Traer TODOS los chats que sigan abiertos en Supabase (para asegurar agentes reasignados)
+        # 2. Traer TODOS los chats que sigan abiertos en Supabase
         res_abiertos = supabase.table("conversaciones")\
             .select(COLUMNAS_DASHBOARD)\
             .not_.in_("estado", estados_cerrados)\
@@ -1465,6 +1510,50 @@ else:
         <b>Ultima sincronizacion:</b> Sin registros<br>
     </div>
     """, unsafe_allow_html=True)
+
+# ==========================================
+# GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (DISPONIBLE / AUSENTE)
+# ==========================================
+nombre_usuario_sesion = st.session_state.get("user_name", "")
+email_usuario_sesion = st.session_state.get("user_email", "")
+
+if nombre_usuario_sesion:
+    st.sidebar.markdown("### Mi Estado de Presencia")
+    
+    # Consultar estado actual
+    try:
+        res_mi_estado = supabase.table("estado_agentes").select("away").ilike("nombre", nombre_usuario_sesion.strip()).limit(1).execute()
+        esta_ausente_actual = bool(res_mi_estado.data[0].get("away", False)) if res_mi_estado.data else False
+    except Exception:
+        esta_ausente_actual = False
+
+    opciones_presencia = ["🟢 Disponible", "🟡 Ausente"]
+    idx_def = 1 if esta_ausente_actual else 0
+
+    estado_sel = st.sidebar.radio(
+        "Indica si estás activo en la bandeja:",
+        options=opciones_presencia,
+        index=idx_def,
+        horizontal=True,
+        key="radio_mi_presencia"
+    )
+
+    nuevo_away = (estado_sel == "🟡 Ausente")
+    if nuevo_away != esta_ausente_actual:
+        try:
+            supabase.table("estado_agentes").upsert({
+                "id": email_usuario_sesion.lower().strip() or nombre_usuario_sesion.lower().strip(),
+                "nombre": nombre_usuario_sesion.strip(),
+                "email": email_usuario_sesion.strip(),
+                "away": nuevo_away,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }, on_conflict="id").execute()
+            obtener_mapa_estados_agentes.clear()
+            st.rerun()
+        except Exception as ex_st:
+            st.sidebar.caption(f"Error actualizando estado: {ex_st}")
+
+    st.sidebar.markdown("---")
 
 st.sidebar.markdown("### Filtros de Consulta")
 
