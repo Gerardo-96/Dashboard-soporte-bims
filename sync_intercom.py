@@ -205,6 +205,12 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             created_at_orig = conv.get("created_at")
             # Extraemos la marca de tiempo de actualización nativa de Intercom
             updated_at_orig = conv.get("updated_at") or conv_summary.get("updated_at")
+
+            # Protección estricta: Si updated_at pertenece al 2026-11-10, ignorar completamente
+            if updated_at_orig:
+                dt_updated_conv = datetime.fromtimestamp(updated_at_orig, tz=tz_local)
+                if dt_updated_conv.date() == date(2026, 11, 10):
+                    continue
             
             statistics = conv.get("statistics", {}) or {}
 
