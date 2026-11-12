@@ -4851,21 +4851,40 @@ if tab_admin is not None:
 
             col_status1, col_status2 = st.columns([2, 1])
 
-            # Consulta de salud del servicio en FastAPI
+            # Consulta de salud y estado de pausa del bot
             estado_bot = "CRITICAL"
             wa_state = "disconnected"
+            bot_pausado = False
+
+            try:
+                res_cfg_bot = supabase.table("config_notificaciones").select("bot_activo").eq("id", 1).limit(1).execute()
+                if res_cfg_bot.data:
+                    bot_pausado = not bool(res_cfg_bot.data[0].get("bot_activo", True))
+            except Exception:
+                pass
+
             try:
                 res_health = requests.get(f"{NOTIFICADOR_API_URL.rstrip('/')}/health-status", timeout=4)
                 if res_health.status_code == 200:
                     data_h = res_health.json()
                     estado_bot = data_h.get("status_general", "CRITICAL")
                     wa_state = data_h.get("whatsapp_state", "disconnected")
-            except Exception as e:
+            except Exception:
                 estado_bot = "CRITICAL"
                 wa_state = "offline"
 
+            col_status1, col_status2, col_status3 = st.columns([1.8, 1.1, 1.1])
+
             with col_status1:
-                if estado_bot == "OK":
+                if bot_pausado:
+                    st.markdown("""
+                    <div class="metric-card" style="border-left: 4px solid #fbbf24;">
+                        <div class="metric-card-title">Estado del Bot WhatsApp</div>
+                        <div class="metric-card-value" style="color: #fbbf24;">⏸️ Pausado Manualmente</div>
+                        <div class="metric-card-sub">Alertas y envíos detenidos por administrador</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif estado_bot == "OK":
                     st.markdown(f"""
                     <div class="metric-card" style="border-left: 4px solid #10b981;">
                         <div class="metric-card-title">Estado del Bot WhatsApp</div>
@@ -4883,6 +4902,21 @@ if tab_admin is not None:
                     """, unsafe_allow_html=True)
 
             with col_status2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if bot_pausado:
+                    if st.button("▶️ Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
+                        supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
+                        st.success("✅ Bot reanudado. Volverá a emitir alertas.")
+                        time_lib.sleep(0.5)
+                        st.rerun()
+                else:
+                    if st.button("⏸️ Pausar Bot (Emergencia)", use_container_width=True, key="btn_pausar_bot_admin"):
+                        supabase.table("config_notificaciones").update({"bot_activo": False}).eq("id", 1).execute()
+                        st.warning("⏸️ Bot pausado. No se enviarán mensajes ni alertas.")
+                        time_lib.sleep(0.5)
+                        st.rerun()
+
+            with col_status3:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
                     with st.spinner("Enviando orden de reinicio a Render..."):
