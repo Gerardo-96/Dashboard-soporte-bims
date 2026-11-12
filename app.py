@@ -1640,7 +1640,7 @@ email_usuario_sesion = st.session_state.get("user_email", "")
 if nombre_usuario_sesion:
     @st.fragment
     def renderizar_selector_presencia_sidebar():
-        st.markdown("### Mi Estado de Presencia")
+        st.markdown("### Mi Estado")
         
         clave_sesion_away = f"estado_away_{email_usuario_sesion}"
         clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
@@ -1685,7 +1685,6 @@ if nombre_usuario_sesion:
                 st.caption(f"Error guardando estado: {ex_st}")
 
         st.radio(
-            "Indica si estás activo en la bandeja:",
             options=opciones_presencia,
             index=idx_def,
             horizontal=True,
