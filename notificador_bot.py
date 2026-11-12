@@ -52,6 +52,16 @@ def obtener_feriados_bot():
 
 FERIADOS = obtener_feriados_bot()
 
+def bot_esta_activo() -> bool:
+    """Verifica si el interruptor de emergencia del bot está encendido en Supabase."""
+    try:
+        res = supabase.table("config_notificaciones").select("bot_activo").eq("id", 1).limit(1).execute()
+        if res.data:
+            return bool(res.data[0].get("bot_activo", True))
+    except Exception:
+        pass
+    return True
+
 ESTADOS_CERRADOS = ["cerrado", "closed", "resolved", "resuelto", "snoozed", "Cerrado", "Closed", "Resolved"]
 
 # ==========================================
@@ -230,6 +240,10 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
 
 def enviar_whatsapp(numero_destino, texto, menciones=[], mencionar_todos=False):
     """Envía un mensaje de WhatsApp con formato estándar para Evolution API v2."""
+    if not bot_esta_activo():
+        print("⏸️ [BOT PAUSADO] Envío de WhatsApp cancelado manualmente desde el panel.")
+        return
+        
     base_url = EVOLUTION_API_URL.rstrip('/')
     url = f"{base_url}/message/sendText/{INSTANCE_NAME}"
     
@@ -261,7 +275,9 @@ def enviar_whatsapp(numero_destino, texto, menciones=[], mencionar_todos=False):
 # ==========================================
 
 def procesar_alertas_y_reportes():
-
+    if not bot_esta_activo():
+        print("⏸️ [BOT PAUSADO] Evaluación de alertas omitida por interruptor manual.")
+        return {"status": "paused", "reason": "Bot pausado manualmente desde el panel"}
     # Verificar salud de la conexión antes de evaluar chats
     if not asegurar_conexion_whatsapp():
         print("❌ Se pausó la evaluación de alertas debido a un reinicio en curso de WhatsApp.")
@@ -303,6 +319,10 @@ def procesar_alertas_y_reportes():
             .execute()
 
         for c in (res_activos.data or []):
+            conv_id_str = str(c.get("id") or "").strip().lower()
+            if not conv_id_str or conv_id_str in ["undefined", "null", "none", "nan"] or not conv_id_str.isdigit():
+                continue
+                
             agente_raw = str(c.get("agente_asignado") or "").strip()
             agente_lower = agente_raw.lower()
 
@@ -359,6 +379,10 @@ def procesar_alertas_y_reportes():
         print(f"📌 [PUNTO 2] Supabase devolvió {len(chats_recuperados)} chats abiertos.")
 
         for c in chats_recuperados:
+            conv_id_str = str(c.get("id") or "").strip().lower()
+            if not conv_id_str or conv_id_str in ["undefined", "null", "none", "nan"] or not conv_id_str.isdigit():
+                continue
+                
             agente_raw = str(c.get("agente_asignado") or "").strip()
             agente_lower = agente_raw.lower()
 
@@ -376,7 +400,7 @@ def procesar_alertas_y_reportes():
             print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente_raw}' | Hs Hábiles: {hs_habiles} | Múltiplo actual: {multiplo_actual} | Último notificado: {ultimo_multiplo}")
 
             # Descarte de IA, bots y chats sin asignar (sin la cadena vacía)
-            if not agente_lower or any(b in agente_lower for b in ["monica", "mónica", "soporte", "sin asignar", "none", "nan"]):
+            if not agente_lower or any(b in agente_lower for b in ["monica", "mónica", "soporte", "soporte bims", "sin asignar", "none", "nan"]):
                 print(f"⏭️ [OMITIDO BOT/SIN ASIGNAR] Chat {c['id']} ({agente_raw})")
                 continue
 
@@ -526,7 +550,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
         hoy_date_py = now_dt.date()
 
         agentes_omitir = [
-            "monica", "mónica", "monica (bot)", "soporte", 
+            "monica", "mónica", "monica (bot)", "soporte", "soporte bims",
             "gerardo gaona", "gerardo.gaona@itti.digital", 
             "none", "nan", "sin asignar", ""
         ]
