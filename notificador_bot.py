@@ -327,13 +327,13 @@ def procesar_alertas_y_reportes():
             agente_lower = agente_raw.lower()
 
             # Descarte de Mónica (IA) y de cualquier agente humano que ya esté asignado
-            if any(bot_tag in agente_lower for bot_tag in ["monica", "mónica"]):
+            if any(bot_tag in agente_lower for bot_tag in ["monica", "mónica", "bot", "soporte bims"]):
                 continue
                 
             # 2. Evaluación de 'Sin Asignar': Solo se evalúa si NO tiene agente humano asignado
             es_sin_asignar = (
                 not agente_lower or 
-                agente_lower in ["sin asignar", "none", "nan", "soporte"] or 
+                agente_lower in ["sin asignar", "none", "nan"] or 
                 "sin asignar" in agente_lower
             )
 
