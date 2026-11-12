@@ -1632,7 +1632,7 @@ else:
     """, unsafe_allow_html=True)
 
 # ==========================================
-# GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (CON MODAL FLOTANTE SIN PARPADEO)
+# GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (CON SWITCH Y MODAL SIN PARPADEO)
 # ==========================================
 nombre_usuario_sesion = st.session_state.get("user_name", "")
 email_usuario_sesion = st.session_state.get("user_email", "")
@@ -1640,6 +1640,7 @@ email_usuario_sesion = st.session_state.get("user_email", "")
 if nombre_usuario_sesion:
     @st.fragment
     def renderizar_selector_presencia_sidebar():
+        st.markdown("### Mi Estado de Presencia")
         
         clave_sesion_away = f"estado_away_{email_usuario_sesion}"
         clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
@@ -1661,15 +1662,15 @@ if nombre_usuario_sesion:
             except Exception:
                 st.session_state[clave_sesion_away] = False
 
-        opciones_presencia = ["🟢 Disponible", "🟡 Ausente"]
-        idx_def = 1 if st.session_state[clave_sesion_away] else 0
+        esta_disponible = not st.session_state[clave_sesion_away]
+        etiqueta_switch = "🟢 Disponible (Activo)" if esta_disponible else "🟡 Ausente (Pausado)"
 
-        # 2. Callback instantáneo al cambiar el radio button
+        # 2. Callback instantáneo al alternar el switch
         def guardar_cambio_presencia():
-            valor_elegido = st.session_state["radio_mi_presencia"]
-            nuevo_away = (valor_elegido == "🟡 Ausente")
+            disponible_ahora = st.session_state["switch_mi_presencia"]
+            nuevo_away = not disponible_ahora
             st.session_state[clave_sesion_away] = nuevo_away
-            st.session_state[clave_notificar] = valor_elegido
+            st.session_state[clave_notificar] = "🟢 Disponible" if disponible_ahora else "🟡 Ausente"
 
             try:
                 supabase.table("estado_agentes").upsert({
@@ -1683,12 +1684,10 @@ if nombre_usuario_sesion:
             except Exception as ex_st:
                 st.caption(f"Error guardando estado: {ex_st}")
 
-        st.radio(
-            "Estado",
-            options=opciones_presencia,
-            index=idx_def,
-            horizontal=True,
-            key="radio_mi_presencia",
+        st.toggle(
+            label=etiqueta_switch,
+            value=esta_disponible,
+            key="switch_mi_presencia",
             on_change=guardar_cambio_presencia
         )
 
@@ -1752,7 +1751,6 @@ if nombre_usuario_sesion:
                 `;
                 doc.body.appendChild(modal);
 
-                // Desvanecer y limpiar del DOM tras 1.8 segundos
                 setTimeout(() => {{
                     const bd = doc.getElementById('bims-presencia-backdrop');
                     if (bd) bd.style.opacity = '0';
@@ -1766,7 +1764,7 @@ if nombre_usuario_sesion:
 
     with st.sidebar:
         renderizar_selector_presencia_sidebar()
-        #st.markdown("---")
+        st.markdown("---")
         
 st.sidebar.markdown("### Filtros de Consulta")
 
