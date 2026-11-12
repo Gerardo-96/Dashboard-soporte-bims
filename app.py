@@ -451,13 +451,13 @@ def obtener_cargas_agentes_db(hoy_inicio_utc):
 
     # 1. Chats abiertos actualmente
     res_abiertos = supabase.table("conversaciones")\
-        .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
+        .select("id, agente_asignado, etiquetas, estado, created_at, updated_at, fecha_cierre")\
         .not_.in_("estado", estados_cerrados_list)\
         .execute()
 
     # 2. Chats cerrados hoy (donde tanto el cierre como la asignación/creación sean de hoy)
     res_cerrados_hoy = supabase.table("conversaciones")\
-        .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
+        .select("id, agente_asignado, etiquetas, estado, created_at, updated_at, fecha_cierre")\
         .in_("estado", estados_cerrados_list)\
         .gte("fecha_cierre", hoy_inicio_utc)\
         .gte("created_at", hoy_inicio_utc)\
@@ -465,7 +465,7 @@ def obtener_cargas_agentes_db(hoy_inicio_utc):
 
     # 3. Respaldo para chats cerrados cuya fecha_cierre sea NULL
     res_cerrados_respaldo = supabase.table("conversaciones")\
-        .select("id, agente_asignado, estado, created_at, updated_at, fecha_cierre")\
+        .select("id, agente_asignado, etiquetas, estado, created_at, updated_at, fecha_cierre")\
         .in_("estado", estados_cerrados_list)\
         .is_("fecha_cierre", "null")\
         .gte("updated_at", hoy_inicio_utc)\
@@ -508,7 +508,7 @@ def renderizar_panel_carga_asignador():
         # Lista de agentes/entidades a EXCLUIR explícitamente
         agentes_omitir = [
             "monica", "mónica", "monica (bot)", "soporte", 
-            "gerardo gaona", "gerardo.gaona@itti.digital", "laura.almiron@tivahq.com", "laura almirón", "rebeca cartes",
+            "gerardo gaona", "gerardo.gaona@itti.digital", "soporte bims", "laura.almiron@tivahq.com", "laura almirón", "rebeca cartes",
             "none", "nan", "sin asignar", ""
         ]
 
@@ -542,7 +542,15 @@ def renderizar_panel_carga_asignador():
             df_c["created_py"] = created_dt.dt.tz_convert("America/Asuncion")
             df_c["created_solo_py"] = df_c["created_py"].dt.date
 
-            df_c["agente_clean"] = df_c["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+            def limpiar_agente_carga(r):
+                ag_orig = str(r.get("agente_asignado", "")).strip()
+                if ag_orig.lower() in ["soporte bims", "soporte", "sin asignar", "", "none", "nan"]:
+                    ag_tag = extraer_agente_desde_etiquetas_str(r.get("etiquetas"))
+                    if ag_tag:
+                        return ag_tag
+                return ag_orig if ag_orig else "Sin asignar"
+            
+            df_c["agente_clean"] = df_c.apply(limpiar_agente_carga, axis=1)
             
             # Incorporar cualquier otro agente humano presente en las conversaciones de hoy
             for ag in df_c["agente_clean"].unique():
@@ -842,46 +850,122 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
 
     return round(total_minutos_habiles, 1)
 
+def extraer_agente_desde_etiquetas_str(etiquetas_val):
+    """Extrae el nombre del agente si existe etiqueta 'Agente:', 'L2:' o 'agendamiento'."""
+    if pd.isna(etiquetas_val) or not str(etiquetas_val).strip():
+        return None
+    tags = [t.strip() for t in str(etiquetas_val).split(",") if t.strip()]
+    ag_l2 = None
+    es_agendamiento = False
+
+    for t in tags:
+        t_lower = t.lower()
+        if t_lower.startswith("agente:"):
+            partes = t.split(":", 1)
+            if len(partes) > 1 and partes[1].strip():
+                return partes[1].strip()
+        elif t_lower.startswith("l2:"):
+            partes = t.split(":", 1)
+            if len(partes) > 1 and partes[1].strip():
+                ag_l2 = f"L2 - {partes[1].strip()}"
+        elif t_lower == "agendamiento" or "agendamiento" in t_lower:
+            es_agendamiento = True
+
+    if ag_l2:
+        return ag_l2
+    if es_agendamiento:
+        return "Agendamiento"
+    return None
+
 def procesar_fechas_df(df):
     """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas VECTORIZADAS."""
     if df.empty or "created_at" not in df.columns:
-        # Normalización del agente por etiquetas desde el 11/11/2026 15:00 hs
-        if "etiquetas" in df.columns and "created_at_dt" in df.columns:
-            dt_corte_15hs = pd.Timestamp("2026-11-11 15:00:00", tz="America/Asuncion")
-            
-            def resolver_agente_hibrido(r):
-                ag_orig = str(r.get("agente_asignado", "")).strip()
-                # Si el chat ingresó a partir de las 15:00 hs de hoy o está asignado a la cuenta general
-                if (pd.notna(r.get("created_at_dt")) and r["created_at_dt"] >= dt_corte_15hs) or ag_orig.lower() in ["soporte bims", "soporte"]:
-                    etiquetas_str = str(r.get("etiquetas", ""))
-                    tags = [t.strip() for t in etiquetas_str.split(",") if t.strip()]
-                    
-                    ag_encontrado = None
-                    es_agendamiento = False
-                    
-                    for t in tags:
-                        t_lower = t.lower()
-                        if t_lower.startswith("agente:"):
-                            partes = t.split(":", 1)
-                            if len(partes) > 1 and partes[1].strip():
-                                return partes[1].strip()
-                        elif t_lower.startswith("l2:"):
-                            partes = t.split(":", 1)
-                            if len(partes) > 1 and partes[1].strip():
-                                ag_encontrado = f"L2 - {partes[1].strip()}"
-                        elif t_lower == "agendamiento" or "agendamiento" in t_lower:
-                            es_agendamiento = True
-    
-                    if ag_encontrado:
-                        return ag_encontrado
-                    if es_agendamiento:
-                        return "Agendamiento"
-    
-                return ag_orig if ag_orig else "Sin asignar"
-    
-            df["agente_asignado"] = df.apply(resolver_agente_hibrido, axis=1)
-        
         return df
+
+    created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
+    local_dt = created_dt.dt.tz_convert("America/Asuncion")
+
+    df["created_at_dt"] = local_dt
+    df["created_at_fmt"] = local_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+    df["fecha_solo"] = local_dt.dt.date
+    df["hora_solo"] = local_dt.dt.time
+
+    # Procesamiento de updated_at para controlar frescura en sidebar
+    if "updated_at" in df.columns:
+        df["updated_at_dt"] = pd.to_datetime(df["updated_at"], errors="coerce", utc=True).dt.tz_convert("America/Asuncion")
+        df["updated_at_local"] = df["updated_at_dt"]
+    else:
+        df["updated_at_local"] = df["created_at_dt"]
+
+    # Evaluamos la franja de horario vectorizada
+    df["horario_evaluado"] = evaluar_horario_dashboard_dt(df["created_at_dt"])
+
+    # Marca de tiempo para CSAT
+    if "fecha_calificacion" in df.columns:
+        calif_utc = pd.to_datetime(df["fecha_calificacion"], errors="coerce", utc=True)
+        local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
+        df["fecha_calificacion_dt"] = local_calif_dt.fillna(df["created_at_dt"])
+    else:
+        df["fecha_calificacion_dt"] = df["created_at_dt"]
+
+    df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+    df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
+
+    # Fechas de Cierre
+    col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
+    if col_cierre in df.columns:
+        cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
+        local_cierre = cierre_dt.dt.tz_convert("America/Asuncion")
+        df["fecha_cierre_dt"] = local_cierre
+        df["fecha_cierre_fmt"] = local_cierre.dt.strftime("%Y-%m-%d %H:%M").fillna("")
+
+    if "primera_respuesta_min" in df.columns:
+        df["primera_respuesta_min"] = pd.to_numeric(df["primera_respuesta_min"], errors="coerce").round(2)
+
+    # CÁLCULO VECTORIZADO DE TIEMPO DE GESTIÓN
+    if "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
+        df["tiempo_resolucion_minutos"] = df.apply(
+            lambda r: calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"])
+            if r.get("horario_evaluado") != "fuera de horario" else np.nan,
+            axis=1
+        )
+
+    if "id" in df.columns:
+        df["id_str"] = df["id"].astype(str).str.strip()
+        df["intercom_url"] = df["id_str"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+        )
+
+    # =========================================================================
+    # RESOLUCIÓN DE AGENTE POR ETIQUETAS (DESDE 11/11/2026 15:00 HS O USUARIO ÚNICO)
+    # =========================================================================
+    if "etiquetas" in df.columns and "created_at_dt" in df.columns:
+        dt_corte_15hs = pd.Timestamp("2026-11-11 15:00:00", tz="America/Asuncion")
+        
+        def resolver_agente_hibrido(r):
+            ag_orig = str(r.get("agente_asignado", "")).strip()
+            ag_lower = ag_orig.lower()
+            es_post_corte = pd.notna(r.get("created_at_dt")) and r["created_at_dt"] >= dt_corte_15hs
+            es_cuenta_generica = ag_lower in ["soporte bims", "soporte", "sin asignar", "", "none", "nan"]
+
+            if es_post_corte or es_cuenta_generica:
+                ag_tag = extraer_agente_desde_etiquetas_str(r.get("etiquetas"))
+                if ag_tag:
+                    return ag_tag
+
+            return ag_orig if ag_orig else "Sin asignar"
+
+        df["agente_asignado"] = df.apply(resolver_agente_hibrido, axis=1)
+        
+        # Recalcular exclusión (incluyendo 'soporte bims' como excluido si no tiene etiqueta)
+        ag_clean = df["agente_asignado"].str.lower().fillna("")
+        df["por_agente"] = np.where(
+            ag_clean.isin(["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)", "soporte", "soporte bims"]) | ag_clean.str.contains("bot"),
+            "excluido",
+            "no excluido"
+        )
+
+    return df
 
     created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
     local_dt = created_dt.dt.tz_convert("America/Asuncion")
@@ -1548,49 +1632,143 @@ else:
     """, unsafe_allow_html=True)
 
 # ==========================================
-# GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (DISPONIBLE / AUSENTE)
+# GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (CON MODAL FLOTANTE SIN PARPADEO)
 # ==========================================
 nombre_usuario_sesion = st.session_state.get("user_name", "")
 email_usuario_sesion = st.session_state.get("user_email", "")
 
 if nombre_usuario_sesion:
-    st.sidebar.markdown("### Mi Estado de Presencia")
-    
-    # Consultar estado actual
-    try:
-        res_mi_estado = supabase.table("estado_agentes").select("away").ilike("nombre", nombre_usuario_sesion.strip()).limit(1).execute()
-        esta_ausente_actual = bool(res_mi_estado.data[0].get("away", False)) if res_mi_estado.data else False
-    except Exception:
-        esta_ausente_actual = False
+    @st.fragment
+    def renderizar_selector_presencia_sidebar():
+        st.markdown("### Mi Estado de Presencia")
+        
+        clave_sesion_away = f"estado_away_{email_usuario_sesion}"
+        clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
 
-    opciones_presencia = ["🟢 Disponible", "🟡 Ausente"]
-    idx_def = 1 if esta_ausente_actual else 0
+        # 1. Consultar a Supabase SOLO la primera vez que carga la sesión
+        if clave_sesion_away not in st.session_state:
+            try:
+                res_mi_estado = (
+                    supabase.table("estado_agentes")
+                    .select("away")
+                    .ilike("nombre", nombre_usuario_sesion.strip())
+                    .limit(1)
+                    .execute()
+                )
+                st.session_state[clave_sesion_away] = (
+                    bool(res_mi_estado.data[0].get("away", False))
+                    if res_mi_estado.data else False
+                )
+            except Exception:
+                st.session_state[clave_sesion_away] = False
 
-    estado_sel = st.sidebar.radio(
-        "Indica si estás activo en la bandeja:",
-        options=opciones_presencia,
-        index=idx_def,
-        horizontal=True,
-        key="radio_mi_presencia"
-    )
+        opciones_presencia = ["🟢 Disponible", "🟡 Ausente"]
+        idx_def = 1 if st.session_state[clave_sesion_away] else 0
 
-    nuevo_away = (estado_sel == "🟡 Ausente")
-    if nuevo_away != esta_ausente_actual:
-        try:
-            supabase.table("estado_agentes").upsert({
-                "id": email_usuario_sesion.lower().strip() or nombre_usuario_sesion.lower().strip(),
-                "nombre": nombre_usuario_sesion.strip(),
-                "email": email_usuario_sesion.strip(),
-                "away": nuevo_away,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }, on_conflict="id").execute()
-            obtener_mapa_estados_agentes.clear()
-            st.rerun()
-        except Exception as ex_st:
-            st.sidebar.caption(f"Error actualizando estado: {ex_st}")
+        # 2. Callback instantáneo al cambiar el radio button
+        def guardar_cambio_presencia():
+            valor_elegido = st.session_state["radio_mi_presencia"]
+            nuevo_away = (valor_elegido == "🟡 Ausente")
+            st.session_state[clave_sesion_away] = nuevo_away
+            st.session_state[clave_notificar] = valor_elegido
 
-    st.sidebar.markdown("---")
+            try:
+                supabase.table("estado_agentes").upsert({
+                    "id": email_usuario_sesion.lower().strip() or nombre_usuario_sesion.lower().strip(),
+                    "nombre": nombre_usuario_sesion.strip(),
+                    "email": email_usuario_sesion.strip(),
+                    "away": nuevo_away,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }, on_conflict="id").execute()
+                obtener_mapa_estados_agentes.clear()
+            except Exception as ex_st:
+                st.caption(f"Error guardando estado: {ex_st}")
 
+        st.radio(
+            "Indica si estás activo en la bandeja:",
+            options=opciones_presencia,
+            index=idx_def,
+            horizontal=True,
+            key="radio_mi_presencia",
+            on_change=guardar_cambio_presencia
+        )
+
+        # 3. Modal visual efímero (se muestra y desaparece solo sin recargar la página)
+        if st.session_state.get(clave_notificar):
+            estado_nuevo = st.session_state.pop(clave_notificar)
+            es_ausente = "Ausente" in estado_nuevo
+            color_borde = "#fbbf24" if es_ausente else "#10b981"
+            icono = "🟡" if es_ausente else "🟢"
+            titulo_txt = "Estado: Ausente" if es_ausente else "Estado: Disponible"
+            sub_txt = (
+                "No recibirás nuevas asignaciones mientras estés ausente."
+                if es_ausente else
+                "Estás activo y visible para recibir chats en la bandeja."
+            )
+
+            st.iframe(f"""
+            <script>
+            (function() {{
+                const doc = window.parent.document;
+                const prev = doc.getElementById('bims-presencia-modal');
+                if (prev) prev.remove();
+
+                const modal = doc.createElement('div');
+                modal.id = 'bims-presencia-modal';
+                modal.innerHTML = `
+                    <div style="
+                        position: fixed;
+                        inset: 0;
+                        z-index: 2147483647;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        background: rgba(11, 17, 32, 0.55);
+                        backdrop-filter: blur(4px);
+                        opacity: 1;
+                        transition: opacity 0.35s ease;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                    " id="bims-presencia-backdrop">
+                        <div style="
+                            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+                            border: 1px solid #334155;
+                            border-left: 5px solid {color_borde};
+                            border-radius: 14px;
+                            padding: 24px 32px;
+                            box-shadow: 0 20px 45px rgba(0,0,0,0.6);
+                            text-align: center;
+                            max-width: 380px;
+                            transform: scale(1);
+                            transition: transform 0.25s ease;
+                        ">
+                            <div style="font-size: 2.2rem; margin-bottom: 8px;">{icono}</div>
+                            <div style="color: #f8fafc; font-weight: 700; font-size: 1.15rem; margin-bottom: 6px;">
+                                {titulo_txt}
+                            </div>
+                            <div style="color: #94a3b8; font-size: 0.88rem; line-height: 1.45;">
+                                {sub_txt}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                doc.body.appendChild(modal);
+
+                // Desvanecer y limpiar del DOM tras 1.8 segundos
+                setTimeout(() => {{
+                    const bd = doc.getElementById('bims-presencia-backdrop');
+                    if (bd) bd.style.opacity = '0';
+                    setTimeout(() => {{
+                        if (modal) modal.remove();
+                    }}, 350);
+                }}, 1800);
+            }})();
+            </script>
+            """, width=1, height=1)
+
+    with st.sidebar:
+        renderizar_selector_presencia_sidebar()
+        st.markdown("---")
+        
 st.sidebar.markdown("### Filtros de Consulta")
 
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
