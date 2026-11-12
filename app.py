@@ -1764,9 +1764,14 @@ if nombre_usuario_sesion:
 
     with st.sidebar:
         renderizar_selector_presencia_sidebar()
-        st.markdown("---")
+    
+    # Separador compacto sin márgenes excesivos
+    st.sidebar.markdown(
+        '<hr style="margin: 8px 0 12px 0; border: none; border-top: 1px solid #334155;">',
+        unsafe_allow_html=True
+    )
         
-st.sidebar.markdown("### Filtros de Consulta")
+st.sidebar.markdown('<h3 style="margin-top: 0; padding-top: 0; font-size: 1.15rem;">Filtros de Consulta</h3>', unsafe_allow_html=True)
 
 usar_filtro_hora = st.sidebar.checkbox("Restringir Franja Horaria", value=False)
 
