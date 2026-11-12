@@ -1766,7 +1766,7 @@ if nombre_usuario_sesion:
 
     with st.sidebar:
         renderizar_selector_presencia_sidebar()
-        st.markdown("---")
+        #st.markdown("---")
         
 st.sidebar.markdown("### Filtros de Consulta")
 
