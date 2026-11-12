@@ -400,7 +400,8 @@ def procesar_alertas_y_reportes():
             print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente_raw}' | Hs Hábiles: {hs_habiles} | Múltiplo actual: {multiplo_actual} | Último notificado: {ultimo_multiplo}")
 
             # Descarte de IA, bots y chats sin asignar (sin la cadena vacía)
-            if not agente_lower or any(b in agente_lower for b in ["monica", "mónica", "soporte", "soporte bims", "sin asignar", "none", "nan"]):
+            if not agente_lower or any(b in agente_lower for b in ["monica", "mónica", "soporte", "soporte bims", "sin asignar", "none", "nan", "l2 -", 
+                                                                   "laura almirón"]):
                 print(f"⏭️ [OMITIDO BOT/SIN ASIGNAR] Chat {c['id']} ({agente_raw})")
                 continue
 
