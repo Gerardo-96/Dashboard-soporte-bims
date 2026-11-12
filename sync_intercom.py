@@ -80,6 +80,7 @@ def obtener_agentes():
         print(f"⚠️ Error al consultar admins de Intercom: {e}")
     return agentes_dict
 
+"""
 def obtener_canal(conv):
     source_type = conv.get("source", {}).get("type", "chat")
     if source_type == "whatsapp":
@@ -88,6 +89,19 @@ def obtener_canal(conv):
         return "Correo electrónico"
     elif source_type == "conversation":
         return "Chat (conversation)"
+    else:
+        return "Chat (conversation)"
+"""
+
+def obtener_canal(conv):
+    source = conv.get("source", {}) or {}
+    source_type = str(source.get("type", "")).lower()
+    delivered_as = str(source.get("delivered_as", "")).lower()
+
+    if "whatsapp" in source_type or "whatsapp" in delivered_as:
+        return "WhatsApp"
+    elif any(k in source_type or k in delivered_as for k in ["email", "mail", "correo"]):
+        return "Correo electrónico"
     else:
         return "Chat (conversation)"
 
