@@ -366,12 +366,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 or agente_clean_check in ["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)", "mónica (bot)", "soporte", "soporte bims"]
                 or "bot" in agente_clean_check
             )
-            por_agente = "excluido" if es_excluido else "no excluido"ean_check = agente.strip().lower()
-            es_excluido = (
-                agente_clean_check in ["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)"]
-                or "bot" in agente_clean_check
-                or agente_clean_check == "soporte"
-            )
             por_agente = "excluido" if es_excluido else "no excluido"
 
             # =========================================================================
