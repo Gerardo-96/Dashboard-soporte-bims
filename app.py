@@ -852,28 +852,37 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
     return round(total_minutos_habiles, 1)
 
 def extraer_agente_desde_etiquetas_str(etiquetas_val):
-    """Extrae el nombre del agente si existe etiqueta 'Agente:', 'L2:' o 'agendamiento'."""
+    """Extrae el agente priorizando L2: <Nombre> -> Niv-L2 -> Agente: -> Agendamiento."""
     if pd.isna(etiquetas_val) or not str(etiquetas_val).strip():
         return None
     tags = [t.strip() for t in str(etiquetas_val).split(",") if t.strip()]
-    ag_l2 = None
+    
+    agente_l1 = None
+    agente_l2_especifico = None
+    tiene_nivel_l2 = False
     es_agendamiento = False
 
     for t in tags:
         t_lower = t.lower()
-        if t_lower.startswith("agente:"):
+        if t_lower.startswith("l2:"):
             partes = t.split(":", 1)
             if len(partes) > 1 and partes[1].strip():
-                return partes[1].strip()
-        elif t_lower.startswith("l2:"):
+                agente_l2_especifico = partes[1].strip()
+        elif t_lower == "niv-l2":
+            tiene_nivel_l2 = True
+        elif t_lower.startswith("agente:"):
             partes = t.split(":", 1)
             if len(partes) > 1 and partes[1].strip():
-                ag_l2 = f"L2 - {partes[1].strip()}"
+                agente_l1 = partes[1].strip()
         elif t_lower == "agendamiento" or "agendamiento" in t_lower:
             es_agendamiento = True
 
-    if ag_l2:
-        return ag_l2
+    if agente_l2_especifico:
+        return agente_l2_especifico
+    if tiene_nivel_l2:
+        return "L2 - Gerardo Gaona"
+    if agente_l1:
+        return agente_l1
     if es_agendamiento:
         return "Agendamiento"
     return None
