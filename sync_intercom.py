@@ -131,7 +131,7 @@ def extraer_agente_de_etiquetas(tags: list[str]) -> str | None:
     if agente_l2_especifico:
         return agente_l2_especifico
     if tiene_nivel_l2:
-        return "L2 - Gerardo Gaona"
+        return "Gerardo Gaona"
     if agente_l1:
         return agente_l1
     if es_agendamiento:
