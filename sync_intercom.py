@@ -300,8 +300,11 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             dt_creacion = datetime.fromtimestamp(created_at_orig, tz=tz_local)
 
             # A partir de hoy 11/11/2026 15:00 hs (PY), se prioriza la etiqueta
-            if dt_creacion >= DT_CORTE_LOCAL and agente_por_tag:
+            # Si tiene etiqueta L2 o el chat fue creado desde el corte, se prioriza la etiqueta
+            es_tag_l2 = any(str(t).strip().lower().startswith("l2:") or str(t).strip().lower() == "niv-l2" for t in tags)
+            if (dt_creacion >= DT_CORTE_LOCAL or es_tag_l2) and agente_por_tag:
                 agente = agente_por_tag
+                
             else:
                 # Fallback al esquema tradicional para chats anteriores o sin etiqueta
                 agente = "Sin asignar"
@@ -339,8 +342,31 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 if agente == "Sin asignar" and agente_por_tag:
                     agente = agente_por_tag
 
-            # Validación de por_agente: Humanos (L1, L2 y Agendamiento) entran a medición
+            # Validación de por_agente: Solo humanos L1 y Agendamiento entran a medición L1 (L2 e IA quedan excluidos)
             agente_clean_check = agente.strip().lower()
+            etiquetas_lower_check = ", ".join(tags).lower()
+
+            agentes_l2_excluidos = {
+                "martin moreira", "martín moreira",
+                "dario olmedo", "darío olmedo",
+                "ivan amarilla", "iván amarilla",
+                "gerardo gaona",
+                "hector trinidad", "héctor trinidad"
+            }
+
+            es_nivel_2 = (
+                "niv-l2" in etiquetas_lower_check
+                or "l2:" in etiquetas_lower_check
+                or agente_clean_check.startswith("l2")
+                or agente_clean_check in agentes_l2_excluidos
+            )
+
+            es_excluido = (
+                es_nivel_2
+                or agente_clean_check in ["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)", "mónica (bot)", "soporte", "soporte bims"]
+                or "bot" in agente_clean_check
+            )
+            por_agente = "excluido" if es_excluido else "no excluido"ean_check = agente.strip().lower()
             es_excluido = (
                 agente_clean_check in ["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)"]
                 or "bot" in agente_clean_check
