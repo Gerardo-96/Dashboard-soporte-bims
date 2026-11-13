@@ -509,8 +509,8 @@ def renderizar_panel_carga_asignador():
         agentes_omitir = [
             "monica", "mónica", "monica (bot)", "soporte", 
             "gerardo gaona", "gerardo.gaona@itti.digital", "soporte bims", "laura.almiron@tivahq.com", "laura almirón", "rebeca cartes",
-            "agendamiento", "l2 - martin moreira", "l2 - dario olmedo", "l2 - ivan amarilla", "l2 - gerardo gaona", "l2 - héctor trinidad", 
-            "none", "nan", "sin asignar", ""
+            "agendamiento", "l2 - martin moreira", "l2 - dario olmedo", "l2 - ivan amarilla", "l2 - gerardo gaona", "l2 - héctor trinidad",
+            "martin moreira", "dario olmedo", "ivan amarilla", "gerardo gaona", "héctor trinidad", "none", "nan", "sin asignar", ""
         ]
 
         # 1. Obtener lista maestra de agentes desde la tabla usuarios_autorizados
@@ -880,7 +880,7 @@ def extraer_agente_desde_etiquetas_str(etiquetas_val):
     if agente_l2_especifico:
         return agente_l2_especifico
     if tiene_nivel_l2:
-        return "L2 - Gerardo Gaona"
+        return "Gerardo Gaona"
     if agente_l1:
         return agente_l1
     if es_agendamiento:
