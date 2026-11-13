@@ -371,12 +371,22 @@ def procesar_alertas_y_reportes():
     
     if jid_grupo and hs_grupo_th > 0:
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
+            .select("id, created_at, tenant, agente_asignado, etiquetas, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
             .execute()
 
         chats_recuperados = res_abiertos.data or []
         print(f"📌 [PUNTO 2] Supabase devolvió {len(chats_recuperados)} chats abiertos.")
+
+        agentes_omitidos = [
+            "monica", "mónica", "soporte", "soporte bims", "sin asignar", "none", "nan",
+            "l2 -", "l2-", "laura almirón", "laura almiron",
+            "martin moreira", "martín moreira",
+            "dario olmedo", "darío olmedo",
+            "ivan amarilla", "iván amarilla",
+            "gerardo gaona",
+            "hector trinidad", "héctor trinidad"
+        ]
 
         for c in chats_recuperados:
             conv_id_str = str(c.get("id") or "").strip().lower()
@@ -385,6 +395,17 @@ def procesar_alertas_y_reportes():
                 
             agente_raw = str(c.get("agente_asignado") or "").strip()
             agente_lower = agente_raw.lower()
+            etiquetas_lower = str(c.get("etiquetas") or "").lower()
+
+            # Descarte inmediato si tiene etiqueta de Nivel 2 ("l2: ...", "niv-l2")
+            if "l2" in etiquetas_lower:
+                print(f"⏭️ [OMITIDO ETIQUETA L2] Chat {c['id']} ({agente_raw}) | Tags: {etiquetas_lower}")
+                continue
+
+            # Descarte de IA, bots, sin asignar y especialistas L2
+            if not agente_lower or any(b in agente_lower for b in agentes_omitidos):
+                print(f"⏭️ [OMITIDO BOT/SIN ASIGNAR/L2] Chat {c['id']} ({agente_raw})")
+                continue
 
             created_dt = parsear_fecha_utc(c.get("created_at"))
             if not created_dt:
@@ -398,12 +419,6 @@ def procesar_alertas_y_reportes():
             ultimo_multiplo = int(c.get("ultimo_multiplo_notificado") or 0)
 
             print(f"🔍 [EVALUANDO GRUPO] Chat: {c['id']} | Agente: '{agente_raw}' | Hs Hábiles: {hs_habiles} | Múltiplo actual: {multiplo_actual} | Último notificado: {ultimo_multiplo}")
-
-            # Descarte de IA, bots y chats sin asignar (sin la cadena vacía)
-            if not agente_lower or any(b in agente_lower for b in ["monica", "mónica", "soporte", "soporte bims", "sin asignar", "none", "nan", "l2 -", 
-                                                                   "laura almirón"]):
-                print(f"⏭️ [OMITIDO BOT/SIN ASIGNAR] Chat {c['id']} ({agente_raw})")
-                continue
 
             # Si alcanzó un nuevo múltiplo (1x, 2x, 3x...), dispara la alerta correspondiente
             if multiplo_actual >= 1 and multiplo_actual > ultimo_multiplo:
