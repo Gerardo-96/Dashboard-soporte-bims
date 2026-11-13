@@ -105,42 +105,40 @@ def obtener_canal(conv):
     else:
         return "Chat (conversation)"
 
-def extraer_agente_de_etiquetas(tags):
-    """
-    Evalúa las etiquetas de la conversación con el siguiente orden de prioridad:
-    1. 'Agente: Nombre' -> 'Nombre'
-    2. 'L2: Nombre'     -> 'L2 - Nombre' (para distinguir métricas de Nivel 2)
-    3. 'agendamiento'   -> 'Agendamiento'
-    """
-    agente_detectado = None
+def extraer_agente_de_etiquetas(tags: list[str]) -> str | None:
+    agente_l1 = None
+    agente_l2_especifico = None
+    tiene_nivel_l2 = False
     es_agendamiento = False
 
     for t in tags:
         t_str = str(t).strip()
         t_lower = t_str.lower()
 
-        # 1. Prioridad: Etiqueta directa de Agente
-        if t_lower.startswith("agente:"):
+        if t_lower.startswith("l2:"):
             partes = t_str.split(":", 1)
             if len(partes) > 1 and partes[1].strip():
-                return partes[1].strip()
-
-        # 2. Prioridad: Etiqueta de Nivel 2
-        elif t_lower.startswith("l2:"):
+                agente_l2_especifico = partes[1].strip()
+        elif t_lower == "niv-l2":
+            tiene_nivel_l2 = True
+        elif t_lower.startswith("agente:"):
             partes = t_str.split(":", 1)
             if len(partes) > 1 and partes[1].strip():
-                agente_detectado = f"L2 - {partes[1].strip()}"
-
-        # 3. Detección de agendamiento
+                agente_l1 = partes[1].strip()
         elif t_lower == "agendamiento" or "agendamiento" in t_lower:
             es_agendamiento = True
 
-    if agente_detectado:
-        return agente_detectado
+    if agente_l2_especifico:
+        return agente_l2_especifico
+    if tiene_nivel_l2:
+        return "L2 - Gerardo Gaona"
+    if agente_l1:
+        return agente_l1
     if es_agendamiento:
         return "Agendamiento"
 
     return None
+
 
 def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None):
     """
