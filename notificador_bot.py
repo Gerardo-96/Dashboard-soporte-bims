@@ -316,7 +316,7 @@ def procesar_alertas_y_reportes():
             .select("id, created_at, canal, etiquetas, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
             .is_("primera_respuesta_min", "null")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
-            .neq("canal", "Correo electrónico")
+            .neq("canal", "Correo electrónico")\
             .execute()
 
         for c in (res_activos.data or []):
@@ -380,7 +380,7 @@ def procesar_alertas_y_reportes():
         res_abiertos = supabase.table("conversaciones")\
             .select("id, created_at, canal, tenant, agente_asignado, etiquetas, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
-            .neq("canal", "Correo electrónico")
+            .neq("canal", "Correo electrónico")\
             .execute()
 
         chats_recuperados = res_abiertos.data or []
