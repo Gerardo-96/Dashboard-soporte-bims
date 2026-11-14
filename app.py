@@ -3563,7 +3563,7 @@ with tab_resumen:
 
 @st.fragment
 def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
-    st.markdown(f"### Seguimiento & Productividad Nivel 2 (`{f_desde_v}` al `{f_hasta_v}`)")
+    st.markdown(f"### Seguimiento & Productividad L2 (`{f_desde_v}` al `{f_hasta_v}`)")
     st.caption("Métricas exclusivas de especialistas L2: chats escalados, correos electrónicos gestionados y tiempos hábiles de cierre.")
 
     agentes_l2_set = {
@@ -3705,6 +3705,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             )
             fig_l2_ch.update_traces(textposition="outside", marker=dict(cornerradius=6))
             fig_l2_ch.update_layout(
+                hovermode=False,
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
                 yaxis=dict(title=None, showticklabels=False, showgrid=False), height=340, margin=dict(t=45, b=20, l=15, r=15)
@@ -3720,6 +3721,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             )
             fig_l2_em.update_traces(textposition="outside", marker=dict(cornerradius=6))
             fig_l2_em.update_layout(
+                hovermode=False,
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
                 yaxis=dict(title=None, showticklabels=False, showgrid=False), height=340, margin=dict(t=45, b=20, l=15, r=15)
@@ -3744,6 +3746,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
                     showarrow=False, yshift=10, font=dict(color="#f8fafc", size=12)
                 )
             fig_l2_tot.update_layout(
+                hovermode=False,
                 barmode="stack", title="<b>Total Gestionado L2 (Chats + Correos)</b>",
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
@@ -3768,6 +3771,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             )
             fig_sla_ch.update_traces(textposition="outside", marker=dict(cornerradius=6))
             fig_sla_ch.update_layout(
+                hovermode=False,
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
                 yaxis=dict(title="Horas Hábiles", showgrid=True, gridcolor="#1e293b"), height=340, margin=dict(t=45, b=20, l=20, r=20)
@@ -3784,17 +3788,18 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             )
             fig_sla_em.update_traces(textposition="outside", marker=dict(cornerradius=6))
             fig_sla_em.update_layout(
+                hovermode=False,
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
                 yaxis=dict(title="Horas Hábiles", showgrid=True, gridcolor="#1e293b"), height=340, margin=dict(t=45, b=20, l=20, r=20)
             )
             st.plotly_chart(fig_sla_em, use_container_width=True)
     else:
-        st.info("No hay casos registrados para especialistas L2 en el rango de fechas seleccionado.")
+        st.info("No hay casos registrados para agentes L2 en el rango de fechas seleccionado.")
 
     # Tabla de Backlog Activo L2
     st.markdown("---")
-    st.markdown(f"#### Backlog Activo Pendiente en Nivel 2 ({tot_pendientes_l2} casos)")
+    st.markdown(f"#### Backlog Activo Pendiente en L2 ({tot_pendientes_l2} casos)")
     if not df_l2_abiertos.empty:
         now_py_l2 = pd.Timestamp.now(tz="America/Asuncion")
         df_l2_abiertos["Hs Hábiles Abierto"] = df_l2_abiertos.apply(
@@ -3809,7 +3814,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Caso", display_text=r".*/(\d+)"),
                 "tipo_canal_l2": "Canal",
-                "especialista_l2": "Especialista L2",
+                "especialista_l2": "Agente L2",
                 "created_at_fmt": "Fecha Ingreso",
                 "Hs Hábiles Abierto": "Hs Hábiles Abierto",
                 "ai_title": "Título IA",
