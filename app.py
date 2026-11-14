@@ -2286,6 +2286,9 @@ def renderizar_alertas_en_vivo():
         
         # 2. FILTRO EXCLUSIVO: Solo consideramos chats con agente "Sin Asignar" / vacíos / "soporte"
         # (Se descartan Mónica y cualquier agente humano ya asignado)
+        agentes_permitidos_sin_asignar = ["sin asignar", "none", "nan", ""]
+        df_activos["agente_clean"] = df_activos["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
+        
         df_activos = df_activos[
             df_activos["agente_clean"].isin(agentes_permitidos_sin_asignar) | 
             df_activos["agente_clean"].str.contains("sin asignar", na=False)
