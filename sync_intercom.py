@@ -211,8 +211,6 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
 
         for conv_summary in convs:
             canal = obtener_canal(conv_summary)
-            if canal == "Correo electrónico":
-                continue
 
             # Timestamp de actualización del sumario
             updated_at_orig = conv_summary.get("updated_at")
@@ -295,6 +293,26 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             # 4. RESOLUCIÓN DE AGENTE: ETIQUETAS (Agente: / L2: / agendamiento)
             # =========================================================================
             tags = [tag.get("name") for tag in conv.get("tags", {}).get("tags", [])]
+
+            tags_lower = [str(t).strip().lower() for t in tags]
+            es_spam = "spam" in tags_lower or "spam-erp" in tags_lower
+            if es_spam:
+                continue
+
+            es_correo = (canal == "Correo electrónico") or ("correo" in tags_lower)
+            if es_correo:
+                canal = "Correo electrónico"
+
+            # Contar cantidad total de respuestas humanas en todo el hilo
+            cantidad_respuestas_agente = sum(
+                1 for p in parts
+                if p.get("part_type") == "comment"
+                and p.get("author", {}).get("type") in ["admin", "user_admin"]
+                and not p.get("author", {}).get("from_ai_agent", False)
+                and not p.get("author", {}).get("is_ai_answer", False)
+                and not any(b in str(p.get("author", {}).get("name", "")).lower() for b in ["monica", "mónica", "fin", "bot"])
+            )
+            
             agente_por_tag = extraer_agente_de_etiquetas(tags)
 
             dt_creacion = datetime.fromtimestamp(created_at_orig, tz=tz_local)
@@ -362,8 +380,9 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             )
 
             es_excluido = (
-                es_nivel_2
-                or agente_clean_check in ["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)", "mónica (bot)", "soporte", "soporte bims"]
+                es_correo
+                or es_nivel_2
+                or agente_clean_check in ["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)", "mónica (bot)", "laura almirón", "soporte", "soporte bims"]
                 or "bot" in agente_clean_check
             )
             por_agente = "excluido" if es_excluido else "no excluido"
@@ -446,7 +465,8 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 "nivel": nivel,
                 "estado": estado,
                 "updated_at": fecha_actualizacion_iso,
-                "ai_title": ai_title
+                "ai_title": ai_title,
+                "cantidad_respuestas_agente": cantidad_respuestas_agente
             }
             lote_registros.append(registro)
 
