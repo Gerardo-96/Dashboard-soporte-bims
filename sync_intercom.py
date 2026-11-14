@@ -419,6 +419,8 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             cliente = next((t for t in tags if t.startswith("cli-")), "")
             tipo_contacto = next((t for t in tags if t.startswith("tipo-")), "")
             nivel = next((t for t in tags if t.startswith("Niv-")), "")
+            if not nivel and any(str(t).strip().lower().startswith("l2:") for t in tags):
+                nivel = "Niv-L2"
             etiquetas_str = ", ".join(tags)
 
             custom_attrs = conv.get("custom_attributes", {}) or {}
