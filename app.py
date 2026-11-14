@@ -3825,7 +3825,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
 # FUNCIÓN AISLADA DEL WBR CON ST.FRAGMENT (BLINDADA CONTRA NameError)
 # ==========================================
 @st.fragment
-def renderizar_informe_wbr(df_base_in):
+def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     st.markdown("""
         <div style="display: flex; align-items: center; gap: 12px;">
             <div>
@@ -5244,7 +5244,7 @@ if tab_l2 is not None:
         renderizar_panel_nivel_2(df_all, df_correos_all, f_desde_l2, f_hasta_l2)
 if tab_wbr is not None:
     with tab_wbr:
-        renderizar_informe_wbr(df_all)
+        renderizar_informe_wbr(df_all, df_correos_all)
 
 
 if tab_admin is not None:
