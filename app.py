@@ -451,22 +451,25 @@ def obtener_cargas_agentes_db(hoy_inicio_utc):
 
     # 1. Chats abiertos actualmente
     res_abiertos = supabase.table("conversaciones")\
-        .select("id, agente_asignado, etiquetas, estado, created_at, updated_at, fecha_cierre")\
+        .select("id, agente_asignado, canal, etiquetas, estado, created_at, updated_at, fecha_cierre")\
         .not_.in_("estado", estados_cerrados_list)\
+        .neq("canal", "Correo electrónico")\
         .execute()
 
     # 2. Chats cerrados hoy (donde tanto el cierre como la asignación/creación sean de hoy)
     res_cerrados_hoy = supabase.table("conversaciones")\
-        .select("id, agente_asignado, etiquetas, estado, created_at, updated_at, fecha_cierre")\
+        .select("id, agente_asignado, canal, etiquetas, estado, created_at, updated_at, fecha_cierre")\
         .in_("estado", estados_cerrados_list)\
+        .neq("canal", "Correo electrónico")\
         .gte("fecha_cierre", hoy_inicio_utc)\
         .gte("created_at", hoy_inicio_utc)\
         .execute()
 
     # 3. Respaldo para chats cerrados cuya fecha_cierre sea NULL
     res_cerrados_respaldo = supabase.table("conversaciones")\
-        .select("id, agente_asignado, etiquetas, estado, created_at, updated_at, fecha_cierre")\
+        .select("id, agente_asignado, canal, etiquetas, estado, created_at, updated_at, fecha_cierre")\
         .in_("estado", estados_cerrados_list)\
+        .neq("canal", "Correo electrónico")\
         .is_("fecha_cierre", "null")\
         .gte("updated_at", hoy_inicio_utc)\
         .gte("created_at", hoy_inicio_utc)\
@@ -525,6 +528,15 @@ def renderizar_panel_carga_asignador():
             pass
 
         df_c = pd.DataFrame(data_cargas) if data_cargas else pd.DataFrame()
+        
+        # Excluir correos electrónicos, spam y escalamientos L2 de la carga en vivo L1
+        if not df_c.empty:
+            canal_c = df_c["canal"].fillna("").astype(str).str.lower() if "canal" in df_c.columns else pd.Series("", index=df_c.index)
+            tags_c = df_c["etiquetas"].fillna("").astype(str).str.lower() if "etiquetas" in df_c.columns else pd.Series("", index=df_c.index)
+            df_c = df_c[
+                ~canal_c.str.contains("correo|email|mail", regex=True)
+                & ~tags_c.str.contains("correo|spam|l2", regex=True)
+            ].copy()
 
         # Garantizar presencia de columnas en df_c
         for col in ["id", "agente_asignado", "estado", "fecha_cierre", "updated_at", "created_at"]:
@@ -1619,6 +1631,21 @@ if "input_f_hasta" not in st.session_state:
 # ==========================================
 df_all = obtener_datos()
 
+if not df_all.empty:
+    canal_all_lower = df_all["canal"].fillna("").astype(str).str.lower() if "canal" in df_all.columns else pd.Series("", index=df_all.index)
+    tags_all_lower = df_all["etiquetas"].fillna("").astype(str).str.lower() if "etiquetas" in df_all.columns else pd.Series("", index=df_all.index)
+
+    es_correo_all = canal_all_lower.str.contains("correo|email|mail", regex=True) | tags_all_lower.str.contains("correo", regex=False)
+    es_spam_all = tags_all_lower.str.contains("spam", regex=False)
+
+    # DataFrame reservado exclusivamente para el futuro módulo/gráfico de Correos (sin Spam)
+    df_correos_all = df_all[es_correo_all & ~es_spam_all].copy()
+
+    # DataFrame principal para SLA, Resumen, Exportación y WBR (libre de correos y spam)
+    df_all = df_all[~es_correo_all & ~es_spam_all].copy()
+else:
+    df_correos_all = pd.DataFrame()
+
 if not df_all.empty and "updated_at_local" in df_all.columns:
     # Tomamos la fecha máxima real parseada
     max_updated_dt = df_all["updated_at_local"].dropna().max()
@@ -2226,11 +2253,12 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        COLUMNAS_ALERTAS = "id, created_at, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
+        COLUMNAS_ALERTAS = "id, created_at, etiquetas, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
 
         res = supabase.table("conversaciones")\
             .select(COLUMNAS_ALERTAS)\
             .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+            .neq("canal", "Correo electrónico")\
             .order("created_at", desc=True)\
             .limit(100)\
             .execute()
@@ -2254,17 +2282,18 @@ def renderizar_alertas_en_vivo():
         
         # 2. FILTRO EXCLUSIVO: Solo consideramos chats con agente "Sin Asignar" / vacíos / "soporte"
         # (Se descartan Mónica y cualquier agente humano ya asignado)
-        agentes_permitidos_sin_asignar = ["sin asignar", "none", "nan", "", "soporte"]
-        df_activos["agente_clean"] = df_activos["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
-        
         df_activos = df_activos[
             df_activos["agente_clean"].isin(agentes_permitidos_sin_asignar) | 
             df_activos["agente_clean"].str.contains("sin asignar", na=False)
         ].copy()
 
-        if "canal" in df_activos.columns:
-            df_activos["canal_clean"] = df_activos["canal"].fillna("").astype(str).str.strip().str.lower()
-            df_activos = df_activos[~df_activos["canal_clean"].isin(["correo electrónico", "email", "correo electronico"])].copy()
+        canal_act = df_activos["canal"].fillna("").astype(str).str.strip().str.lower() if "canal" in df_activos.columns else pd.Series("", index=df_activos.index)
+        tags_act = df_activos["etiquetas"].fillna("").astype(str).str.strip().str.lower() if "etiquetas" in df_activos.columns else pd.Series("", index=df_activos.index)
+
+        df_activos = df_activos[
+            ~canal_act.str.contains("correo|email|mail", regex=True)
+            & ~tags_act.str.contains("correo|spam|l2", regex=True)
+        ].copy()
 
         if not df_activos.empty:
             df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
