@@ -4145,7 +4145,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             "sin asignar", "none", "nan", ""
         ]
         
-        df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+        df_target_cerrados["agente_nom"] = df_target_cerrados.apply(agrupar_agente_donut_wbr, axis=1)
         es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
         es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
         
@@ -4153,6 +4153,29 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         cnt_cerrados_humanos = int((~es_omitido_torta).sum())
         pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
 
+        agentes_l2_donut = {
+            "martin moreira", "martín moreira",
+            "dario olmedo", "darío olmedo",
+            "ivan amarilla", "iván amarilla",
+            "gerardo gaona",
+            "hector trinidad", "héctor trinidad"
+        }
+    
+        def agrupar_agente_donut_wbr(row):
+            ag = str(row.get("agente_asignado") or "").strip()
+            ag_low = ag.lower()
+            ag_clean = ag_low.replace("l2 -", "").replace("l2:", "").strip()
+            tags_low = str(row.get("etiquetas") or "").lower()
+    
+            if (
+                ag_low.startswith("l2")
+                or ag_clean in agentes_l2_donut
+                or "niv-l2" in tags_low
+                or "l2:" in tags_low
+            ):
+                return "Nivel 2 (L2)"
+            return ag if ag else "Sin asignar"
+        
         df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
         df_ag_pie.columns = ["Agente", "Cerrados"]
 
