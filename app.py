@@ -3576,8 +3576,8 @@ with tab_resumen:
 
 @st.fragment
 def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
-    st.markdown(f"### Seguimiento & Productividad L2 (`{f_desde_v}` al `{f_hasta_v}`)")
-    st.caption("Métricas exclusivas de especialistas L2: chats escalados, correos electrónicos gestionados y tiempos hábiles de cierre.")
+    st.markdown(f"### Seguimiento & Productividad Nivel 2 (`{f_desde_v}` al `{f_hasta_v}`)")
+    st.caption("Métricas exclusivas de especialistas L2: casos cerrados en el período seleccionado y tiempos hábiles de resolución.")
 
     agentes_l2_set = {
         "martin moreira", "martín moreira",
@@ -3599,8 +3599,8 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
         "héctor trinidad": "Héctor Trinidad"
     }
 
-    def filtrar_y_normalizar_l2(df_src, tipo_canal):
-        if df_src.empty:
+    def preparar_universo_l2(df_src, tipo_canal):
+        if df_src is None or df_src.empty:
             return pd.DataFrame()
         df_tmp = df_src.copy()
         ag_low = df_tmp["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
@@ -3627,6 +3627,20 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
         estado_low = df_tmp["estado"].fillna("").astype(str).str.strip().str.lower()
         df_tmp["es_cerrado_l2"] = estado_low.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"])
 
+        # Fecha efectiva de cierre (para imputar productividad al día en que se resolvió el caso)
+        if "fecha_cierre_dt" in df_tmp.columns:
+            fecha_ref_cierre = df_tmp["fecha_cierre_dt"].copy()
+            if "updated_at_dt" in df_tmp.columns:
+                fecha_ref_cierre = fecha_ref_cierre.fillna(df_tmp["updated_at_dt"])
+            elif "created_at_dt" in df_tmp.columns:
+                fecha_ref_cierre = fecha_ref_cierre.fillna(df_tmp["created_at_dt"])
+            df_tmp["fecha_cierre_solo"] = fecha_ref_cierre.dt.date
+        elif "fecha_solo" in df_tmp.columns:
+            df_tmp["fecha_cierre_solo"] = df_tmp["fecha_solo"]
+        else:
+            df_tmp["fecha_cierre_solo"] = pd.NaT
+
+        # Cálculo exacto en horas hábiles desde created_at_dt hasta fecha_cierre_dt
         if "created_at_dt" in df_tmp.columns and "fecha_cierre_dt" in df_tmp.columns:
             df_tmp["horas_habiles_cierre"] = df_tmp.apply(
                 lambda r: round(calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"]) / 60.0, 2)
@@ -3639,56 +3653,59 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
 
         return df_tmp
 
-    # Filtrar por rango de fechas seleccionado en el sidebar
-    df_chats_rango = df_chats_in[
-        (df_chats_in["fecha_solo"] >= f_desde_v) & (df_chats_in["fecha_solo"] <= f_hasta_v)
-    ].copy() if (not df_chats_in.empty and "fecha_solo" in df_chats_in.columns) else pd.DataFrame()
+    # 1. Universo completo L2 (chats y correos)
+    df_l2_chats_all = preparar_universo_l2(df_chats_in, "Chat")
+    df_l2_correos_all = preparar_universo_l2(df_correos_in, "Correo")
 
-    df_correos_rango = df_correos_in[
-        (df_correos_in["fecha_solo"] >= f_desde_v) & (df_correos_in["fecha_solo"] <= f_hasta_v)
-    ].copy() if (not df_correos_in.empty and "fecha_solo" in df_correos_in.columns) else pd.DataFrame()
+    # 2. Filtrar SOLO CERRADOS cuya fecha de cierre caiga dentro del rango seleccionado [f_desde_v, f_hasta_v]
+    df_l2_chats_cerrados = df_l2_chats_all[
+        (df_l2_chats_all["es_cerrado_l2"]) &
+        (df_l2_chats_all["fecha_cierre_solo"] >= f_desde_v) &
+        (df_l2_chats_all["fecha_cierre_solo"] <= f_hasta_v)
+    ].copy() if not df_l2_chats_all.empty else pd.DataFrame()
 
-    df_l2_chats = filtrar_y_normalizar_l2(df_chats_rango, "Chat")
-    df_l2_correos = filtrar_y_normalizar_l2(df_correos_rango, "Correo")
+    df_l2_correos_cerrados = df_l2_correos_all[
+        (df_l2_correos_all["es_cerrado_l2"]) &
+        (df_l2_correos_all["fecha_cierre_solo"] >= f_desde_v) &
+        (df_l2_correos_all["fecha_cierre_solo"] <= f_hasta_v)
+    ].copy() if not df_l2_correos_all.empty else pd.DataFrame()
 
-    # Backlog abierto histórico de L2 (sin importar fecha de creación)
-    df_l2_chats_all = filtrar_y_normalizar_l2(df_chats_in, "Chat")
-    df_l2_correos_all = filtrar_y_normalizar_l2(df_correos_in, "Correo")
+    # 3. Backlog abierto histórico actual de L2
     df_l2_abiertos = pd.concat([
         df_l2_chats_all[~df_l2_chats_all["es_cerrado_l2"]] if not df_l2_chats_all.empty else pd.DataFrame(),
         df_l2_correos_all[~df_l2_correos_all["es_cerrado_l2"]] if not df_l2_correos_all.empty else pd.DataFrame()
     ], ignore_index=True)
 
-    tot_chats_l2 = len(df_l2_chats)
-    tot_correos_l2 = len(df_l2_correos)
+    tot_chats_l2 = len(df_l2_chats_cerrados)
+    tot_correos_l2 = len(df_l2_correos_cerrados)
     tot_combinado_l2 = tot_chats_l2 + tot_correos_l2
     tot_pendientes_l2 = len(df_l2_abiertos)
 
-    prom_hs_chats = round(df_l2_chats["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_chats.empty and df_l2_chats["horas_habiles_cierre"].notna().any() else 0.0
-    prom_hs_correos = round(df_l2_correos["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_correos.empty and df_l2_correos["horas_habiles_cierre"].notna().any() else 0.0
+    prom_hs_chats = round(df_l2_chats_cerrados["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_chats_cerrados.empty and df_l2_chats_cerrados["horas_habiles_cierre"].notna().any() else 0.0
+    prom_hs_correos = round(df_l2_correos_cerrados["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_correos_cerrados.empty and df_l2_correos_cerrados["horas_habiles_cierre"].notna().any() else 0.0
 
     # KPIs superiores
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.markdown(f'<div class="metric-card" style="border-left: 4px solid #0284c7;"><div class="metric-card-title">Chats Escalados L2</div><div class="metric-card-value">{tot_chats_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_chats} hs hábiles</div></div>', unsafe_allow_html=True)
-    k2.markdown(f'<div class="metric-card" style="border-left: 4px solid #38bdf8;"><div class="metric-card-title">Correos Atendidos L2</div><div class="metric-card-value">{tot_correos_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_correos} hs hábiles</div></div>', unsafe_allow_html=True)
-    k3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">Total Gestionado L2</div><div class="metric-card-value" style="color:#34d399;">{tot_combinado_l2}</div><div class="metric-card-sub">Chats + Correos en rango</div></div>', unsafe_allow_html=True)
+    k1.markdown(f'<div class="metric-card" style="border-left: 4px solid #0284c7;"><div class="metric-card-title">Chats Cerrados L2</div><div class="metric-card-value">{tot_chats_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_chats} hs hábiles</div></div>', unsafe_allow_html=True)
+    k2.markdown(f'<div class="metric-card" style="border-left: 4px solid #38bdf8;"><div class="metric-card-title">Correos Cerrados L2</div><div class="metric-card-value">{tot_correos_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_correos} hs hábiles</div></div>', unsafe_allow_html=True)
+    k3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">Total Cerrado L2</div><div class="metric-card-value" style="color:#34d399;">{tot_combinado_l2}</div><div class="metric-card-sub">Chats + Correos cerrados</div></div>', unsafe_allow_html=True)
     k4.markdown(f'<div class="metric-card" style="border-left: 4px solid #f97316;"><div class="metric-card-title">Backlog Abierto L2</div><div class="metric-card-value" style="color:#fb923c;">{tot_pendientes_l2}</div><div class="metric-card-sub">Pendientes activos actuales</div></div>', unsafe_allow_html=True)
-    resp_hilos_l2 = int(pd.to_numeric(df_l2_correos.get("cantidad_respuestas_agente", 0), errors="coerce").fillna(0).sum()) if not df_l2_correos.empty else 0
-    k5.markdown(f'<div class="metric-card" style="border-left: 4px solid #818cf8;"><div class="metric-card-title">Respuestas en Hilos</div><div class="metric-card-value">{resp_hilos_l2}</div><div class="metric-card-sub">Interacciones correo L2</div></div>', unsafe_allow_html=True)
+    resp_hilos_l2 = int(pd.to_numeric(df_l2_correos_cerrados.get("cantidad_respuestas_agente", 0), errors="coerce").fillna(0).sum()) if not df_l2_correos_cerrados.empty else 0
+    k5.markdown(f'<div class="metric-card" style="border-left: 4px solid #818cf8;"><div class="metric-card-title">Respuestas en Hilos</div><div class="metric-card-value">{resp_hilos_l2}</div><div class="metric-card-sub">En correos cerrados L2</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Preparar lista unificada de especialistas presentes
+    # Preparar lista unificada de especialistas con casos cerrados en el período
     especialistas = sorted(list(
-        set(df_l2_chats["especialista_l2"].tolist() if not df_l2_chats.empty else []) |
-        set(df_l2_correos["especialista_l2"].tolist() if not df_l2_correos.empty else [])
+        set(df_l2_chats_cerrados["especialista_l2"].tolist() if not df_l2_chats_cerrados.empty else []) |
+        set(df_l2_correos_cerrados["especialista_l2"].tolist() if not df_l2_correos_cerrados.empty else [])
     ))
 
     if especialistas:
         rows_l2 = []
         for esp in especialistas:
-            sub_ch = df_l2_chats[df_l2_chats["especialista_l2"] == esp] if not df_l2_chats.empty else pd.DataFrame()
-            sub_em = df_l2_correos[df_l2_correos["especialista_l2"] == esp] if not df_l2_correos.empty else pd.DataFrame()
+            sub_ch = df_l2_chats_cerrados[df_l2_chats_cerrados["especialista_l2"] == esp] if not df_l2_chats_cerrados.empty else pd.DataFrame()
+            sub_em = df_l2_correos_cerrados[df_l2_correos_cerrados["especialista_l2"] == esp] if not df_l2_correos_cerrados.empty else pd.DataFrame()
 
             c_ch = len(sub_ch)
             c_em = len(sub_em)
@@ -3706,14 +3723,14 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
 
         df_graf_l2 = pd.DataFrame(rows_l2).sort_values(by="Total", ascending=False)
 
-        # FILA 1: 3 Gráficos de barras (Chats L2 | Correos L2 | Total Chats + Correos)
+        # FILA 1: 3 Gráficos de barras (Chats Cerrados L2 | Correos Cerrados L2 | Total Cerrado Chats + Correos)
         g1, g2, g3 = st.columns(3)
 
         with g1:
             fig_l2_ch = px.bar(
                 df_graf_l2.sort_values("Chats", ascending=False),
                 x="Especialista", y="Chats", text="Chats",
-                title="<b>Chats Atendidos por Agente L2</b>",
+                title="<b>Chats Cerrados por Agente L2</b>",
                 color_discrete_sequence=["#0284c7"]
             )
             fig_l2_ch.update_traces(textposition="outside", marker=dict(cornerradius=6))
@@ -3729,7 +3746,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             fig_l2_em = px.bar(
                 df_graf_l2.sort_values("Correos", ascending=False),
                 x="Especialista", y="Correos", text="Correos",
-                title="<b>Correos Atendidos por Agente L2</b>",
+                title="<b>Correos Cerrados por Agente L2</b>",
                 color_discrete_sequence=["#38bdf8"]
             )
             fig_l2_em.update_traces(textposition="outside", marker=dict(cornerradius=6))
@@ -3760,7 +3777,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
                 )
             fig_l2_tot.update_layout(
                 hovermode=False,
-                barmode="stack", title="<b>Total Gestionado L2 (Chats + Correos)</b>",
+                barmode="stack", title="<b>Total Cerrado L2 (Chats + Correos)</b>",
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
                 yaxis=dict(title=None, showticklabels=False, showgrid=False),
@@ -3808,11 +3825,11 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             )
             st.plotly_chart(fig_sla_em, use_container_width=True)
     else:
-        st.info("No hay casos registrados para agentes L2 en el rango de fechas seleccionado.")
+        st.info("No hay casos cerrados por especialistas L2 en el rango de fechas seleccionado.")
 
     # Tabla de Backlog Activo L2
     st.markdown("---")
-    st.markdown(f"#### Backlog Activo Pendiente en L2 ({tot_pendientes_l2} casos)")
+    st.markdown(f"#### Backlog Activo Pendiente en Nivel 2 ({tot_pendientes_l2} casos)")
     if not df_l2_abiertos.empty:
         now_py_l2 = pd.Timestamp.now(tz="America/Asuncion")
         df_l2_abiertos["Hs Hábiles Abierto"] = df_l2_abiertos.apply(
@@ -3827,7 +3844,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             column_config={
                 "intercom_url": st.column_config.LinkColumn("ID Caso", display_text=r".*/(\d+)"),
                 "tipo_canal_l2": "Canal",
-                "especialista_l2": "Agente L2",
+                "especialista_l2": "Especialista L2",
                 "created_at_fmt": "Fecha Ingreso",
                 "Hs Hábiles Abierto": "Hs Hábiles Abierto",
                 "ai_title": "Título IA",
