@@ -4144,14 +4144,6 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             "monica", "mónica", "monica (bot)", 
             "sin asignar", "none", "nan", ""
         ]
-        
-        df_target_cerrados["agente_nom"] = df_target_cerrados.apply(agrupar_agente_donut_wbr, axis=1)
-        es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
-        es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
-        
-        cnt_cerrados_ia = int(es_cerrado_ia.sum())
-        cnt_cerrados_humanos = int((~es_omitido_torta).sum())
-        pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
 
         agentes_l2_donut = {
             "martin moreira", "martín moreira",
@@ -4160,13 +4152,13 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             "gerardo gaona",
             "hector trinidad", "héctor trinidad"
         }
-    
+
         def agrupar_agente_donut_wbr(row):
             ag = str(row.get("agente_asignado") or "").strip()
             ag_low = ag.lower()
             ag_clean = ag_low.replace("l2 -", "").replace("l2:", "").strip()
             tags_low = str(row.get("etiquetas") or "").lower()
-    
+
             if (
                 ag_low.startswith("l2")
                 or ag_clean in agentes_l2_donut
@@ -4176,6 +4168,15 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 return "Nivel 2 (L2)"
             return ag if ag else "Sin asignar"
         
+        df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+        es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
+        es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
+        
+        cnt_cerrados_ia = int(es_cerrado_ia.sum())
+        cnt_cerrados_humanos = int((~es_omitido_torta).sum())
+        pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
+
+        df_target_cerrados["agente_nom"] = df_target_cerrados.apply(agrupar_agente_donut_wbr, axis=1)
         df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
         df_ag_pie.columns = ["Agente", "Cerrados"]
 
@@ -4208,7 +4209,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
 
         cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
         empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
-        num_agentes_activos = df_ag_pie["Agente"].nunique()
+        num_agentes_activos = df_ag_pie[df_ag_pie["Agente"] != "Nivel 2 (L2)"]["Agente"].nunique()
         prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
 
         st.markdown(f"""
