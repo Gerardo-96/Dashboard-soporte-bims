@@ -1093,7 +1093,8 @@ COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
     "feedback, agente_evaluado, tenant, company, nombre_contacto, "
-    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado, ticket_relacionado, ai_title"
+    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado, "
+    "ticket_relacionado, ai_title, cantidad_respuestas_agente"
 )
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -2209,6 +2210,7 @@ titulos_tabs = [
 ]
 
 if puede_ver_wbr:
+    titulos_tabs.append("Gestión L2")
     titulos_tabs.append("Informe WBR Gerencial")
 
 if puede_ver_admin:
@@ -2225,8 +2227,10 @@ tab_operativo = tabs_creadas[idx]; idx += 1
 tab_carga_vivo = tabs_creadas[idx]; idx += 1
 tab_resumen = tabs_creadas[idx]; idx += 1
 
+tab_l2 = None
 tab_wbr = None
 if puede_ver_wbr:
+    tab_l2 = tabs_creadas[idx]; idx += 1
     tab_wbr = tabs_creadas[idx]; idx += 1
 
 tab_admin = None
@@ -3548,6 +3552,272 @@ with tab_resumen:
 
         st.markdown("---")
 
+
+
+# ==========================================
+# Sección de L2                                                      
+# ==========================================
+
+@st.fragment
+def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
+    st.markdown(f"### Seguimiento & Productividad Nivel 2 (`{f_desde_v}` al `{f_hasta_v}`)")
+    st.caption("Métricas exclusivas de especialistas L2: chats escalados, correos electrónicos gestionados y tiempos hábiles de cierre.")
+
+    agentes_l2_set = {
+        "martin moreira", "martín moreira",
+        "dario olmedo", "darío olmedo",
+        "ivan amarilla", "iván amarilla",
+        "gerardo gaona",
+        "hector trinidad", "héctor trinidad"
+    }
+
+    mapa_normalizacion_l2 = {
+        "martin moreira": "Martín Moreira",
+        "martín moreira": "Martín Moreira",
+        "dario olmedo": "Darío Olmedo",
+        "darío olmedo": "Darío Olmedo",
+        "ivan amarilla": "Iván Amarilla",
+        "iván amarilla": "Iván Amarilla",
+        "gerardo gaona": "Gerardo Gaona",
+        "hector trinidad": "Héctor Trinidad",
+        "héctor trinidad": "Héctor Trinidad"
+    }
+
+    def filtrar_y_normalizar_l2(df_src, tipo_canal):
+        if df_src.empty:
+            return pd.DataFrame()
+        df_tmp = df_src.copy()
+        ag_low = df_tmp["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
+        ag_sin_prefijo = ag_low.str.replace(r"^l2\s*[-:]\s*", "", regex=True).str.strip()
+        tags_low = df_tmp["etiquetas"].fillna("").astype(str).str.lower() if "etiquetas" in df_tmp.columns else pd.Series("", index=df_tmp.index)
+
+        es_l2 = (
+            ag_low.str.startswith("l2")
+            | ag_sin_prefijo.isin(agentes_l2_set)
+            | tags_low.str.contains("niv-l2|l2:", regex=True)
+        )
+        df_tmp = df_tmp[es_l2].copy()
+        if df_tmp.empty:
+            return df_tmp
+
+        def nom_l2(val):
+            s = str(val or "").strip()
+            s_clean = s.lower().replace("l2 -", "").replace("l2:", "").strip()
+            return mapa_normalizacion_l2.get(s_clean, s if s else "L2 Sin Asignar")
+
+        df_tmp["especialista_l2"] = df_tmp["agente_asignado"].apply(nom_l2)
+        df_tmp["tipo_canal_l2"] = tipo_canal
+
+        estado_low = df_tmp["estado"].fillna("").astype(str).str.strip().str.lower()
+        df_tmp["es_cerrado_l2"] = estado_low.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"])
+
+        if "created_at_dt" in df_tmp.columns and "fecha_cierre_dt" in df_tmp.columns:
+            df_tmp["horas_habiles_cierre"] = df_tmp.apply(
+                lambda r: round(calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"]) / 60.0, 2)
+                if (r["es_cerrado_l2"] and pd.notna(r["created_at_dt"]) and pd.notna(r["fecha_cierre_dt"]))
+                else np.nan,
+                axis=1
+            )
+        else:
+            df_tmp["horas_habiles_cierre"] = np.nan
+
+        return df_tmp
+
+    # Filtrar por rango de fechas seleccionado en el sidebar
+    df_chats_rango = df_chats_in[
+        (df_chats_in["fecha_solo"] >= f_desde_v) & (df_chats_in["fecha_solo"] <= f_hasta_v)
+    ].copy() if (not df_chats_in.empty and "fecha_solo" in df_chats_in.columns) else pd.DataFrame()
+
+    df_correos_rango = df_correos_in[
+        (df_correos_in["fecha_solo"] >= f_desde_v) & (df_correos_in["fecha_solo"] <= f_hasta_v)
+    ].copy() if (not df_correos_in.empty and "fecha_solo" in df_correos_in.columns) else pd.DataFrame()
+
+    df_l2_chats = filtrar_y_normalizar_l2(df_chats_rango, "Chat")
+    df_l2_correos = filtrar_y_normalizar_l2(df_correos_rango, "Correo")
+
+    # Backlog abierto histórico de L2 (sin importar fecha de creación)
+    df_l2_chats_all = filtrar_y_normalizar_l2(df_chats_in, "Chat")
+    df_l2_correos_all = filtrar_y_normalizar_l2(df_correos_in, "Correo")
+    df_l2_abiertos = pd.concat([
+        df_l2_chats_all[~df_l2_chats_all["es_cerrado_l2"]] if not df_l2_chats_all.empty else pd.DataFrame(),
+        df_l2_correos_all[~df_l2_correos_all["es_cerrado_l2"]] if not df_l2_correos_all.empty else pd.DataFrame()
+    ], ignore_index=True)
+
+    tot_chats_l2 = len(df_l2_chats)
+    tot_correos_l2 = len(df_l2_correos)
+    tot_combinado_l2 = tot_chats_l2 + tot_correos_l2
+    tot_pendientes_l2 = len(df_l2_abiertos)
+
+    prom_hs_chats = round(df_l2_chats["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_chats.empty and df_l2_chats["horas_habiles_cierre"].notna().any() else 0.0
+    prom_hs_correos = round(df_l2_correos["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_correos.empty and df_l2_correos["horas_habiles_cierre"].notna().any() else 0.0
+
+    # KPIs superiores
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.markdown(f'<div class="metric-card" style="border-left: 4px solid #0284c7;"><div class="metric-card-title">Chats Escalados L2</div><div class="metric-card-value">{tot_chats_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_chats} hs hábiles</div></div>', unsafe_allow_html=True)
+    k2.markdown(f'<div class="metric-card" style="border-left: 4px solid #38bdf8;"><div class="metric-card-title">Correos Atendidos L2</div><div class="metric-card-value">{tot_correos_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_correos} hs hábiles</div></div>', unsafe_allow_html=True)
+    k3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">Total Gestionado L2</div><div class="metric-card-value" style="color:#34d399;">{tot_combinado_l2}</div><div class="metric-card-sub">Chats + Correos en rango</div></div>', unsafe_allow_html=True)
+    k4.markdown(f'<div class="metric-card" style="border-left: 4px solid #f97316;"><div class="metric-card-title">Backlog Abierto L2</div><div class="metric-card-value" style="color:#fb923c;">{tot_pendientes_l2}</div><div class="metric-card-sub">Pendientes activos actuales</div></div>', unsafe_allow_html=True)
+    resp_hilos_l2 = int(pd.to_numeric(df_l2_correos.get("cantidad_respuestas_agente", 0), errors="coerce").fillna(0).sum()) if not df_l2_correos.empty else 0
+    k5.markdown(f'<div class="metric-card" style="border-left: 4px solid #818cf8;"><div class="metric-card-title">Respuestas en Hilos</div><div class="metric-card-value">{resp_hilos_l2}</div><div class="metric-card-sub">Interacciones correo L2</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Preparar lista unificada de especialistas presentes
+    especialistas = sorted(list(
+        set(df_l2_chats["especialista_l2"].tolist() if not df_l2_chats.empty else []) |
+        set(df_l2_correos["especialista_l2"].tolist() if not df_l2_correos.empty else [])
+    ))
+
+    if especialistas:
+        rows_l2 = []
+        for esp in especialistas:
+            sub_ch = df_l2_chats[df_l2_chats["especialista_l2"] == esp] if not df_l2_chats.empty else pd.DataFrame()
+            sub_em = df_l2_correos[df_l2_correos["especialista_l2"] == esp] if not df_l2_correos.empty else pd.DataFrame()
+
+            c_ch = len(sub_ch)
+            c_em = len(sub_em)
+            hs_ch = round(sub_ch["horas_habiles_cierre"].dropna().mean(), 1) if not sub_ch.empty and sub_ch["horas_habiles_cierre"].notna().any() else 0.0
+            hs_em = round(sub_em["horas_habiles_cierre"].dropna().mean(), 1) if not sub_em.empty and sub_em["horas_habiles_cierre"].notna().any() else 0.0
+
+            rows_l2.append({
+                "Especialista": esp,
+                "Chats": c_ch,
+                "Correos": c_em,
+                "Total": c_ch + c_em,
+                "Hs_Cierre_Chat": hs_ch,
+                "Hs_Cierre_Correo": hs_em
+            })
+
+        df_graf_l2 = pd.DataFrame(rows_l2).sort_values(by="Total", ascending=False)
+
+        # FILA 1: 3 Gráficos de barras (Chats L2 | Correos L2 | Total Chats + Correos)
+        g1, g2, g3 = st.columns(3)
+
+        with g1:
+            fig_l2_ch = px.bar(
+                df_graf_l2.sort_values("Chats", ascending=False),
+                x="Especialista", y="Chats", text="Chats",
+                title="<b>Chats Atendidos por Agente L2</b>",
+                color_discrete_sequence=["#0284c7"]
+            )
+            fig_l2_ch.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_l2_ch.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title=None, showticklabels=False, showgrid=False), height=340, margin=dict(t=45, b=20, l=15, r=15)
+            )
+            st.plotly_chart(fig_l2_ch, use_container_width=True)
+
+        with g2:
+            fig_l2_em = px.bar(
+                df_graf_l2.sort_values("Correos", ascending=False),
+                x="Especialista", y="Correos", text="Correos",
+                title="<b>Correos Atendidos por Agente L2</b>",
+                color_discrete_sequence=["#38bdf8"]
+            )
+            fig_l2_em.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_l2_em.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title=None, showticklabels=False, showgrid=False), height=340, margin=dict(t=45, b=20, l=15, r=15)
+            )
+            st.plotly_chart(fig_l2_em, use_container_width=True)
+
+        with g3:
+            fig_l2_tot = go.Figure()
+            fig_l2_tot.add_trace(go.Bar(
+                x=df_graf_l2["Especialista"], y=df_graf_l2["Chats"],
+                name="Chats", marker=dict(color="#0284c7", cornerradius=6),
+                text=df_graf_l2["Chats"].apply(lambda v: str(v) if v > 0 else ""), textposition="inside"
+            ))
+            fig_l2_tot.add_trace(go.Bar(
+                x=df_graf_l2["Especialista"], y=df_graf_l2["Correos"],
+                name="Correos", marker=dict(color="#10b981", cornerradius=6),
+                text=df_graf_l2["Correos"].apply(lambda v: str(v) if v > 0 else ""), textposition="inside"
+            ))
+            for _, r in df_graf_l2.iterrows():
+                fig_l2_tot.add_annotation(
+                    x=r["Especialista"], y=r["Total"], text=f"<b>{r['Total']}</b>",
+                    showarrow=False, yshift=10, font=dict(color="#f8fafc", size=12)
+                )
+            fig_l2_tot.update_layout(
+                barmode="stack", title="<b>Total Gestionado L2 (Chats + Correos)</b>",
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title=None, showticklabels=False, showgrid=False),
+                legend=dict(orientation="h", y=1.02, x=1, xanchor="right"),
+                height=340, margin=dict(t=45, b=20, l=15, r=15)
+            )
+            st.plotly_chart(fig_l2_tot, use_container_width=True)
+
+        st.markdown("---")
+
+        # FILA 2: 2 Gráficos de SLA / Tiempo Hábil de Cierre (Chats L2 vs Correos L2)
+        s1, s2 = st.columns(2)
+
+        with s1:
+            df_sla_ch = df_graf_l2[df_graf_l2["Hs_Cierre_Chat"] > 0].sort_values("Hs_Cierre_Chat", ascending=True)
+            fig_sla_ch = px.bar(
+                df_sla_ch, x="Especialista", y="Hs_Cierre_Chat",
+                text=df_sla_ch["Hs_Cierre_Chat"].apply(lambda v: f"{v} hs"),
+                title="<b>Tiempo Promedio Cierre Chats L2 (Horas Hábiles)</b>",
+                color_discrete_sequence=["#818cf8"]
+            )
+            fig_sla_ch.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_sla_ch.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title="Horas Hábiles", showgrid=True, gridcolor="#1e293b"), height=340, margin=dict(t=45, b=20, l=20, r=20)
+            )
+            st.plotly_chart(fig_sla_ch, use_container_width=True)
+
+        with s2:
+            df_sla_em = df_graf_l2[df_graf_l2["Hs_Cierre_Correo"] > 0].sort_values("Hs_Cierre_Correo", ascending=True)
+            fig_sla_em = px.bar(
+                df_sla_em, x="Especialista", y="Hs_Cierre_Correo",
+                text=df_sla_em["Hs_Cierre_Correo"].apply(lambda v: f"{v} hs"),
+                title="<b>Tiempo Promedio Cierre Correos L2 (Horas Hábiles)</b>",
+                color_discrete_sequence=["#fbbf24"]
+            )
+            fig_sla_em.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_sla_em.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title="Horas Hábiles", showgrid=True, gridcolor="#1e293b"), height=340, margin=dict(t=45, b=20, l=20, r=20)
+            )
+            st.plotly_chart(fig_sla_em, use_container_width=True)
+    else:
+        st.info("No hay casos registrados para especialistas L2 en el rango de fechas seleccionado.")
+
+    # Tabla de Backlog Activo L2
+    st.markdown("---")
+    st.markdown(f"#### Backlog Activo Pendiente en Nivel 2 ({tot_pendientes_l2} casos)")
+    if not df_l2_abiertos.empty:
+        now_py_l2 = pd.Timestamp.now(tz="America/Asuncion")
+        df_l2_abiertos["Hs Hábiles Abierto"] = df_l2_abiertos.apply(
+            lambda r: round(calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_l2) / 60.0, 1)
+            if pd.notna(r.get("created_at_dt")) else 0.0,
+            axis=1
+        )
+        df_l2_abiertos = df_l2_abiertos.sort_values(by="Hs Hábiles Abierto", ascending=False)
+        cols_l2_open = ["intercom_url", "tipo_canal_l2", "especialista_l2", "created_at_fmt", "Hs Hábiles Abierto", "ai_title", "nombre_contacto", "tenant"]
+        st.dataframe(
+            df_l2_abiertos.reindex(columns=cols_l2_open).dropna(how="all", axis=1),
+            column_config={
+                "intercom_url": st.column_config.LinkColumn("ID Caso", display_text=r".*/(\d+)"),
+                "tipo_canal_l2": "Canal",
+                "especialista_l2": "Especialista L2",
+                "created_at_fmt": "Fecha Ingreso",
+                "Hs Hábiles Abierto": "Hs Hábiles Abierto",
+                "ai_title": "Título IA",
+                "nombre_contacto": "Contacto",
+                "tenant": "Tenant"
+            },
+            hide_index=True, use_container_width=True
+        )
+    else:
+        st.success("🟢 No hay casos abiertos pendientes en Nivel 2.")
+
 # ==========================================
 # FUNCIÓN AISLADA DEL WBR CON ST.FRAGMENT (BLINDADA CONTRA NameError)
 # ==========================================
@@ -4633,9 +4903,109 @@ def renderizar_informe_wbr(df_base_in):
     st.markdown("---")
 
     # =========================================================================
+    # SLIDE 7B: DISTRIBUCIÓN POR NIVELES (L1 / L2 / L3) & CORREOS ELECTRÓNICOS
+    # =========================================================================
+    st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Resolución por Niveles (L1 / L2 / L3) & Correos")
+
+    agentes_l2_wbr = {
+        "martin moreira", "martín moreira",
+        "dario olmedo", "darío olmedo",
+        "ivan amarilla", "iván amarilla",
+        "gerardo gaona",
+        "hector trinidad", "héctor trinidad"
+    }
+
+    def clasificar_nivel_wbr(r):
+        niv_raw = str(r.get("nivel") or "").strip().lower()
+        tags_raw = str(r.get("etiquetas") or "").strip().lower()
+        ag_raw = str(r.get("agente_asignado") or "").strip().lower()
+        ag_clean = ag_raw.replace("l2 -", "").replace("l2:", "").strip()
+
+        if "niv-l3" in niv_raw or "niv-l3" in tags_raw:
+            return "Nivel 3 (L3)"
+        if (
+            "niv-l2" in niv_raw
+            or "niv-l2" in tags_raw
+            or "l2:" in tags_raw
+            or ag_raw.startswith("l2")
+            or ag_clean in agentes_l2_wbr
+        ):
+            return "Nivel 2 (L2)"
+        return "Nivel 1 (L1)"
+
+    df_target["nivel_wbr_cat"] = df_target.apply(clasificar_nivel_wbr, axis=1)
+    orden_niveles_wbr = ["Nivel 1 (L1)", "Nivel 2 (L2)", "Nivel 3 (L3)"]
+    df_niveles_cnt = df_target["nivel_wbr_cat"].value_counts().reindex(orden_niveles_wbr, fill_value=0).reset_index()
+    df_niveles_cnt.columns = ["Nivel", "Cantidad"]
+    tot_niv_wbr = df_niveles_cnt["Cantidad"].sum()
+    df_niveles_cnt["Texto"] = df_niveles_cnt["Cantidad"].apply(
+        lambda c: f"{c} ({round(c / tot_niv_wbr * 100, 1)}%)" if tot_niv_wbr > 0 else "0 (0%)"
+    )
+
+    # Cálculo de correos electrónicos de la semana seleccionada
+    if df_correos_in is not None and not df_correos_in.empty and "created_at_dt" in df_correos_in.columns:
+        df_cor_sem = df_correos_in[
+            (df_correos_in["created_at_dt"].dt.isocalendar().year == target_year) &
+            (df_correos_in["created_at_dt"].dt.isocalendar().week == target_week)
+        ].copy()
+    else:
+        df_cor_sem = pd.DataFrame()
+
+    tot_correos_rec_w = len(df_cor_sem)
+    estado_cor_low = df_cor_sem["estado"].fillna("").astype(str).str.strip().str.lower() if not df_cor_sem.empty else pd.Series(dtype=str)
+    tot_correos_cer_w = int(estado_cor_low.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"]).sum()) if not df_cor_sem.empty else 0
+    tot_resp_correos_w = int(pd.to_numeric(df_cor_sem.get("cantidad_respuestas_agente", 0), errors="coerce").fillna(0).sum()) if not df_cor_sem.empty else 0
+    # Si aún hay correos históricos sin contador de respuestas cargado, usar como piso los cerrados/respondidos
+    if tot_resp_correos_w == 0 and tot_correos_cer_w > 0:
+        tot_resp_correos_w = tot_correos_cer_w
+
+    col_niv_chart, col_cor_card = st.columns([1.4, 1], gap="medium")
+
+    with col_niv_chart:
+        st.markdown("##### Cantidad de Chats Tratados por Nivel (L1, L2 y L3)")
+        fig_niveles_wbr = go.Figure(go.Bar(
+            x=df_niveles_cnt["Nivel"],
+            y=df_niveles_cnt["Cantidad"],
+            text=df_niveles_cnt["Texto"],
+            textposition="outside",
+            cliponaxis=False,
+            marker=dict(color=["#0284c7", "#38bdf8", "#f97316"], cornerradius=8),
+            textfont=dict(color="#f8fafc", size=12, family="Arial Black")
+        ))
+        fig_niveles_wbr.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1", size=12),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            margin=dict(t=35, b=20, l=20, r=20),
+            height=320
+        )
+        st.plotly_chart(fig_niveles_wbr, use_container_width=True)
+
+    with col_cor_card:
+        st.markdown("##### Gestión de Correos Electrónicos (Intercom)")
+        pct_cor_res = round((tot_correos_cer_w / tot_correos_rec_w * 100), 1) if tot_correos_rec_w > 0 else 0.0
+        st.markdown(f"""
+        <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 155px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 12px;">
+            <div class="metric-card-title" style="justify-content: center;">CORREOS RESPONDIDOS / GESTIONADOS</div>
+            <div class="metric-card-value" style="font-size: 2.4rem; color: #38bdf8;">{tot_correos_cer_w:,} <span style="font-size: 1.1rem; color: #94a3b8;">/ {tot_correos_rec_w:,} recibidos</span></div>
+            <div class="metric-card-sub" style="color: #34d399; font-weight: 600;">{pct_cor_res}% tasa de cierre semanal</div>
+        </div>
+        <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 145px; display: flex; flex-direction: column; justify-content: center;">
+            <div class="metric-card-title" style="justify-content: center;">TOTAL RESPUESTAS ENVIADAS EN HILOS</div>
+            <div class="metric-card-value" style="font-size: 2.2rem; color: #34d399;">{tot_resp_correos_w:,}</div>
+            <div class="metric-card-sub" style="color: #94a3b8;">Interacciones humanas por correo desde Intercom</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    
+    # =========================================================================
     # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
     # =========================================================================
-    st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
+    st.markdown(f"#### 9. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
 
     df_ext_ingresados = df_target[df_target["horario_evaluado"] == "extendido"].copy()
     tot_ext = len(df_ext_ingresados)
@@ -4865,6 +5235,10 @@ def renderizar_informe_wbr(df_base_in):
 
 
 # Llamada limpia en la pestaña
+if tab_l2 is not None:
+    with tab_l2:
+        f_desde_l2, f_hasta_l2 = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
+        renderizar_panel_nivel_2(df_all, df_correos_all, f_desde_l2, f_hasta_l2)
 if tab_wbr is not None:
     with tab_wbr:
         renderizar_informe_wbr(df_all)
