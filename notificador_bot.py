@@ -313,12 +313,19 @@ def procesar_alertas_y_reportes():
 
     if tel_destino_indiv:
         res_activos = supabase.table("conversaciones")\
-            .select("id, created_at, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
+            .select("id, created_at, canal, etiquetas, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
             .is_("primera_respuesta_min", "null")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
+            .neq("canal", "Correo electrónico")
             .execute()
 
         for c in (res_activos.data or []):
+            canal_lower = str(c.get("canal") or "").strip().lower()
+            etiquetas_lower = str(c.get("etiquetas") or "").lower()
+            
+            # Blindaje estricto: jamás enviar alertas de WhatsApp por correos electrónicos o spam
+            if any(k in canal_lower for k in ["correo", "email", "mail"]) or "correo" in etiquetas_lower or "spam" in etiquetas_lower:
+                continue
             conv_id_str = str(c.get("id") or "").strip().lower()
             if not conv_id_str or conv_id_str in ["undefined", "null", "none", "nan"] or not conv_id_str.isdigit():
                 continue
@@ -371,8 +378,9 @@ def procesar_alertas_y_reportes():
     
     if jid_grupo and hs_grupo_th > 0:
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, tenant, agente_asignado, etiquetas, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
+            .select("id, created_at, canal, tenant, agente_asignado, etiquetas, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
+            .neq("canal", "Correo electrónico")
             .execute()
 
         chats_recuperados = res_abiertos.data or []
@@ -389,6 +397,12 @@ def procesar_alertas_y_reportes():
         ]
 
         for c in chats_recuperados:
+            canal_lower = str(c.get("canal") or "").strip().lower()
+            etiquetas_lower = str(c.get("etiquetas") or "").lower()
+            
+            # Blindaje estricto: jamás enviar alertas de WhatsApp por correos electrónicos o spam
+            if any(k in canal_lower for k in ["correo", "email", "mail"]) or "correo" in etiquetas_lower or "spam" in etiquetas_lower:
+                continue
             conv_id_str = str(c.get("id") or "").strip().lower()
             if not conv_id_str or conv_id_str in ["undefined", "null", "none", "nan"] or not conv_id_str.isdigit():
                 continue
