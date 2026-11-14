@@ -51,6 +51,19 @@ st.markdown("""
         margin: 0 !important;
         padding: 0 !important;
     }
+
+    /* Oculta la barra flotante de Plotly (Modebar) en todos los gráficos */
+    .modebar,
+    .modebar-container {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Oculta el botón de pantalla completa de Streamlit en los gráficos */
+    [data-testid="stFullScreenFrame"] > button {
+        display: none !important;
+    }
+    
 </style>
 """, unsafe_allow_html=True)
 
