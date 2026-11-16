@@ -5051,12 +5051,12 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         pct_cor_res = round((tot_correos_cer_w / tot_correos_rec_w * 100), 1) if tot_correos_rec_w > 0 else 0.0
         st.markdown(f"""
         <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 155px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 12px;">
-            <div class="metric-card-title" style="justify-content: center;">CORREOS RESPONDIDOS / GESTIONADOS</div>
+            <div class="metric-card-title" style="justify-content: center;">HILOS CERRADOS / RECIBIDOS</div>
             <div class="metric-card-value" style="font-size: 2.4rem; color: #38bdf8;">{tot_correos_cer_w:,} <span style="font-size: 1.1rem; color: #94a3b8;">/ {tot_correos_rec_w:,} recibidos</span></div>
             <div class="metric-card-sub" style="color: #34d399; font-weight: 600;">{pct_cor_res}% tasa de cierre semanal</div>
         </div>
         <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 145px; display: flex; flex-direction: column; justify-content: center;">
-            <div class="metric-card-title" style="justify-content: center;">TOTAL RESPUESTAS ENVIADAS EN HILOS</div>
+            <div class="metric-card-title" style="justify-content: center;">TOTAL RESPUESTAS ENVIADAS</div>
             <div class="metric-card-value" style="font-size: 2.2rem; color: #34d399;">{tot_resp_correos_w:,}</div>
             <div class="metric-card-sub" style="color: #94a3b8;">Interacciones humanas por correo desde Intercom</div>
         </div>
