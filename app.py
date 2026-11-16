@@ -12,8 +12,6 @@ import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 import extra_streamlit_components as stx
-import copy
-from pptx.util import Inches
 
 # ==========================================
 # 1. CONFIGURACIÓN ÚNICA DE PÁGINA
@@ -771,35 +769,6 @@ FERIADOS_DEFAULT = [
     "2026-05-14", "2026-05-15", "2026-06-12", "2026-06-22", "2026-06-30",
     "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
 ]
-
-def agregar_grafico_plotly_a_slide(slide, fig, left_in, top_in, width_in, height_in, tema_claro=True):
-    """Clona un gráfico de Plotly, lo adapta para PPTX y lo inserta como PNG HD."""
-    fig_export = copy.deepcopy(fig)
-
-    # Si tu plantilla PPTX tiene fondo blanco, ajustamos colores de texto para que se lean bien
-    if tema_claro:
-        fig_export.update_layout(
-            paper_bgcolor="rgba(255,255,255,0)",
-            plot_bgcolor="rgba(255,255,255,0)",
-            font=dict(color="#1e293b", size=13),
-        )
-        fig_export.update_xaxes(gridcolor="#e2e8f0", tickfont=dict(color="#334155"))
-        fig_export.update_yaxes(gridcolor="#e2e8f0", tickfont=dict(color="#334155"))
-
-    # Renderizar a PNG en memoria con escala 2x (alta definición)
-    img_bytes = fig_export.to_image(
-        format="png",
-        width=int(width_in * 120),
-        height=int(height_in * 120),
-        scale=2
-    )
-    slide.shapes.add_picture(
-        io.BytesIO(img_bytes),
-        Inches(left_in),
-        Inches(top_in),
-        width=Inches(width_in),
-        height=Inches(height_in)
-    )
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def obtener_feriados_activos():
@@ -3932,16 +3901,12 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         st.info("No hay semanas disponibles en el registro.")
         return
 
-    col_selector, col_separador, col_boton_slot = st.columns([2.2, 0.8, 1.8])
-    with col_selector:
-        semana_seleccionada_str = st.selectbox(
-            "Seleccionar Semana del Reporte WBR:",
-            options=opciones_semanas,
-            index=0,
-            key="sel_wbr_week"
-        )
-
-    contenedor_descarga = col_boton_slot.empty()
+    semana_seleccionada_str = st.selectbox(
+        "Seleccionar Semana del Reporte WBR:",
+        options=opciones_semanas,
+        index=0,
+        key="sel_wbr_week"
+    )
 
     if not semana_seleccionada_str:
         return
@@ -5241,108 +5206,6 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             """, unsafe_allow_html=True)
         else:
             st.info("Sin registros diarios de ingreso en horario extendido.")
-
-    # CÓDIGO OPTIMIZADO: Genera el archivo solo si el usuario pulsa descargar
-    try:
-        from wbr_exporter import exportar_wbr_con_plantilla
-    
-        paquete_datos_wbr = {
-            "semana_label": semana_seleccionada_str,
-            "target_week": target_week,
-            "sem_prev_num": sem_prev_num,
-            "tot_5w_rec": tot_5w_recibidos,
-            "tot_5w_cer": tot_5w_cerrados,
-            "pct_5w_cer": pct_5w_cerrados,
-            "df_5w": df_res_5w,
-            "tot_sem_rec": tot_sem_rec,
-            "tot_sem_cer": tot_sem_cer,
-            "pct_sem_cer": pct_sem_cer,
-            "diff_rec_pct": diff_rec_pct,
-            "diff_cer_pct": diff_cer_pct,
-            "tot_prev_rec": tot_prev_rec,
-            "tot_prev_cer": tot_prev_cer,
-            "sin_resp_count": sin_resp_count,
-            "prom_por_agente": prom_por_agente,
-            "cuentas_unicas": cuentas_unicas,
-            "empresas_unicas": empresas_unicas,
-            "cnt_cerrados_ia": cnt_cerrados_ia,
-            "pct_ia": pct_ia,
-            "df_dias": df_dias_agg,
-            "df_agentes": df_ag_pie,
-            "foco_gest": foco_gest,
-            "foco_1ra": foco_1ra,
-            "prev_gest": prev_gest,
-            "prev_1ra": prev_1ra,
-            "wow_gest_pct": wow_gest_pct,
-            "wow_1ra_pct": wow_1ra_pct,
-            "foco_sla_gest": foco_sla_gest,
-            "foco_sla_1ra": foco_sla_1ra,
-            "tot_sin_calificar": tot_sin_calificar,
-            "pct_sin_calificar": pct_sin_calificar,
-            "tot_evaluados": tot_evaluados,
-            "pct_calificados": pct_calificados,
-            "cnt_5": cnt_5, "pct_5": f_pct(cnt_5, tot_evaluados),
-            "cnt_4": cnt_4, "pct_4": f_pct(cnt_4, tot_evaluados),
-            "cnt_3": cnt_3, "pct_3": f_pct(cnt_3, tot_evaluados),
-            "cnt_2": cnt_2, "pct_2": f_pct(cnt_2, tot_evaluados),
-            "cnt_1": cnt_1, "pct_1": f_pct(cnt_1, tot_evaluados),
-            "foco_csat": foco_csat,
-            "diff_csat_wow": diff_csat,
-            "foco_ratio": foco_ratio,
-            "tot_negativas": tot_negativas,
-            "tot_l1_neg": tot_l1_neg,
-            "pct_l1_total": pct_l1_del_total,
-            "df_l1_agentes": pivot_l1 if ('pivot_l1' in locals() and not pivot_l1.empty) else None,
-            "df_l1_motivos": df_l1_motivos if ('df_l1_motivos' in locals() and not df_l1_motivos.empty) else None,
-            "tot_l3_neg": tot_l3_neg,
-            "pct_l3_total": pct_l3_sobre_total_neg,
-            "df_l3_agentes": pivot_l3 if ('pivot_l3' in locals() and not pivot_l3.empty) else None,
-            "df_l3_neg": df_l3_neg if ('df_l3_neg' in locals() and not df_l3_neg.empty) else None,
-            "df_tiempos": df_evol_tiempos,
-            "df_evol_csat": df_evol_csat,
-            "tot_ext": tot_ext,
-            "tot_domingo": tot_domingo,
-            "pct_ext_cerrados": pct_ext_cerrados,
-            "tot_ext_cerrados": tot_ext_cerrados,
-            "df_dias_ext": df_dias_ext_cnt if not df_ext_ingresados.empty else None,
-            "df_agentes_ext": df_ext_ag if not df_ext_ag.empty else None,
-            "tot_correos_rec": tot_correos_rec_w,
-            "tot_correos_cer": tot_correos_cer_w,
-            "pct_cor_res": pct_cor_res,
-            "tot_resp_correos": tot_resp_correos_w,
-            # Figuras de Plotly para renderizado PNG HD en PPTX
-            "fig_5w": fig_5w if 'fig_5w' in locals() else None,
-            "fig_dias": fig_dias if 'fig_dias' in locals() else None,
-            "fig_pie_w": fig_pie_w if 'fig_pie_w' in locals() else None,
-            "fig_bar_gest": fig_bar_gest if 'fig_bar_gest' in locals() else None,
-            "fig_bar_1ra": fig_bar_1ra if 'fig_bar_1ra' in locals() else None,
-            "fig_niv": fig_niv if 'fig_niv' in locals() else None,
-            "fig_sent": fig_sent if 'fig_sent' in locals() else None,
-            "fig_bar_csat": fig_bar_csat if 'fig_bar_csat' in locals() else None,
-            "fig_bar_ratio": fig_bar_ratio if 'fig_bar_ratio' in locals() else None,
-            "fig_niveles_wbr": fig_niveles_wbr if 'fig_niveles_wbr' in locals() else None,
-            "fig_pie_ext": fig_pie_ext if 'fig_pie_ext' in locals() else None,
-            "fig_bar_dias_ext": fig_bar_dias_ext if 'fig_bar_dias_ext' in locals() else None,
-        }
-    
-        # Función generadora diferida: solo se invoca cuando el usuario hace clic en Descargar
-        def obtener_pptx_en_demanda():
-            return exportar_wbr_con_plantilla(paquete_datos_wbr).getvalue()
-    
-        with contenedor_descarga.container():
-            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            st.download_button(
-                label="📥 Descargar Informe WBR (.pptx)",
-                data=obtener_pptx_en_demanda,  # Se pasa la función sin paréntesis
-                file_name=f"WBR_{semana_seleccionada_str.replace(' ', '_').replace('(', '').replace(')', '')}.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                key=f"btn_descarga_wbr_{target_week}_{target_year}"
-            )
-    except Exception as e_pptx:
-        with contenedor_descarga.container():
-            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            st.caption(f"⚠️ Error en descarga PPTX: {e_pptx}")
-
 
 # Llamada limpia en la pestaña
 if tab_l2 is not None:
