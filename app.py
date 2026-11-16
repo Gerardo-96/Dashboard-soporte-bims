@@ -5306,6 +5306,23 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             "tot_ext_cerrados": tot_ext_cerrados,
             "df_dias_ext": df_dias_ext_cnt if not df_ext_ingresados.empty else None,
             "df_agentes_ext": df_ext_ag if not df_ext_ag.empty else None,
+            "tot_correos_rec": tot_correos_rec_w,
+            "tot_correos_cer": tot_correos_cer_w,
+            "pct_cor_res": pct_cor_res,
+            "tot_resp_correos": tot_resp_correos_w,
+            # Figuras de Plotly para renderizado PNG HD en PPTX
+            "fig_5w": fig_5w if 'fig_5w' in locals() else None,
+            "fig_dias": fig_dias if 'fig_dias' in locals() else None,
+            "fig_pie_w": fig_pie_w if 'fig_pie_w' in locals() else None,
+            "fig_bar_gest": fig_bar_gest if 'fig_bar_gest' in locals() else None,
+            "fig_bar_1ra": fig_bar_1ra if 'fig_bar_1ra' in locals() else None,
+            "fig_niv": fig_niv if 'fig_niv' in locals() else None,
+            "fig_sent": fig_sent if 'fig_sent' in locals() else None,
+            "fig_bar_csat": fig_bar_csat if 'fig_bar_csat' in locals() else None,
+            "fig_bar_ratio": fig_bar_ratio if 'fig_bar_ratio' in locals() else None,
+            "fig_niveles_wbr": fig_niveles_wbr if 'fig_niveles_wbr' in locals() else None,
+            "fig_pie_ext": fig_pie_ext if 'fig_pie_ext' in locals() else None,
+            "fig_bar_dias_ext": fig_bar_dias_ext if 'fig_bar_dias_ext' in locals() else None,
         }
     
         # Función generadora diferida: solo se invoca cuando el usuario hace clic en Descargar
