@@ -1,4 +1,6 @@
 import io
+import tempfile
+import kaleido
 import os
 import copy
 import pandas as pd
@@ -73,21 +75,10 @@ def obtener_formas_grafico_ordenadas(slide):
     return objetivos
 
 
-def reemplazar_forma_por_plotly_hd(slide, target_shape, fig, fondo_oscuro=True):
-    """
-    Reemplaza un gráfico o imagen placeholder por la captura PNG HD de Plotly
-    manteniendo exactamente su posición y tamaño en la diapositiva.
-    """
-    if fig is None or target_shape is None:
-        return
-
-    left = target_shape.left
-    top = target_shape.top
-    width = target_shape.width
-    height = target_shape.height
-
-    width_in = max(2.0, width / 914400.0)
-    height_in = max(1.5, height / 914400.0)
+def preparar_figura_para_pptx(fig, width_emu, height_emu, path_png, fondo_oscuro=True):
+    """Prepara el diccionario de especificación para renderizar todas las figuras en una sola pasada."""
+    width_in = max(2.0, width_emu / 914400.0)
+    height_in = max(1.5, height_emu / 914400.0)
     px_w = int(width_in * 130)
     px_h = int(height_in * 130)
 
@@ -105,24 +96,26 @@ def reemplazar_forma_por_plotly_hd(slide, target_shape, fig, fondo_oscuro=True):
             font=dict(color="#1e293b", size=12),
         )
 
-    img_bytes = fig_export.to_image(
-        format="png",
-        width=px_w,
-        height=px_h,
-        scale=2
-    )
+    return {
+        "fig": fig_export,
+        "path": path_png,
+        "opts": {"format": "png", "width": px_w, "height": px_h, "scale": 2}
+    }
+
+
+def insertar_png_en_lugar_de_forma(slide, target_shape, path_png):
+    """Elimina el placeholder de la slide e inserta el PNG renderizado en sus mismas coordenadas."""
+    if not os.path.exists(path_png):
+        return
+    left = target_shape.left
+    top = target_shape.top
+    width = target_shape.width
+    height = target_shape.height
 
     sp_elem = target_shape._element
     sp_elem.getparent().remove(sp_elem)
 
-    slide.shapes.add_picture(
-        io.BytesIO(img_bytes),
-        left,
-        top,
-        width=width,
-        height=height
-    )
-
+    slide.shapes.add_picture(path_png, left, top, width=width, height=height)
 
 def obtener_todas_las_tablas(slide):
     """Extrae todas las tablas de un slide ordenadas de arriba a abajo (por posición Y)."""
@@ -506,47 +499,40 @@ def exportar_wbr_con_plantilla(datos):
     # Detectar si la diapositiva índice 0 es portada (sin gráficos)
     offset = 1 if (len(prs.slides) > 0 and len(obtener_formas_grafico_ordenadas(prs.slides[0])) == 0) else 0
 
-    # 2. Reemplazo de Gráficos por Capturas PNG HD de Plotly
-    # SLIDE 1 (1. WBR | Evolutivo de Volumen) -> índice offset + 0
-    if len(prs.slides) > offset + 0 and datos.get("fig_5w") is not None:
-        chs_1 = obtener_formas_grafico_ordenadas(prs.slides[offset + 0])
-        if chs_1:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 0], chs_1[0], datos["fig_5w"], fondo_oscuro=True)
+    # 2. Reemplazo de Gráficos en lote único (1 sola instancia de Chromium para todas las slides)
+    mapeo_slides_figs = [
+        (offset + 0, [datos.get("fig_5w")]),
+        (offset + 1, [datos.get("fig_dias"), datos.get("fig_pie_w")]),
+        (offset + 2, [datos.get("fig_bar_gest"), datos.get("fig_bar_1ra")]),
+        (offset + 3, [datos.get("fig_niv"), datos.get("fig_sent")]),
+        (offset + 4, [datos.get("fig_bar_csat"), datos.get("fig_bar_ratio")]),
+        (offset + 7, [datos.get("fig_niveles_wbr")]),
+        (offset + 8, [datos.get("fig_pie_ext"), datos.get("fig_bar_dias_ext")]),
+    ]
 
-    # SLIDE 2 (2. WBR | Detalle Operativo Semanal: Día a Día + Donut Agentes) -> índice offset + 1
-    if len(prs.slides) > offset + 1:
-        chs_2 = obtener_formas_grafico_ordenadas(prs.slides[offset + 1])
-        if len(chs_2) >= 1 and datos.get("fig_dias") is not None:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 1], chs_2[0], datos["fig_dias"], fondo_oscuro=True)
-        if len(chs_2) >= 2 and datos.get("fig_pie_w") is not None:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 1], chs_2[1], datos["fig_pie_w"], fondo_oscuro=True)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tareas_render = []
 
-    # SLIDE 3 (3. WBR | Tiempos de Gestión y SLA Operativo) -> índice offset + 2
-    if len(prs.slides) > offset + 2:
-        chs_3 = obtener_formas_grafico_ordenadas(prs.slides[offset + 2])
-        if len(chs_3) >= 1 and datos.get("fig_bar_gest") is not None:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 2], chs_3[0], datos["fig_bar_gest"], fondo_oscuro=True)
-        if len(chs_3) >= 2 and datos.get("fig_bar_1ra") is not None:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 2], chs_3[1], datos["fig_bar_1ra"], fondo_oscuro=True)
+        for idx_slide, lista_figs in mapeo_slides_figs:
+            if len(prs.slides) <= idx_slide:
+                continue
+            slide_obj = prs.slides[idx_slide]
+            formas_graf = obtener_formas_grafico_ordenadas(slide_obj)
+            figs_validas = [f for f in lista_figs if f is not None]
 
-    # SLIDE 4 (4. WBR | Chats Evaluados & Sentimiento) -> índice offset + 3
-    if len(prs.slides) > offset + 3:
-        chs_4 = obtener_formas_grafico_ordenadas(prs.slides[offset + 3])
-        if len(chs_4) >= 2:
-            if datos.get("fig_niv") is not None:
-                reemplazar_forma_por_plotly_hd(prs.slides[offset + 3], chs_4[0], datos["fig_niv"], fondo_oscuro=True)
-            if datos.get("fig_sent") is not None:
-                reemplazar_forma_por_plotly_hd(prs.slides[offset + 3], chs_4[1], datos["fig_sent"], fondo_oscuro=True)
-        elif len(chs_4) == 1 and datos.get("fig_sent") is not None:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 3], chs_4[0], datos["fig_sent"], fondo_oscuro=True)
+            for j, target_shp in enumerate(formas_graf):
+                if j >= len(figs_validas):
+                    break
+                png_file = os.path.join(tmp_dir, f"s{idx_slide}_g{j}.png")
+                spec = preparar_figura_para_pptx(
+                    figs_validas[j], target_shp.width, target_shp.height, png_file, fondo_oscuro=True
+                )
+                tareas_render.append((slide_obj, target_shp, png_file, spec))
 
-    # SLIDE 5 (5. WBR | Evolutivo de CSAT & Frecuencia por Empresa) -> índice offset + 4
-    if len(prs.slides) > offset + 4:
-        chs_5 = obtener_formas_grafico_ordenadas(prs.slides[offset + 4])
-        if len(chs_5) >= 1 and datos.get("fig_bar_csat") is not None:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 4], chs_5[0], datos["fig_bar_csat"], fondo_oscuro=True)
-        if len(chs_5) >= 2 and datos.get("fig_bar_ratio") is not None:
-            reemplazar_forma_por_plotly_hd(prs.slides[offset + 4], chs_5[1], datos["fig_bar_ratio"], fondo_oscuro=True)
+        if tareas_render:
+            kaleido.write_fig_sync([t[3] for t in tareas_render])
+            for slide_obj, target_shp, png_file, _ in tareas_render:
+                insertar_png_en_lugar_de_forma(slide_obj, target_shp, png_file)
 
     # 3. Poblar Tablas de L1 (Slide 6 -> índice offset + 5) y L3 (Slide 7 -> índice offset + 6)
     if len(prs.slides) > offset + 5:
