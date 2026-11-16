@@ -48,35 +48,44 @@ def procesar_forma_reemplazos(shape, reemplazos):
 
 def obtener_formas_grafico_ordenadas(slide):
     """
-    Extrae las formas (shapes) que contienen gráficos nativos en el slide,
-    ordenadas de izquierda a derecha (left) y arriba a abajo (top).
+    Extrae las formas placeholder de gráficos en la diapositiva:
+    prioriza gráficos nativos (has_chart) y, si no hay, imágenes grandes (shape_type == 13).
+    Ordena de izquierda a derecha y de arriba a abajo.
     """
-    formas = []
-    for shp in slide.shapes:
+    charts = []
+    pictures = []
+
+    def recolectar(shp):
         if shp.has_chart:
-            formas.append(shp)
-        elif shp.shape_type == 6:
+            charts.append(shp)
+        elif shp.shape_type == 13:  # PICTURE (ignora logos pequeños < 2.2 pulgadas)
+            if (shp.width / 914400.0) >= 2.2 and (shp.height / 914400.0) >= 1.5:
+                pictures.append(shp)
+        elif shp.shape_type == 6:  # GROUP
             for sub in shp.shapes:
-                if sub.has_chart:
-                    formas.append(sub)
-    formas.sort(key=lambda s: (round(s.top / 914400, 1), s.left))
-    return formas
+                recolectar(sub)
+
+    for s in slide.shapes:
+        recolectar(s)
+
+    objetivos = charts if charts else pictures
+    objetivos.sort(key=lambda s: (round(s.top / 914400.0, 1), s.left))
+    return objetivos
 
 
-def reemplazar_chart_por_plotly_hd(slide, chart_shape, fig, fondo_oscuro=True):
+def reemplazar_forma_por_plotly_hd(slide, target_shape, fig, fondo_oscuro=True):
     """
-    Toma las coordenadas exactas de un gráfico placeholder en la slide,
-    renderiza la figura de Plotly a PNG de alta resolución y reemplaza el placeholder.
+    Reemplaza un gráfico o imagen placeholder por la captura PNG HD de Plotly
+    manteniendo exactamente su posición y tamaño en la diapositiva.
     """
-    if fig is None or chart_shape is None:
+    if fig is None or target_shape is None:
         return
 
-    left = chart_shape.left
-    top = chart_shape.top
-    width = chart_shape.width
-    height = chart_shape.height
+    left = target_shape.left
+    top = target_shape.top
+    width = target_shape.width
+    height = target_shape.height
 
-    # Calcular dimensiones en píxeles proporcionales al tamaño físico de la slide (914400 EMUs = 1 pulgada)
     width_in = max(2.0, width / 914400.0)
     height_in = max(1.5, height / 914400.0)
     px_w = int(width_in * 130)
@@ -103,8 +112,7 @@ def reemplazar_chart_por_plotly_hd(slide, chart_shape, fig, fondo_oscuro=True):
         scale=2
     )
 
-    # Eliminar el gráfico nativo placeholder y pegar la imagen exactamente encima
-    sp_elem = chart_shape._element
+    sp_elem = target_shape._element
     sp_elem.getparent().remove(sp_elem)
 
     slide.shapes.add_picture(
@@ -402,7 +410,7 @@ def poblar_tabla_l3_casos(tabla_shape, df_l3_neg, slide):
 
 
 # =============================================================================
-# EXPORTADOR PRINCIPAL (CON CAPTURAS HD DE PLOTLY)
+# EXPORTADOR PRINCIPAL (CON CAPTURAS PNG HD DE PLOTLY)
 # =============================================================================
 def exportar_wbr_con_plantilla(datos):
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -490,108 +498,74 @@ def exportar_wbr_con_plantilla(datos):
         "{{TOT_RESP_CORREOS}}": f"{datos.get('tot_resp_correos', 0):,}",
     }
 
-    # 1. Reemplazo de Textos
+    # 1. Reemplazo de Textos en todas las diapositivas (incluida portada en índice 0)
     for slide in prs.slides:
         for shape in slide.shapes:
             procesar_forma_reemplazos(shape, reemplazos)
 
-    # 2. Reemplazo de Gráficos Placeholder por Capturas PNG HD de Plotly (fondo oscuro)
-    # SLIDE 1 (índice 0): Evolutivo 5 Semanas
-    try:
-        if len(prs.slides) > 0 and datos.get("fig_5w") is not None:
-            chs_1 = obtener_formas_grafico_ordenadas(prs.slides[0])
-            if chs_1:
-                reemplazar_chart_por_plotly_hd(prs.slides[0], chs_1[0], datos["fig_5w"], fondo_oscuro=True)
-    except Exception as e:
-        print(f"Error captura S1: {e}")
+    # Detectar si la diapositiva índice 0 es portada (sin gráficos)
+    offset = 1 if (len(prs.slides) > 0 and len(obtener_formas_grafico_ordenadas(prs.slides[0])) == 0) else 0
 
-    # SLIDE 2 (índice 1): Detalle Día a Día (izq) y Donut de Agentes (der)
-    try:
-        if len(prs.slides) > 1:
-            chs_2 = obtener_formas_grafico_ordenadas(prs.slides[1])
-            if len(chs_2) >= 1 and datos.get("fig_dias") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[1], chs_2[0], datos["fig_dias"], fondo_oscuro=True)
-            if len(chs_2) >= 2 and datos.get("fig_pie_w") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[1], chs_2[1], datos["fig_pie_w"], fondo_oscuro=True)
-    except Exception as e:
-        print(f"Error captura S2: {e}")
+    # 2. Reemplazo de Gráficos por Capturas PNG HD de Plotly
+    # SLIDE 1 (1. WBR | Evolutivo de Volumen) -> índice offset + 0
+    if len(prs.slides) > offset + 0 and datos.get("fig_5w") is not None:
+        chs_1 = obtener_formas_grafico_ordenadas(prs.slides[offset + 0])
+        if chs_1:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 0], chs_1[0], datos["fig_5w"], fondo_oscuro=True)
 
-    # SLIDE 3 (índice 2): Tiempos de Gestión (izq) y 1ra Respuesta (der)
-    try:
-        if len(prs.slides) > 2:
-            chs_3 = obtener_formas_grafico_ordenadas(prs.slides[2])
-            if len(chs_3) >= 1 and datos.get("fig_bar_gest") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[2], chs_3[0], datos["fig_bar_gest"], fondo_oscuro=True)
-            if len(chs_3) >= 2 and datos.get("fig_bar_1ra") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[2], chs_3[1], datos["fig_bar_1ra"], fondo_oscuro=True)
-    except Exception as e:
-        print(f"Error captura S3: {e}")
+    # SLIDE 2 (2. WBR | Detalle Operativo Semanal: Día a Día + Donut Agentes) -> índice offset + 1
+    if len(prs.slides) > offset + 1:
+        chs_2 = obtener_formas_grafico_ordenadas(prs.slides[offset + 1])
+        if len(chs_2) >= 1 and datos.get("fig_dias") is not None:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 1], chs_2[0], datos["fig_dias"], fondo_oscuro=True)
+        if len(chs_2) >= 2 and datos.get("fig_pie_w") is not None:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 1], chs_2[1], datos["fig_pie_w"], fondo_oscuro=True)
 
-    # SLIDE 4 (índice 3): Puntuaciones por Nivel (izq) y Sentimiento (der)
-    try:
-        if len(prs.slides) > 3:
-            chs_4 = obtener_formas_grafico_ordenadas(prs.slides[3])
-            if len(chs_4) >= 1 and datos.get("fig_niv") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[3], chs_4[0], datos["fig_niv"], fondo_oscuro=True)
-            if len(chs_4) >= 2 and datos.get("fig_sent") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[3], chs_4[1], datos["fig_sent"], fondo_oscuro=True)
-    except Exception as e:
-        print(f"Error captura S4: {e}")
+    # SLIDE 3 (3. WBR | Tiempos de Gestión y SLA Operativo) -> índice offset + 2
+    if len(prs.slides) > offset + 2:
+        chs_3 = obtener_formas_grafico_ordenadas(prs.slides[offset + 2])
+        if len(chs_3) >= 1 and datos.get("fig_bar_gest") is not None:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 2], chs_3[0], datos["fig_bar_gest"], fondo_oscuro=True)
+        if len(chs_3) >= 2 and datos.get("fig_bar_1ra") is not None:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 2], chs_3[1], datos["fig_bar_1ra"], fondo_oscuro=True)
 
-    # SLIDE 5 (índice 4): Evolutivo CSAT (izq) y Ratio Empresa (der)
-    try:
-        if len(prs.slides) > 4:
-            chs_5 = obtener_formas_grafico_ordenadas(prs.slides[4])
-            if len(chs_5) >= 1 and datos.get("fig_bar_csat") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[4], chs_5[0], datos["fig_bar_csat"], fondo_oscuro=True)
-            if len(chs_5) >= 2 and datos.get("fig_bar_ratio") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[4], chs_5[1], datos["fig_bar_ratio"], fondo_oscuro=True)
-    except Exception as e:
-        print(f"Error captura S5: {e}")
+    # SLIDE 4 (4. WBR | Chats Evaluados & Sentimiento) -> índice offset + 3
+    if len(prs.slides) > offset + 3:
+        chs_4 = obtener_formas_grafico_ordenadas(prs.slides[offset + 3])
+        if len(chs_4) >= 2:
+            if datos.get("fig_niv") is not None:
+                reemplazar_forma_por_plotly_hd(prs.slides[offset + 3], chs_4[0], datos["fig_niv"], fondo_oscuro=True)
+            if datos.get("fig_sent") is not None:
+                reemplazar_forma_por_plotly_hd(prs.slides[offset + 3], chs_4[1], datos["fig_sent"], fondo_oscuro=True)
+        elif len(chs_4) == 1 and datos.get("fig_sent") is not None:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 3], chs_4[0], datos["fig_sent"], fondo_oscuro=True)
 
-    # 3. Poblar Tablas de L1 (Slide 6 -> índice 5) y L3 (Slide 7 -> índice 6)
-    try:
-        if len(prs.slides) >= 6:
-            s_l1 = prs.slides[5]
-            tablas_s6 = obtener_todas_las_tablas(s_l1)
-            t_agentes_l1 = tablas_s6[0] if len(tablas_s6) >= 1 else None
-            t_motivos_l1 = tablas_s6[1] if len(tablas_s6) >= 2 else None
+    # SLIDE 5 (5. WBR | Evolutivo de CSAT & Frecuencia por Empresa) -> índice offset + 4
+    if len(prs.slides) > offset + 4:
+        chs_5 = obtener_formas_grafico_ordenadas(prs.slides[offset + 4])
+        if len(chs_5) >= 1 and datos.get("fig_bar_csat") is not None:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 4], chs_5[0], datos["fig_bar_csat"], fondo_oscuro=True)
+        if len(chs_5) >= 2 and datos.get("fig_bar_ratio") is not None:
+            reemplazar_forma_por_plotly_hd(prs.slides[offset + 4], chs_5[1], datos["fig_bar_ratio"], fondo_oscuro=True)
 
-            poblar_tabla_matriz_agentes(t_agentes_l1, datos.get("df_l1_agentes"), s_l1, y_def=1.5)
-            poblar_tabla_l1_motivos(t_motivos_l1, datos.get("df_l1_motivos"), s_l1)
-    except Exception as e:
-        print(f"Error en tablas Slide 6 (L1): {e}")
+    # 3. Poblar Tablas de L1 (Slide 6 -> índice offset + 5) y L3 (Slide 7 -> índice offset + 6)
+    if len(prs.slides) > offset + 5:
+        s_l1 = prs.slides[offset + 5]
+        tablas_s6 = obtener_todas_las_tablas(s_l1)
+        t_agentes_l1 = tablas_s6[0] if len(tablas_s6) >= 1 else None
+        t_motivos_l1 = tablas_s6[1] if len(tablas_s6) >= 2 else None
 
-    try:
-        if len(prs.slides) >= 7:
-            s_l3 = prs.slides[6]
-            tablas_s7 = obtener_todas_las_tablas(s_l3)
-            t_agentes_l3 = tablas_s7[0] if len(tablas_s7) >= 1 else None
-            t_casos_l3 = tablas_s7[1] if len(tablas_s7) >= 2 else None
+        poblar_tabla_matriz_agentes(t_agentes_l1, datos.get("df_l1_agentes"), s_l1, y_def=1.5)
+        poblar_tabla_l1_motivos(t_motivos_l1, datos.get("df_l1_motivos"), s_l1)
 
-            poblar_tabla_matriz_agentes(t_agentes_l3, datos.get("df_l3_agentes"), s_l3, y_def=1.5)
-            poblar_tabla_l3_casos(t_casos_l3, datos.get("df_l3_neg"), s_l3)
-    except Exception as e:
-        print(f"Error en tablas Slide 7 (L3): {e}")
+    if len(prs.slides) > offset + 6:
+        s_l3 = prs.slides[offset + 6]
+        tablas_s7 = obtener_todas_las_tablas(s_l3)
+        t_agentes_l3 = tablas_s7[0] if len(tablas_s7) >= 1 else None
+        t_casos_l3 = tablas_s7[1] if len(tablas_s7) >= 2 else None
 
-    # SLIDE 8+ (si tu plantilla tiene diapositivas extra para Niveles L1/L2/L3 y Horario Extendido)
-    try:
-        if len(prs.slides) >= 8:
-            chs_8 = obtener_formas_grafico_ordenadas(prs.slides[7])
-            if len(chs_8) >= 1 and datos.get("fig_niveles_wbr") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[7], chs_8[0], datos["fig_niveles_wbr"], fondo_oscuro=True)
-    except Exception as e:
-        print(f"Error captura S8: {e}")
-
-    try:
-        if len(prs.slides) >= 9:
-            chs_9 = obtener_formas_grafico_ordenadas(prs.slides[8])
-            if len(chs_9) >= 1 and datos.get("fig_pie_ext") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[8], chs_9[0], datos["fig_pie_ext"], fondo_oscuro=True)
-            if len(chs_9) >= 2 and datos.get("fig_bar_dias_ext") is not None:
-                reemplazar_chart_por_plotly_hd(prs.slides[8], chs_9[1], datos["fig_bar_dias_ext"], fondo_oscuro=True)
-    except Exception as e:
-        print(f"Error captura S9: {e}")
+        poblar_tabla_matriz_agentes(t_agentes_l3, datos.get("df_l3_agentes"), s_l3, y_def=1.5)
+        poblar_tabla_l3_casos(t_casos_l3, datos.get("df_l3_neg"), s_l3)
 
     out = io.BytesIO()
     prs.save(out)
