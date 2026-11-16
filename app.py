@@ -12,6 +12,8 @@ import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
 import extra_streamlit_components as stx
+import copy
+from pptx.util import Inches
 
 # ==========================================
 # 1. CONFIGURACIÓN ÚNICA DE PÁGINA
@@ -769,6 +771,35 @@ FERIADOS_DEFAULT = [
     "2026-05-14", "2026-05-15", "2026-06-12", "2026-06-22", "2026-06-30",
     "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
 ]
+
+def agregar_grafico_plotly_a_slide(slide, fig, left_in, top_in, width_in, height_in, tema_claro=True):
+    """Clona un gráfico de Plotly, lo adapta para PPTX y lo inserta como PNG HD."""
+    fig_export = copy.deepcopy(fig)
+
+    # Si tu plantilla PPTX tiene fondo blanco, ajustamos colores de texto para que se lean bien
+    if tema_claro:
+        fig_export.update_layout(
+            paper_bgcolor="rgba(255,255,255,0)",
+            plot_bgcolor="rgba(255,255,255,0)",
+            font=dict(color="#1e293b", size=13),
+        )
+        fig_export.update_xaxes(gridcolor="#e2e8f0", tickfont=dict(color="#334155"))
+        fig_export.update_yaxes(gridcolor="#e2e8f0", tickfont=dict(color="#334155"))
+
+    # Renderizar a PNG en memoria con escala 2x (alta definición)
+    img_bytes = fig_export.to_image(
+        format="png",
+        width=int(width_in * 120),
+        height=int(height_in * 120),
+        scale=2
+    )
+    slide.shapes.add_picture(
+        io.BytesIO(img_bytes),
+        Inches(left_in),
+        Inches(top_in),
+        width=Inches(width_in),
+        height=Inches(height_in)
+    )
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def obtener_feriados_activos():
