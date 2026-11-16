@@ -303,15 +303,50 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             if es_correo:
                 canal = "Correo electrónico"
 
-            # Contar cantidad total de respuestas humanas en todo el hilo
+            # Contar cantidad total de respuestas humanas en todo el hilo (Intercom + Gmail corporativo)
+            dominios_corporativos = ("@tivahq.com", "@itti.digital", "@bims.app", "@bimsapp.com", "@bims.intercom-mail.com")
+            correos_sistema_ignorar = {
+                "hola@bimsapp.com", "hola@getbims.com", "hola@bims.app", "facturacion@tivahq.com",
+                "monitoreo@bimsapp.com", "no-reply@bimsapp.com", "noreply@bimsapp.com"
+            }
+
+            def es_respuesta_humana_o_gmail_corporativo(part):
+                if part.get("part_type") != "comment":
+                    return False
+                author = part.get("author") or {}
+                a_type = str(author.get("type", "")).lower()
+                a_name = str(author.get("name", "")).lower()
+
+                # 1. Respuesta enviada directamente desde Intercom por un humano
+                if a_type in ["admin", "user_admin"]:
+                    if author.get("from_ai_agent", False) or author.get("is_ai_answer", False):
+                        return False
+                    if any(b in a_name for b in ["monica", "mónica", "fin", "bot"]):
+                        return False
+                    return True
+
+                # 2. Respuesta enviada desde Gmail corporativo (@tivahq.com o @itti.digital)
+                if a_type in ["user", "lead"]:
+                    a_email = str(author.get("email", "")).strip().lower()
+                    if not a_email and author.get("id"):
+                        c_info = get_contact(author.get("id"))
+                        a_email = str((c_info or {}).get("email", "")).strip().lower()
+                    if any(a_email.endswith(dom) for dom in dominios_corporativos) and a_email not in correos_sistema_ignorar:
+                        return True
+
+                return False
+
             cantidad_respuestas_agente = sum(
-                1 for p in parts
-                if p.get("part_type") == "comment"
-                and p.get("author", {}).get("type") in ["admin", "user_admin"]
-                and not p.get("author", {}).get("from_ai_agent", False)
-                and not p.get("author", {}).get("is_ai_answer", False)
-                and not any(b in str(p.get("author", {}).get("name", "")).lower() for b in ["monica", "mónica", "fin", "bot"])
+                1 for p in parts if es_respuesta_humana_o_gmail_corporativo(p)
             )
+            source_author = (conv.get("source") or {}).get("author") or {}
+            if str(source_author.get("type", "")).lower() in ["user", "lead"]:
+                src_email = str(source_author.get("email", "")).strip().lower()
+                if not src_email and source_author.get("id"):
+                    c_src = get_contact(source_author.get("id"))
+                    src_email = str((c_src or {}).get("email", "")).strip().lower()
+                if any(src_email.endswith(dom) for dom in dominios_corporativos) and src_email not in correos_sistema_ignorar:
+                    cantidad_respuestas_agente += 1
             
             agente_por_tag = extraer_agente_de_etiquetas(tags)
 
