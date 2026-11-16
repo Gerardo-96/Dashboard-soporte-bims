@@ -1691,7 +1691,7 @@ email_usuario_sesion = st.session_state.get("user_email", "")
 if nombre_usuario_sesion:
     @st.fragment
     def renderizar_selector_presencia_sidebar():
-        st.markdown("### Mi Estado de Presencia")
+        st.markdown("### Mi Estado:")
         
         clave_sesion_away = f"estado_away_{email_usuario_sesion}"
         clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
@@ -5058,7 +5058,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 145px; display: flex; flex-direction: column; justify-content: center;">
             <div class="metric-card-title" style="justify-content: center;">TOTAL RESPUESTAS ENVIADAS</div>
             <div class="metric-card-value" style="font-size: 2.2rem; color: #34d399;">{tot_resp_correos_w:,}</div>
-            <div class="metric-card-sub" style="color: #94a3b8;">Interacciones humanas por correo desde Intercom</div>
+            <div class="metric-card-sub" style="color: #94a3b8;">Interacciones humanas por correo (cc soporte)</div>
         </div>
         """, unsafe_allow_html=True)
 
