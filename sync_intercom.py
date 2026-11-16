@@ -140,7 +140,7 @@ def extraer_agente_de_etiquetas(tags: list[str]) -> str | None:
     return None
 
 
-def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None):
+def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress_callback=None, por_creacion=False):
     """
     Sincroniza conversaciones de Intercom hacia Supabase.
     Aplica corte estricto infranqueable: ignora cualquier registro modificado antes
@@ -182,9 +182,10 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
     print(f"🔄 Sincronizando conversaciones de Intercom desde {dt_inicio.strftime('%Y-%m-%d %H:%M:%S')} hasta {dt_fin.strftime('%Y-%m-%d %H:%M:%S')}...")
 
     while True:
+        campo_fecha_query = "created_at" if por_creacion else "updated_at"
         query_conditions = [
-            {"field": "updated_at", "operator": ">=", "value": start_ts},
-            {"field": "updated_at", "operator": "<=", "value": end_ts}
+            {"field": campo_fecha_query, "operator": ">=", "value": start_ts},
+            {"field": campo_fecha_query, "operator": "<=", "value": end_ts}
         ]
 
         payload = {
@@ -527,6 +528,12 @@ if __name__ == "__main__":
     parser.add_argument("--dias", type=int, default=1, help="Días a sincronizar hacia atrás")
     parser.add_argument("--desde", type=str, default=None, help="Fecha inicio en formato YYYY-MM-DD")
     parser.add_argument("--hasta", type=str, default=None, help="Fecha fin en formato YYYY-MM-DD")
+    parser.add_argument("--por-creacion", action="store_true", help="Filtrar exclusivamente por created_at en lugar de updated_at")
     args = parser.parse_args()
     
-    sincronizar_intercom(dias=args.dias, fecha_desde=args.desde, fecha_hasta=args.hasta)
+    sincronizar_intercom(
+        dias=args.dias,
+        fecha_desde=args.desde,
+        fecha_hasta=args.hasta,
+        por_creacion=args.por_creacion
+    )
