@@ -1,11 +1,11 @@
 import io
 import os
+import copy
 import pandas as pd
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from pptx.chart.data import CategoryChartData
 
 # Paleta corporativa
 C_FONDO_TABLA = RGBColor(15, 23, 42)      # #0f172a
@@ -15,6 +15,7 @@ C_TEXTO_BLANCO = RGBColor(248, 250, 252)  # #f8fafc
 C_TEXTO_MUTED = RGBColor(148, 163, 184)   # #94a3b8
 C_DORADO = RGBColor(251, 191, 36)         # #fbbf24
 C_AZUL_TXT = RGBColor(56, 189, 248)       # #38bdf8
+
 
 def reemplazar_en_text_frame(tf, reemplazos):
     for p in tf.paragraphs:
@@ -32,6 +33,7 @@ def reemplazar_en_text_frame(tf, reemplazos):
             else:
                 p.text = full_text
 
+
 def procesar_forma_reemplazos(shape, reemplazos):
     if shape.has_text_frame:
         reemplazar_en_text_frame(shape.text_frame, reemplazos)
@@ -43,18 +45,76 @@ def procesar_forma_reemplazos(shape, reemplazos):
         for sub_shape in shape.shapes:
             procesar_forma_reemplazos(sub_shape, reemplazos)
 
-def obtener_todos_los_graficos(slide):
-    """Extrae todos los gráficos de un slide, incluso si están dentro de grupos."""
-    graficos = []
-    def buscar(s_shape):
-        if s_shape.has_chart:
-            graficos.append(s_shape.chart)
-        elif s_shape.shape_type == 6:
-            for sub in s_shape.shapes:
-                buscar(sub)
+
+def obtener_formas_grafico_ordenadas(slide):
+    """
+    Extrae las formas (shapes) que contienen gráficos nativos en el slide,
+    ordenadas de izquierda a derecha (left) y arriba a abajo (top).
+    """
+    formas = []
     for shp in slide.shapes:
-        buscar(shp)
-    return graficos
+        if shp.has_chart:
+            formas.append(shp)
+        elif shp.shape_type == 6:
+            for sub in shp.shapes:
+                if sub.has_chart:
+                    formas.append(sub)
+    formas.sort(key=lambda s: (round(s.top / 914400, 1), s.left))
+    return formas
+
+
+def reemplazar_chart_por_plotly_hd(slide, chart_shape, fig, fondo_oscuro=True):
+    """
+    Toma las coordenadas exactas de un gráfico placeholder en la slide,
+    renderiza la figura de Plotly a PNG de alta resolución y reemplaza el placeholder.
+    """
+    if fig is None or chart_shape is None:
+        return
+
+    left = chart_shape.left
+    top = chart_shape.top
+    width = chart_shape.width
+    height = chart_shape.height
+
+    # Calcular dimensiones en píxeles proporcionales al tamaño físico de la slide (914400 EMUs = 1 pulgada)
+    width_in = max(2.0, width / 914400.0)
+    height_in = max(1.5, height / 914400.0)
+    px_w = int(width_in * 130)
+    px_h = int(height_in * 130)
+
+    fig_export = copy.deepcopy(fig)
+    if fondo_oscuro:
+        fig_export.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#f8fafc", size=12),
+        )
+    else:
+        fig_export.update_layout(
+            paper_bgcolor="rgba(255,255,255,0)",
+            plot_bgcolor="rgba(255,255,255,0)",
+            font=dict(color="#1e293b", size=12),
+        )
+
+    img_bytes = fig_export.to_image(
+        format="png",
+        width=px_w,
+        height=px_h,
+        scale=2
+    )
+
+    # Eliminar el gráfico nativo placeholder y pegar la imagen exactamente encima
+    sp_elem = chart_shape._element
+    sp_elem.getparent().remove(sp_elem)
+
+    slide.shapes.add_picture(
+        io.BytesIO(img_bytes),
+        left,
+        top,
+        width=width,
+        height=height
+    )
+
 
 def obtener_todas_las_tablas(slide):
     """Extrae todas las tablas de un slide ordenadas de arriba a abajo (por posición Y)."""
@@ -62,23 +122,19 @@ def obtener_todas_las_tablas(slide):
     for shp in slide.shapes:
         if shp.has_table:
             tablas.append(shp)
-    # Ordenar por posición vertical top
     tablas.sort(key=lambda t: t.top)
     return tablas
+
 
 # =============================================================================
 # FUNCIONES PARA TABLAS DE MATRIZ DE AGENTES (SLIDES 6 Y 7)
 # =============================================================================
 def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def=1.5, w_def=8.3):
-    """
-    Llena la tabla de resumen de agentes con calificaciones 1★, 2★, 3★.
-    """
     if df_agentes is None or df_agentes.empty:
         return
 
     cols_esperadas = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total"]
     
-    # Asegurar columnas necesarias en df_agentes
     df_poblar = df_agentes.copy()
     if "% del Total a L1" in df_poblar.columns:
         df_poblar = df_poblar.rename(columns={"% del Total a L1": "% del Total"})
@@ -113,7 +169,6 @@ def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def
             table.rows._tbl.append(table.rows[0]._tr)
 
     for r_idx, (_, row) in enumerate(df_poblar.iterrows(), start=1):
-        # 1. Agente
         c0 = table.cell(r_idx, 0)
         c0.fill.solid()
         c0.fill.fore_color.rgb = C_FONDO_TABLA
@@ -123,7 +178,6 @@ def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def
         p0.font.size = Pt(8.5)
         p0.font.color.rgb = C_TEXTO_BLANCO
 
-        # 2. Regular 3★
         c1 = table.cell(r_idx, 1)
         c1.fill.solid()
         c1.fill.fore_color.rgb = C_FONDO_TABLA
@@ -133,7 +187,6 @@ def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def
         p1.font.size = Pt(8.5)
         p1.font.color.rgb = C_DORADO
 
-        # 3. Malo 2★
         c2 = table.cell(r_idx, 2)
         c2.fill.solid()
         c2.fill.fore_color.rgb = C_FONDO_TABLA
@@ -143,7 +196,6 @@ def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def
         p2.font.size = Pt(8.5)
         p2.font.color.rgb = RGBColor(249, 115, 22)
 
-        # 4. Muy malo 1★
         c3 = table.cell(r_idx, 3)
         c3.fill.solid()
         c3.fill.fore_color.rgb = C_FONDO_TABLA
@@ -153,7 +205,6 @@ def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def
         p3.font.size = Pt(8.5)
         p3.font.color.rgb = RGBColor(239, 68, 68)
 
-        # 5. Todos los casos
         c4 = table.cell(r_idx, 4)
         c4.fill.solid()
         c4.fill.fore_color.rgb = RGBColor(30, 41, 59)
@@ -164,7 +215,6 @@ def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def
         p4.font.size = Pt(8.5)
         p4.font.color.rgb = C_AZUL_TXT
 
-        # 6. % del Total
         c5 = table.cell(r_idx, 5)
         c5.fill.solid()
         c5.fill.fore_color.rgb = RGBColor(30, 41, 59)
@@ -174,6 +224,7 @@ def poblar_tabla_matriz_agentes(tabla_shape, df_agentes, slide, x_def=4.3, y_def
         p5.font.bold = True
         p5.font.size = Pt(8.5)
         p5.font.color.rgb = C_AZUL_TXT
+
 
 # =============================================================================
 # FUNCIONES PARA TABLAS DE DETALLE INFERIORES (MOTIVOS / TICKETS)
@@ -252,6 +303,7 @@ def poblar_tabla_l1_motivos(tabla_shape, df_l1_motivos, slide):
     for ini, fin in bloques_merge:
         table.cell(ini, 0).merge(table.cell(fin, 0))
         table.cell(ini, 0).vertical_anchor = MSO_ANCHOR.MIDDLE
+
 
 def poblar_tabla_l3_casos(tabla_shape, df_l3_neg, slide):
     if df_l3_neg is None or df_l3_neg.empty:
@@ -348,8 +400,9 @@ def poblar_tabla_l3_casos(tabla_shape, df_l3_neg, slide):
         table.cell(ini, 0).merge(table.cell(fin, 0))
         table.cell(ini, 0).vertical_anchor = MSO_ANCHOR.MIDDLE
 
+
 # =============================================================================
-# EXPORTADOR PRINCIPAL
+# EXPORTADOR PRINCIPAL (CON CAPTURAS HD DE PLOTLY)
 # =============================================================================
 def exportar_wbr_con_plantilla(datos):
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -429,7 +482,12 @@ def exportar_wbr_con_plantilla(datos):
         "{{TOT_EXT}}": f"{datos.get('tot_ext', 0)}",
         "{{TOT_DOMINGO}}": f"{datos.get('tot_domingo', 0)}",
         "{{PCT_EXT_CER}}": f"{datos.get('pct_ext_cerrados', 0)}",
-        "{{TOT_EXT_CER}}": f"{datos.get('tot_ext_cerrados', 0)}"
+        "{{TOT_EXT_CER}}": f"{datos.get('tot_ext_cerrados', 0)}",
+
+        "{{TOT_CORREOS_REC}}": f"{datos.get('tot_correos_rec', 0):,}",
+        "{{TOT_CORREOS_CER}}": f"{datos.get('tot_correos_cer', 0):,}",
+        "{{PCT_COR_RES}}": f"{datos.get('pct_cor_res', 0)}",
+        "{{TOT_RESP_CORREOS}}": f"{datos.get('tot_resp_correos', 0):,}",
     }
 
     # 1. Reemplazo de Textos
@@ -437,94 +495,61 @@ def exportar_wbr_con_plantilla(datos):
         for shape in slide.shapes:
             procesar_forma_reemplazos(shape, reemplazos)
 
-    # 2. Inyección de Gráficos (Slide por Slide)
-    # SLIDE 1: Evolutivo 5 Semanas
+    # 2. Reemplazo de Gráficos Placeholder por Capturas PNG HD de Plotly (fondo oscuro)
+    # SLIDE 1 (índice 0): Evolutivo 5 Semanas
     try:
-        df_5w = datos.get("df_5w")
-        if df_5w is not None and not df_5w.empty and len(prs.slides) > 0:
-            chs_1 = obtener_todos_los_graficos(prs.slides[0])
+        if len(prs.slides) > 0 and datos.get("fig_5w") is not None:
+            chs_1 = obtener_formas_grafico_ordenadas(prs.slides[0])
             if chs_1:
-                cd1 = CategoryChartData()
-                cd1.categories = [str(x) for x in df_5w["Semana"]]
-                cd1.add_series("Recibidos", [float(x) for x in df_5w["Recibidos"]])
-                cd1.add_series("Cerrados", [float(x) for x in df_5w["Cerrados"]])
-                chs_1[0].replace_data(cd1)
+                reemplazar_chart_por_plotly_hd(prs.slides[0], chs_1[0], datos["fig_5w"], fondo_oscuro=True)
     except Exception as e:
-        print(f"Error gráfico S1: {e}")
+        print(f"Error captura S1: {e}")
 
-    # SLIDE 2: Detalle Día a Día y Donut de Agentes
+    # SLIDE 2 (índice 1): Detalle Día a Día (izq) y Donut de Agentes (der)
     try:
         if len(prs.slides) > 1:
-            chs_2 = obtener_todos_los_graficos(prs.slides[1])
-            df_dias = datos.get("df_dias")
-            if chs_2 and df_dias is not None and not df_dias.empty:
-                cd_dias = CategoryChartData()
-                cd_dias.categories = [str(x)[5:] for x in df_dias["Fecha"]]
-                cd_dias.add_series("Recibidos", [float(x) for x in df_dias["Recibidos"]])
-                cd_dias.add_series("Cerrados", [float(x) for x in df_dias["Cerrados"]])
-                chs_2[0].replace_data(cd_dias)
-
-            df_ag = datos.get("df_agentes")
-            if len(chs_2) > 1 and df_ag is not None and not df_ag.empty:
-                cd_ag = CategoryChartData()
-                cd_ag.categories = [str(x) for x in df_ag["Agente"]]
-                cd_ag.add_series("Cerrados", [float(x) for x in df_ag["Cerrados"]])
-                chs_2[1].replace_data(cd_ag)
+            chs_2 = obtener_formas_grafico_ordenadas(prs.slides[1])
+            if len(chs_2) >= 1 and datos.get("fig_dias") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[1], chs_2[0], datos["fig_dias"], fondo_oscuro=True)
+            if len(chs_2) >= 2 and datos.get("fig_pie_w") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[1], chs_2[1], datos["fig_pie_w"], fondo_oscuro=True)
     except Exception as e:
-        print(f"Error gráfico S2: {e}")
+        print(f"Error captura S2: {e}")
 
-    # SLIDE 3: Tiempos de Gestión y 1ra Respuesta
+    # SLIDE 3 (índice 2): Tiempos de Gestión (izq) y 1ra Respuesta (der)
     try:
         if len(prs.slides) > 2:
-            chs_3 = obtener_todos_los_graficos(prs.slides[2])
-            df_t = datos.get("df_tiempos")
-            if df_t is not None and not df_t.empty and len(chs_3) >= 2:
-                cd_g = CategoryChartData()
-                cd_g.categories = [str(x) for x in df_t["Semana"]]
-                cd_g.add_series("Gestión", [float(x) for x in df_t["Prom_Gestion"]])
-                chs_3[0].replace_data(cd_g)
-
-                cd_1 = CategoryChartData()
-                cd_1.categories = [str(x) for x in df_t["Semana"]]
-                cd_1.add_series("1ra Resp", [float(x) for x in df_t["Prom_1ra"]])
-                chs_3[1].replace_data(cd_1)
+            chs_3 = obtener_formas_grafico_ordenadas(prs.slides[2])
+            if len(chs_3) >= 1 and datos.get("fig_bar_gest") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[2], chs_3[0], datos["fig_bar_gest"], fondo_oscuro=True)
+            if len(chs_3) >= 2 and datos.get("fig_bar_1ra") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[2], chs_3[1], datos["fig_bar_1ra"], fondo_oscuro=True)
     except Exception as e:
-        print(f"Error gráfico S3: {e}")
+        print(f"Error captura S3: {e}")
 
-    # SLIDE 4: Sentimiento (Dona de Calificaciones)
+    # SLIDE 4 (índice 3): Puntuaciones por Nivel (izq) y Sentimiento (der)
     try:
         if len(prs.slides) > 3:
-            chs_4 = obtener_todos_los_graficos(prs.slides[3])
-            c_pos = int(datos.get("cnt_5", 0)) + int(datos.get("cnt_4", 0))
-            c_neg = int(datos.get("cnt_3", 0)) + int(datos.get("cnt_2", 0)) + int(datos.get("cnt_1", 0))
-            if len(chs_4) > 1 and (c_pos + c_neg) > 0:
-                cd_sent = CategoryChartData()
-                cd_sent.categories = ["Positivas (≥4★)", "Negativas (≤3★)"]
-                cd_sent.add_series("Sentimiento", [c_pos, c_neg])
-                chs_4[1].replace_data(cd_sent)
+            chs_4 = obtener_formas_grafico_ordenadas(prs.slides[3])
+            if len(chs_4) >= 1 and datos.get("fig_niv") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[3], chs_4[0], datos["fig_niv"], fondo_oscuro=True)
+            if len(chs_4) >= 2 and datos.get("fig_sent") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[3], chs_4[1], datos["fig_sent"], fondo_oscuro=True)
     except Exception as e:
-        print(f"Error gráfico S4: {e}")
+        print(f"Error captura S4: {e}")
 
-    # SLIDE 5: Evolutivo CSAT y Ratio Empresa
+    # SLIDE 5 (índice 4): Evolutivo CSAT (izq) y Ratio Empresa (der)
     try:
         if len(prs.slides) > 4:
-            chs_5 = obtener_todos_los_graficos(prs.slides[4])
-            df_csat_evo = datos.get("df_evol_csat")
-            if df_csat_evo is not None and not df_csat_evo.empty and len(chs_5) >= 2:
-                cd_c = CategoryChartData()
-                cd_c.categories = [str(x) for x in df_csat_evo["Semana"]]
-                cd_c.add_series("CSAT %", [float(x) for x in df_csat_evo["CSAT"]])
-                chs_5[0].replace_data(cd_c)
-
-                cd_r = CategoryChartData()
-                cd_r.categories = [str(x) for x in df_csat_evo["Semana"]]
-                cd_r.add_series("Ratio", [float(x) for x in df_csat_evo["Ratio_Empresa"]])
-                chs_5[1].replace_data(cd_r)
+            chs_5 = obtener_formas_grafico_ordenadas(prs.slides[4])
+            if len(chs_5) >= 1 and datos.get("fig_bar_csat") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[4], chs_5[0], datos["fig_bar_csat"], fondo_oscuro=True)
+            if len(chs_5) >= 2 and datos.get("fig_bar_ratio") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[4], chs_5[1], datos["fig_bar_ratio"], fondo_oscuro=True)
     except Exception as e:
-        print(f"Error gráfico S5: {e}")
+        print(f"Error captura S5: {e}")
 
-    # 3. Poblar Tablas de L1 (Slide 6) y L3 (Slide 7)
-    # SLIDE 6: L1 (Tabla Superior de Agentes + Tabla Inferior de Motivos)
+    # 3. Poblar Tablas de L1 (Slide 6 -> índice 5) y L3 (Slide 7 -> índice 6)
     try:
         if len(prs.slides) >= 6:
             s_l1 = prs.slides[5]
@@ -537,7 +562,6 @@ def exportar_wbr_con_plantilla(datos):
     except Exception as e:
         print(f"Error en tablas Slide 6 (L1): {e}")
 
-    # SLIDE 7: L3 (Tabla Superior de Agentes + Tabla Inferior de Casos/Tickets)
     try:
         if len(prs.slides) >= 7:
             s_l3 = prs.slides[6]
@@ -549,6 +573,25 @@ def exportar_wbr_con_plantilla(datos):
             poblar_tabla_l3_casos(t_casos_l3, datos.get("df_l3_neg"), s_l3)
     except Exception as e:
         print(f"Error en tablas Slide 7 (L3): {e}")
+
+    # SLIDE 8+ (si tu plantilla tiene diapositivas extra para Niveles L1/L2/L3 y Horario Extendido)
+    try:
+        if len(prs.slides) >= 8:
+            chs_8 = obtener_formas_grafico_ordenadas(prs.slides[7])
+            if len(chs_8) >= 1 and datos.get("fig_niveles_wbr") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[7], chs_8[0], datos["fig_niveles_wbr"], fondo_oscuro=True)
+    except Exception as e:
+        print(f"Error captura S8: {e}")
+
+    try:
+        if len(prs.slides) >= 9:
+            chs_9 = obtener_formas_grafico_ordenadas(prs.slides[8])
+            if len(chs_9) >= 1 and datos.get("fig_pie_ext") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[8], chs_9[0], datos["fig_pie_ext"], fondo_oscuro=True)
+            if len(chs_9) >= 2 and datos.get("fig_bar_dias_ext") is not None:
+                reemplazar_chart_por_plotly_hd(prs.slides[8], chs_9[1], datos["fig_bar_dias_ext"], fondo_oscuro=True)
+    except Exception as e:
+        print(f"Error captura S9: {e}")
 
     out = io.BytesIO()
     prs.save(out)
