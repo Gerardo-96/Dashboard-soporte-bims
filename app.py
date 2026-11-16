@@ -5525,6 +5525,12 @@ if tab_admin is not None:
             col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
             f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
             f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
+            chk_por_creacion = col_f3.checkbox(
+                "Filtrar solo por fecha de creación (created_at)",
+                value=False,
+                key="chk_sync_por_creacion",
+                help="Si se marca, trae únicamente conversaciones creadas en el rango (evita traer tickets antiguos reasignados masivamente)."
+            )
 
             btn_bloqueado = (sync_info["status"] == "running")
 
@@ -5535,22 +5541,32 @@ if tab_admin is not None:
                     GLOBAL_SYNC_STATE["log"] = ""
                     GLOBAL_SYNC_STATE["error"] = None
 
-                    def tarea_sync_paralela(f_inicio, f_final):
+                    def tarea_sync_paralela(f_inicio, f_final, solo_creacion):
                         try:
                             def cb_progreso(proc, tot):
                                 GLOBAL_SYNC_STATE["processed"] = proc
 
-                            tot_f = sincronizar_intercom(fecha_desde=f_inicio, fecha_hasta=f_final, progress_callback=cb_progreso)
+                            tot_f = sincronizar_intercom(
+                                fecha_desde=f_inicio,
+                                fecha_hasta=f_final,
+                                progress_callback=cb_progreso,
+                                por_creacion=solo_creacion
+                            )
                             GLOBAL_SYNC_STATE["status"] = "completed"
                             tz_py = timezone(timedelta(hours=-3))
                             hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
+                            criterio_txt = "created_at" if solo_creacion else "updated_at"
 
-                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
+                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros ({criterio_txt}) para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
                         except Exception as ex_thread:
                             GLOBAL_SYNC_STATE["status"] = "error"
                             GLOBAL_SYNC_STATE["error"] = str(ex_thread)
 
-                    hilo_sync = threading.Thread(target=tarea_sync_paralela, args=(f_sync_desde, f_sync_hasta), daemon=True)
+                    hilo_sync = threading.Thread(
+                        target=tarea_sync_paralela,
+                        args=(f_sync_desde, f_sync_hasta, chk_por_creacion),
+                        daemon=True
+                    )
                     hilo_sync.start()
                     st.rerun()
                 else:
