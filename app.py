@@ -689,8 +689,8 @@ def renderizar_panel_carga_asignador():
             fig_carga.update_layout(
                 barmode="stack",
                 title="<b>Distribución y Carga Actual del Equipo (Apilado)</b>",
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#1e293b",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=12),
                 xaxis=dict(gridcolor="#334155", title=None),
                 yaxis=dict(gridcolor="#334155", title="Cantidad de Chats", showgrid=False, showticklabels=False, dtick=1),
@@ -2549,7 +2549,7 @@ with tab_operativo:
                     annotation_text="<b>Meta 90%</b>",
                     annotation_position="top left",
                     annotation_font=dict(color="#34d399", size=11),
-                    annotation_bgcolor="rgba(15, 23, 42, 0.85)"
+                    annotation_bgcolor="rgba(11, 17, 32, 0.85)
                 )
 
                 # Aire lateral en eje X para que S27 y S47 nunca se corten
@@ -2579,8 +2579,8 @@ with tab_operativo:
                         ticksuffix="%",
                         tickfont=dict(color="#64748b", size=10)
                     ),
-                    paper_bgcolor="#1e293b",
-                    plot_bgcolor="#1e293b",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#cbd5e1"),
                     margin=dict(t=55, b=35, l=45, r=35),
                     height=380,
