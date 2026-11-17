@@ -1046,15 +1046,14 @@ def obtener_inicio_trimestre_anterior():
 # CACHÉ DE DATOS EN SUPABASE
 # ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
-def obtener_datos_historicos_q():
-    """Descarga datos históricos desde el Q anterior usando created_at (1 vez al día)."""
+def obtener_datos_historicos_q(fecha_hasta_ayer_str):
+    """Descarga datos históricos desde el Q anterior hasta ayer (se invalida automáticamente al cambiar de día)."""
     todos_los_datos = []
     lote = 0
     tamanio_lote = 1000
 
-    hoy = obtener_fecha_local_hoy()
     fecha_inicio_q_ant = f"{obtener_inicio_trimestre_anterior()[:10]}T00:00:00Z"
-    fecha_hasta_ayer = f"{hoy}T00:00:00Z"
+    fecha_hasta_ayer = f"{fecha_hasta_ayer_str}T03:00:00Z"
 
     while True:
         inicio = lote * tamanio_lote
@@ -1120,16 +1119,16 @@ def obtener_datos_hoy():
         return []
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def obtener_df_historico_procesado():
-    """Procesa y cachea por 24h todo el histórico hasta ayer (evita recalcular en cada F5)."""
-    datos_historicos = obtener_datos_historicos_q()
+def obtener_df_historico_procesado(fecha_corte_hoy_str):
+    """Procesa y cachea el histórico hasta ayer, invalidándose solo cuando cambia la fecha del día."""
+    datos_historicos = obtener_datos_historicos_q(fecha_corte_hoy_str)
     if not datos_historicos:
         return pd.DataFrame()
     df_h = pd.DataFrame(datos_historicos).drop_duplicates(subset=["id"], keep="first").copy()
     return procesar_fechas_df(df_h)
 
 @st.cache_data(ttl=900, show_spinner=False)
-def obtener_df_hoy_procesado():
+def obtener_df_hoy_procesado(fecha_corte_hoy_str):
     """Procesa únicamente las conversaciones de hoy y abiertas."""
     datos_hoy = obtener_datos_hoy()
     if not datos_hoy:
@@ -1139,8 +1138,9 @@ def obtener_df_hoy_procesado():
 
 def obtener_datos():
     """Une el histórico cacheado con los datos frescos de hoy en milisegundos."""
-    df_hoy = obtener_df_hoy_procesado()
-    df_hist = obtener_df_historico_procesado()
+    hoy_str = str(obtener_fecha_local_hoy())
+    df_hoy = obtener_df_hoy_procesado(hoy_str)
+    df_hist = obtener_df_historico_procesado(hoy_str)
     
     if df_hoy.empty and df_hist.empty:
         return pd.DataFrame()
