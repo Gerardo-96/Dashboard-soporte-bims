@@ -317,9 +317,10 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 body_clean = re.sub(r"<[^>]*>", "", str(part.get("body") or "")).strip()
                 tiene_texto = len(body_clean) > 0
 
-                # Incluye respuestas enviadas con "Reply & Close" (part_type == "close" con body)
-                if p_type not in ["comment", "email", "reply"] and not (p_type == "close" and tiene_texto):
+                # Cualquier parte con texto real escrita por un humano (incluye Reply & Close / Assign)
+                if p_type not in ["comment", "email", "reply"] and not (p_type in ["close", "assignment"] and tiene_texto):
                     return False
+
                 author = part.get("author") or {}
                 a_type = str(author.get("type", "")).lower()
                 a_name = str(author.get("name", "")).lower()
@@ -332,7 +333,7 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                         return False
                     return True
 
-                # 2. Respuesta enviada desde Gmail corporativo (@tivahq.com o @itti.digital)
+                # 2. Respuesta enviada desde Gmail corporativo
                 if a_type in ["user", "lead"]:
                     a_email = str(author.get("email", "")).strip().lower()
                     if not a_email and author.get("id"):
