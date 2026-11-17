@@ -2549,7 +2549,7 @@ with tab_operativo:
                     annotation_text="<b>Meta 90%</b>",
                     annotation_position="top left",
                     annotation_font=dict(color="#34d399", size=11),
-                    annotation_bgcolor="rgba(11, 17, 32, 0.85)
+                    annotation_bgcolor="rgba(11, 17, 32, 0.85)"
                 )
 
                 # Aire lateral en eje X para que S27 y S47 nunca se corten
