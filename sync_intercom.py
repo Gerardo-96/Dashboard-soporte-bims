@@ -315,10 +315,9 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             def es_respuesta_humana_o_gmail_corporativo(part):
                 p_type = str(part.get("part_type") or "").lower()
                 body_clean = re.sub(r"<[^>]*>", "", str(part.get("body") or "")).strip()
-                tiene_texto = len(body_clean) > 0
 
-                # Cualquier parte con texto real escrita por un humano (incluye Reply & Close / Assign)
-                if p_type not in ["comment", "email", "reply"] and not (p_type in ["close", "assignment"] and tiene_texto):
+                # Excluye notas internas ("note") y eventos vacíos; acepta cualquier respuesta con texto (comment, assignment, close, etc.)
+                if p_type == "note" or len(body_clean) == 0:
                     return False
 
                 author = part.get("author") or {}
