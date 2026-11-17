@@ -2576,11 +2576,18 @@ with tab_operativo:
         or st.session_state.get("admin_authenticated", False)
     )
 
-    # DETALLE Y CATEGORIZACIÓN CSAT DIRECTO EN TABLA (Con Form para Guardado Seguro)
-    if not df_filtered.empty and "rating" in df_filtered.columns:
-        df_csat_det = df_filtered.dropna(subset=["rating"]).copy()
+    # DETALLE Y CATEGORIZACIÓN CSAT DIRECTO EN TABLA (Filtrado por fecha_calificacion, no por fecha de creación)
+    if not df_all.empty and "rating" in df_all.columns and "fecha_calificacion_solo" in df_all.columns:
+        df_csat_det = df_all.dropna(subset=["rating"]).copy()
         df_csat_det["rating_num"] = pd.to_numeric(df_csat_det["rating"], errors="coerce")
         df_csat_det = df_csat_det.dropna(subset=["rating_num"])
+        df_csat_det = df_csat_det[
+            (df_csat_det["fecha_calificacion_solo"] >= f_desde_v) &
+            (df_csat_det["fecha_calificacion_solo"] <= f_hasta_v)
+        ].copy()
+        if usar_filtro_hora and not df_csat_det.empty and "fecha_calificacion_dt" in df_csat_det.columns:
+            hora_calif_s = df_csat_det["fecha_calificacion_dt"].dt.time
+            df_csat_det = df_csat_det[(hora_calif_s >= hora_inicio) & (hora_calif_s <= hora_fin)]
 
         if not df_csat_det.empty:
             with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas)", expanded=False):
