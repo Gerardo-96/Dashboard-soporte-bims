@@ -4434,14 +4434,15 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         mapa_escala = {
             5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
         }
-        
-        df_target["nivel_norm"] = (
-            df_target["nivel"].fillna("Niv-L1")
+
+        df_target_csat["nivel_norm"] = (
+            df_target_csat.get("nivel", pd.Series(index=df_target_csat.index, dtype=str))
+            .fillna("Niv-L1")
             .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
         )
-        df_target["rating_int"] = pd.to_numeric(df_target["rating"], errors="coerce").fillna(0).astype(int)
+        df_target_csat["rating_int"] = pd.to_numeric(df_target_csat["rating_num"], errors="coerce").fillna(0).astype(int)
 
-        df_target_calificados = df_target[df_target["rating_int"] > 0].copy()
+        df_target_calificados = df_target_csat[df_target_csat["rating_int"] > 0].copy()
         df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
 
         orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo"]
@@ -4452,21 +4453,54 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             x="puntuacion_str",
             y="Cantidad",
             color="nivel_norm",
-            barmode="group",
-            category_orders={"puntuacion_str": orden_puntuacion},
-            color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#0369a1"},
+            barmode="stack",
+            category_orders={
+                "puntuacion_str": orden_puntuacion,
+                "nivel_norm": ["Niv-L1", "Niv-L2", "Niv-L3"]
+            },
+            color_discrete_map={
+                "Niv-L1": "#38bdf8",
+                "Niv-L2": "#818cf8",
+                "Niv-L3": "#f59e0b"
+            },
             text="Cantidad"
         )
-        fig_niv.update_traces(textposition="outside", marker=dict(cornerradius=6))
+        fig_niv.update_traces(
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(color="#0f172a", size=12, family="Arial Black"),
+            marker=dict(cornerradius=6, line=dict(color="#0b1120", width=1.5))
+        )
+
+        # Total acumulado encima de cada barra apilada
+        totales_punt = df_niv_grp.groupby("puntuacion_str")["Cantidad"].sum()
+        for cat_punt, tot_val in totales_punt.items():
+            if tot_val > 0:
+                fig_niv.add_annotation(
+                    x=cat_punt,
+                    y=tot_val,
+                    text=f"<b>{int(tot_val)}</b>",
+                    showarrow=False,
+                    yshift=12,
+                    font=dict(color="#f8fafc", size=13)
+                )
+
         fig_niv.update_layout(
             hovermode=False,
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(color="#cbd5e1", size=11),
             xaxis=dict(gridcolor="#1e293b", title=None),
-            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            yaxis=dict(
+                range=[0, max(totales_punt.max() * 1.18, 2)] if not totales_punt.empty else [0, 5],
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+                showline=False,
+                title=None
+            ),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
-            margin=dict(t=30, b=20, l=20, r=20),
+            margin=dict(t=35, b=20, l=20, r=20),
             height=360
         )
         st.plotly_chart(fig_niv, use_container_width=True)
@@ -4507,14 +4541,14 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     # =========================================================================
     st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
 
-    df_l1_neg = df_target[
-        (df_target["nivel_norm"] == "Niv-L1") &
-        (df_target["rating_int"].isin([1, 2, 3]))
+    df_l1_neg = df_target_csat[
+        (df_target_csat["nivel_norm"] == "Niv-L1") &
+        (df_target_csat["rating_int"].isin([1, 2, 3]))
     ].copy()
 
-    df_l3_neg = df_target[
-        (df_target["nivel_norm"] == "Niv-L3") &
-        (df_target["rating_int"].isin([1, 2, 3]))
+    df_l3_neg = df_target_csat[
+        (df_target_csat["nivel_norm"] == "Niv-L3") &
+        (df_target_csat["rating_int"].isin([1, 2, 3]))
     ].copy()
 
     tot_l1_neg = len(df_l1_neg)
