@@ -2506,62 +2506,86 @@ with tab_operativo:
 
                 fig_csat = go.Figure()
 
+                # Colores dinámicos en los nodos según cumplimiento de meta (90%)
+                colores_nodos = [
+                    "#10b981" if v >= 90.0 else "#f59e0b"
+                    for v in df_evo_csat["CSAT %"]
+                ]
+
                 fig_csat.add_trace(go.Scatter(
                     x=df_evo_csat["Semana"],
                     y=df_evo_csat["CSAT %"],
-                    mode="lines+text",
+                    mode="lines+markers+text",
                     name="CSAT (%)",
-                    text=[f"<b>{v}%</b>" for v in df_evo_csat["CSAT %"]],
+                    text=[f"<b>{v:.1f}%</b>" for v in df_evo_csat["CSAT %"]],
                     textposition="top center",
-                    # %{customdata[0]} = Rango de fechas | %{customdata[1]} = Cantidad de encuestas
+                    textfont=dict(color="#f8fafc", size=11),
+                    marker=dict(
+                        size=8,
+                        color=colores_nodos,
+                        line=dict(color="#0f172a", width=2)
+                    ),
                     hovertemplate=(
                         "<b>%{x}</b> (%{customdata[0]})<br>"
-                        "CSAT: <b>%{y}%</b><br>"
+                        "CSAT: <b>%{y:.1f}%</b><br>"
                         "Total encuestas: %{customdata[1]}<extra></extra>"
                     ),
                     customdata=np.stack((df_evo_csat["Rango_Fechas"], df_evo_csat["Encuestas"]), axis=-1),
-                    line=dict(color="#38bdf8", width=3, shape="spline"),
+                    line=dict(color="#38bdf8", width=3, shape="spline", smoothing=0.8),
                     fill="tozeroy",
-                    fillcolor="rgba(56, 189, 248, 0.08)"
+                    fillgradient=dict(
+                        type="vertical",
+                        colorscale=[
+                            [0.0, "rgba(56, 189, 248, 0.0)"],
+                            [1.0, "rgba(56, 189, 248, 0.22)"]
+                        ]
+                    )
                 ))
 
-                fig_csat.add_shape(
-                    type="line",
-                    x0=0, x1=1, xref="paper",
-                    y0=90, y1=90, yref="y",
-                    line=dict(color="#34d399", width=1.5, dash="dash")
+                # Línea de meta objetivo (90%)
+                fig_csat.add_hline(
+                    y=90,
+                    line=dict(color="#34d399", width=1.5, dash="dot"),
+                    annotation_text="<b>Meta 90%</b>",
+                    annotation_position="top left",
+                    annotation_font=dict(color="#34d399", size=11),
+                    annotation_bgcolor="rgba(15, 23, 42, 0.85)"
                 )
 
-                # Anotación reubicada al inicio del gráfico (lado izquierdo) y por debajo de la línea
-                fig_csat.add_annotation(
-                    x=0.01, y=90, xref="paper", yref="y",
-                    text="<b>Meta Objetivo (90%)</b>",
-                    showarrow=False,
-                    xanchor="left",
-                    yshift=-12,  # Debajo de la línea para no chocar con los números de la curva
-                    font=dict(color="#34d399", size=11),
-                    bgcolor="rgba(30, 41, 59, 0.75)"  # Fondo translúcido protector
-                )
+                # Aire lateral en eje X para que S27 y S47 nunca se corten
+                total_semanas = len(df_evo_csat)
+                min_y = max(60, float(df_evo_csat["CSAT %"].min()) - 6)
 
                 fig_csat.update_layout(
-                    title=f"<b>Evolución Semanal de Satisfacción al Cliente (Desde Q{q_ant_evo})</b>",
-                    xaxis_title="Semana del Año",
-                    yaxis_title="",
-                    yaxis=dict(
-                        range=[0, 120],  # Rango ampliado para que el 100% tenga suficiente aire superior
-                        showgrid=False,
-                        showline=False,
-                        zeroline=False,
-                        showticklabels=False
+                    title=dict(
+                        text=f"<b>Evolución Semanal de Satisfacción al Cliente (Desde Q{q_ant_evo})</b>",
+                        font=dict(size=15, color="#f8fafc"),
+                        x=0.01
                     ),
-                    xaxis=dict(gridcolor="#334155"),
+                    xaxis=dict(
+                        title=None,
+                        range=[-0.6, total_semanas - 0.4],
+                        showgrid=False,
+                        zeroline=False,
+                        tickfont=dict(color="#94a3b8", size=11)
+                    ),
+                    yaxis=dict(
+                        title=None,
+                        range=[min_y, 104],
+                        gridcolor="rgba(51, 65, 85, 0.35)",
+                        griddash="dot",
+                        zeroline=False,
+                        showline=False,
+                        ticksuffix="%",
+                        tickfont=dict(color="#64748b", size=10)
+                    ),
                     paper_bgcolor="#1e293b",
                     plot_bgcolor="#1e293b",
                     font=dict(color="#cbd5e1"),
-                    margin=dict(t=50, b=40, l=20, r=20),
-                    height=380
+                    margin=dict(t=55, b=35, l=45, r=35),
+                    height=380,
+                    showlegend=False
                 )
-
                 st.plotly_chart(fig_csat, use_container_width=True)
             else:
                 st.info(f"No hay encuestas registradas desde Q{q_ant_evo} para generar el gráfico.")
