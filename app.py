@@ -11,6 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from openpyxl.utils import get_column_letter
 from supabase import create_client, Client
+from guardias import render_widget_guardia
 import extra_streamlit_components as stx
 
 # ==========================================
@@ -184,6 +185,22 @@ def obtener_permisos_usuario(identificador_usuario):
     except Exception as e:
         print(f"Error consultando permisos: {e}")
     return {"acceso_wbr": False, "acceso_admin": False}
+
+@st.cache_data(ttl=600, show_spinner=False)
+def obtener_id_usuario_actual(email_usuario):
+    if not email_usuario:
+        return None
+    try:
+        res = (
+            supabase.table("usuarios_autorizados")
+            .select("id")
+            .eq("email", email_usuario.strip().lower())
+            .limit(1)
+            .execute()
+        )
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        return None
 
 # ==========================================
 # PANTALLA DE LOGIN CON MODAL INSTANTÁNEO (ANTI-DEFORMACIÓN AL DAR ENTER)
@@ -2320,6 +2337,12 @@ def renderizar_alertas_en_vivo():
 
 with tab_operativo:
     renderizar_alertas_en_vivo()
+
+    usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
+    render_widget_guardia(
+        supabase=supabase,
+        usuario_actual_id=usuario_id_actual
+    )
 
     sla_1ra_th = st.session_state["sla_1ra_th"]
     sla_gest_th = st.session_state["sla_gest_th"]
