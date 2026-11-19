@@ -617,10 +617,10 @@ def notificar_guardia_sabado(authorization: str = Header(None)):
 
         fecha_fmt = datetime.strptime(manana_sabado, "%Y-%m-%d").strftime("%d/%m")
         msg_guardia = (
-            f"🛡️ *Recordatorio de Guardia Sabatina*\n\n"
+            f"🛡️ *Recordatorio de Guardia*\n\n"
             f"Buen cierre de semana equipo 👋\n"
             f"Recordamos que mañana *sábado {fecha_fmt}* de *09:00 a 12:00 hs* le corresponde la guardia a {tag_agente}.\n\n"
-            f"_Si realizaron algún intercambio, recuérdenlo registrarlo en el dashboard._"
+            f"_Si realizaron algún intercambio, recuerden registrarlo en el dashboard._"
         )
 
         enviar_whatsapp(jid_grupo, msg_guardia, menciones=menciones_list)
