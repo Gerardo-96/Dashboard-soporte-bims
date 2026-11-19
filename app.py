@@ -2133,7 +2133,17 @@ else:
     </div>
     """
 
-st.markdown(badge_html, unsafe_allow_html=True)
+col_header_izq, col_header_der = st.columns([2.2, 1], vertical_alignment="center")
+
+with col_header_izq:
+    st.markdown(badge_html, unsafe_allow_html=True)
+
+with col_header_der:
+    usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
+    render_widget_guardia(
+        supabase=supabase,
+        usuario_actual_id=usuario_id_actual
+    )
 
 # 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
 usuario_actual = st.session_state.get("usuario_conectado") or st.session_state.get("user_email", "")
@@ -2337,12 +2347,6 @@ def renderizar_alertas_en_vivo():
 
 with tab_operativo:
     renderizar_alertas_en_vivo()
-
-    usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
-    render_widget_guardia(
-        supabase=supabase,
-        usuario_actual_id=usuario_id_actual
-    )
 
     sla_1ra_th = st.session_state["sla_1ra_th"]
     sla_gest_th = st.session_state["sla_gest_th"]
