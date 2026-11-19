@@ -84,7 +84,7 @@ def modal_calendario_guardias(supabase):
 
 
 def render_widget_guardia(supabase, usuario_actual_id=None):
-    """Widget compacto con estética .metric-card y el botón integrado a la derecha."""
+    """Tarjeta .metric-card exacta con botón superpuesto a la derecha."""
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
 
     res = (
@@ -115,45 +115,44 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         if siguiente else "09:00 - 12:00 hs"
     )
 
+    # 1. Tarjeta HTML pura con espacio reservado a la derecha (padding-right: 135px)
     st.markdown(f"""
+    <div class="metric-card" style="
+        border-left: 4px solid {borde_color};
+        padding: 12px 135px 12px 16px;
+        margin-bottom: 0px;
+    ">
+        <div class="metric-card-title" style="font-size: 0.68rem;">
+            <span>🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()} (09-12 HS){badge_turno}</span>
+        </div>
+        <div style="font-size: 1.18rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">
+            {agente_actual}
+        </div>
+        <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px;">
+            {texto_siguiente}
+        </div>
+    </div>
     <style>
-        div[data-testid="stVerticalBlock"]:has(> div.stElementContainer .guardia-card-ancla),
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.guardia-card-ancla) {{
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
-            border: 1px solid #334155 !important;
-            border-left: 4px solid {borde_color} !important;
-            border-radius: 12px !important;
-            padding: 12px 16px !important;
-            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35) !important;
+        div.st-key-btn_abrir_guardias {{
+            margin-top: -62px !important;
+            margin-bottom: 22px !important;
+            margin-right: 14px !important;
+            display: flex !important;
+            justify-content: flex-end !important;
+            position: relative !important;
+            z-index: 10 !important;
         }}
-        div[data-testid="stVerticalBlock"]:has(> div.stElementContainer .guardia-card-ancla) div.stElementContainer:first-child {{
-            display: none !important;
-        }}
-        div[data-testid="stVerticalBlock"]:has(> div.stElementContainer .guardia-card-ancla) button {{
-            font-size: 0.78rem !important;
-            padding: 5px 10px !important;
-            min-height: 34px !important;
+        div.st-key-btn_abrir_guardias button {{
+            width: auto !important;
+            min-width: 112px !important;
+            padding: 6px 12px !important;
+            font-size: 0.76rem !important;
+            height: 34px !important;
+            margin-top: 0 !important;
         }}
     </style>
     """, unsafe_allow_html=True)
 
-    with st.container(border=True):
-        st.markdown('<div class="guardia-card-ancla"></div>', unsafe_allow_html=True)
-        col_txt, col_btn = st.columns([1.65, 1], vertical_alignment="center")
-
-        with col_txt:
-            st.markdown(f"""
-            <div class="metric-card-title" style="font-size: 0.68rem;">
-                <span>🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()} (09-12 HS){badge_turno}</span>
-            </div>
-            <div style="font-size: 1.2rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">
-                {agente_actual}
-            </div>
-            <div style="font-size: 0.73rem; color: #94a3b8; margin-top: 4px;">
-                {texto_siguiente}
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col_btn:
-            if st.button("📅 Ver / Cambiar", key="btn_abrir_guardias", use_container_width=True):
-                modal_calendario_guardias(supabase)
+    # 2. Botón nativo que se posiciona dentro de la tarjeta a la derecha
+    if st.button("📅 Ver / Cambiar", key="btn_abrir_guardias"):
+        modal_calendario_guardias(supabase)
