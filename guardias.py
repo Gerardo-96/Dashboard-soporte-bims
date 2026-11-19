@@ -147,7 +147,7 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         margin-bottom: 0px;
     ">
         <div class="metric-card-title" style="font-size: 0.68rem;">
-            <span>🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()} (09-12 HS){badge_turno}</span>
+            <span>🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()} {badge_turno}</span>
         </div>
         <div style="font-size: 1.18rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">
             {agente_actual}
