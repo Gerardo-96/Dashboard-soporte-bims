@@ -189,5 +189,5 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     </style>
     """, unsafe_allow_html=True)
 
-    if st.button("Ver", key="btn_abrir_guardias"):
+    if st.button("📅 Ver", key="btn_abrir_guardias"):
         modal_calendario_guardias(supabase)
