@@ -84,7 +84,7 @@ def modal_calendario_guardias(supabase):
 
 
 def render_widget_guardia(supabase, usuario_actual_id=None):
-    """Widget compacto para mostrar en la vista principal del dashboard."""
+    """Widget compacto estilizado para la esquina superior derecha del header."""
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
 
     res = (
@@ -96,7 +96,6 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         .execute()
     )
     proximas = res.data or []
-
     if not proximas:
         return
 
@@ -105,20 +104,34 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     agente_actual = actual["usuarios_autorizados"]["nombre"]
     es_mi_turno = usuario_actual_id and (actual["usuarios_autorizados"]["id"] == usuario_actual_id)
 
-    with st.container(border=True):
-        col_info, col_btn = st.columns([4, 1.5], vertical_alignment="center")
+    borde_color = "#fbbf24" if es_mi_turno else "#38bdf8"
+    badge_turno = (
+        '<span style="background:rgba(251,191,36,0.15); color:#fbbf24; padding:1px 7px; '
+        'border-radius:10px; font-size:0.68rem; margin-left:6px;">¡Te toca!</span>'
+        if es_mi_turno else ""
+    )
+    texto_siguiente = (
+        f"Próx. ({formatear_fecha_corta(siguiente['fecha'])}): <b>{siguiente['usuarios_autorizados']['nombre']}</b>"
+        if siguiente else "09:00 - 12:00 hs"
+    )
 
-        with col_info:
-            badge = " · 🔔 **¡Te toca guardia!**" if es_mi_turno else ""
-            st.caption(f"🛡️ GUARDIA SABATINA (09:00 - 12:00){badge}")
-            st.markdown(f"### {agente_actual} — *{formatear_fecha_corta(actual['fecha'])}*")
+    st.markdown(f"""
+    <div class="metric-card" style="
+        border-left: 4px solid {borde_color};
+        padding: 12px 16px;
+        margin-bottom: 6px;
+    ">
+        <div class="metric-card-title" style="font-size: 0.7rem; justify-content: space-between;">
+            <span>🛡️ GUARDIA SÁBADO {formatear_fecha_corta(actual['fecha']).upper()} (09-12 HS){badge_turno}</span>
+        </div>
+        <div style="font-size: 1.25rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">
+            {agente_actual}
+        </div>
+        <div style="font-size: 0.74rem; color: #94a3b8; margin-top: 4px;">
+            {texto_siguiente}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-            if siguiente:
-                st.caption(
-                    f"Próximo sábado ({formatear_fecha_corta(siguiente['fecha'])}): "
-                    f"**{siguiente['usuarios_autorizados']['nombre']}**"
-                )
-
-        with col_btn:
-            if st.button("Ver / Cambiar", key="btn_abrir_guardias", use_container_width=True):
-                modal_calendario_guardias(supabase)
+    if st.button("📅 Ver calendario / Cambiar turno", key="btn_abrir_guardias", use_container_width=True):
+        modal_calendario_guardias(supabase)
