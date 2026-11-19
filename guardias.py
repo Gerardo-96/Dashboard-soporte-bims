@@ -16,9 +16,19 @@ def formatear_fecha_larga(fecha_str: str) -> str:
              "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
     return f"Sábado {dt.day:02d} de {meses[dt.month - 1]} {dt.year}"
 
+def obtener_feriados_guardias(supabase) -> set:
+    try:
+        res = supabase.table("config_notificaciones").select("feriados").eq("id", 1).limit(1).execute()
+        if res.data and res.data[0].get("feriados"):
+            return {str(f).strip() for f in res.data[0]["feriados"] if str(f).strip()}
+    except Exception:
+        pass
+    return set()
+
 @st.dialog("📅 Calendario de Guardias Sabatinas (09:00 - 12:00)", width="large")
 def modal_calendario_guardias(supabase):
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
+    feriados_set = obtener_feriados_guardias(supabase)
 
     res = (
         supabase.table("guardias_sabado")
@@ -33,47 +43,61 @@ def modal_calendario_guardias(supabase):
         st.info("No hay guardias programadas próximamente.")
         return
 
-    # --- Sección superior: Intercambio rápido entre compañeros ---
+    # Solo permitir intercambiar sábados hábiles (no feriados)
+    guardias_habiles = [g for g in guardias if g["fecha"] not in feriados_set]
+
     with st.expander("🔄 Intercambiar guardia entre compañeros", expanded=False):
-        opciones = {
-            f"{formatear_fecha_corta(g['fecha'])} — {g['usuarios_autorizados']['nombre']}": g["fecha"]
-            for g in guardias
-        }
-        etiquetas = list(opciones.keys())
+        if len(guardias_habiles) < 2:
+            st.info("No hay suficientes turnos hábiles disponibles para intercambiar.")
+        else:
+            opciones = {
+                f"{formatear_fecha_corta(g['fecha'])} — {g['usuarios_autorizados']['nombre']}": g["fecha"]
+                for g in guardias_habiles
+            }
+            etiquetas = list(opciones.keys())
 
-        col1, col2 = st.columns(2)
-        with col1:
-            sel_a = st.selectbox("Turno 1 (Agente que cede):", etiquetas, index=0)
-        with col2:
-            sel_b = st.selectbox("Turno 2 (Compañero que cubre):", etiquetas, index=min(1, len(etiquetas) - 1))
+            col1, col2 = st.columns(2)
+            with col1:
+                sel_a = st.selectbox("Turno 1 (Agente que cede):", etiquetas, index=0)
+            with col2:
+                sel_b = st.selectbox("Turno 2 (Compañero que cubre):", etiquetas, index=min(1, len(etiquetas) - 1))
 
-        if st.button("Confirmar intercambio", type="primary", use_container_width=True):
-            fecha_a = opciones[sel_a]
-            fecha_b = opciones[sel_b]
+            if st.button("Confirmar intercambio", type="primary", use_container_width=True):
+                fecha_a = opciones[sel_a]
+                fecha_b = opciones[sel_b]
 
-            if fecha_a == fecha_b:
-                st.warning("Debes seleccionar dos fechas diferentes para intercambiar.")
-            else:
-                try:
-                    supabase.rpc(
-                        "intercambiar_guardia_sabado",
-                        {"fecha_a": fecha_a, "fecha_b": fecha_b}
-                    ).execute()
-                    st.success("✅ ¡Intercambio registrado correctamente!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al intercambiar guardias: {e}")
+                if fecha_a == fecha_b:
+                    st.warning("Debes seleccionar dos fechas diferentes para intercambiar.")
+                else:
+                    try:
+                        supabase.rpc(
+                            "intercambiar_guardia_sabado",
+                            {"fecha_a": fecha_a, "fecha_b": fecha_b}
+                        ).execute()
+                        st.success("✅ ¡Intercambio registrado correctamente!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al intercambiar guardias: {e}")
 
     st.divider()
 
-    # --- Tabla completa de próximos sábados ---
     filas = []
-    for idx, g in enumerate(guardias):
+    proximo_asignado = False
+    for g in guardias:
+        es_feriado = g["fecha"] in feriados_set
+        if es_feriado:
+            estado_txt = "🎉 Feriado (Sin guardia)"
+        elif not proximo_asignado:
+            estado_txt = "🟢 Próximo"
+            proximo_asignado = True
+        else:
+            estado_txt = "Programado"
+
         filas.append({
-            "Estado": "🟢 Próximo" if idx == 0 else "Programado",
+            "Estado": estado_txt,
             "Fecha": formatear_fecha_larga(g["fecha"]),
-            "Agente asignado": g["usuarios_autorizados"]["nombre"],
-            "Observación": g.get("nota_cambio") or "—"
+            "Agente asignado": "—" if es_feriado else g["usuarios_autorizados"]["nombre"],
+            "Observación": "Omitido por feriado oficial" if es_feriado else (g.get("nota_cambio") or "—")
         })
 
     st.dataframe(
@@ -84,18 +108,19 @@ def modal_calendario_guardias(supabase):
 
 
 def render_widget_guardia(supabase, usuario_actual_id=None):
-    """Tarjeta .metric-card exacta con botón superpuesto a la derecha."""
+    """Tarjeta .metric-card fija en cabecera con botón integrado a la derecha."""
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
+    feriados_set = obtener_feriados_guardias(supabase)
 
     res = (
         supabase.table("guardias_sabado")
         .select("id, fecha, usuarios_autorizados(id, nombre)")
         .gte("fecha", hoy_py)
         .order("fecha", desc=False)
-        .limit(2)
+        .limit(6)
         .execute()
     )
-    proximas = res.data or []
+    proximas = [g for g in (res.data or []) if g["fecha"] not in feriados_set][:2]
     if not proximas:
         return
 
@@ -115,7 +140,6 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         if siguiente else "09:00 - 12:00 hs"
     )
 
-    # 1. Tarjeta HTML pura con espacio reservado a la derecha (padding-right: 135px)
     st.markdown(f"""
     <div class="metric-card guardia-header-card" style="
         border-left: 4px solid {borde_color};
@@ -165,6 +189,5 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     </style>
     """, unsafe_allow_html=True)
 
-    # 2. Botón nativo que se posiciona dentro de la tarjeta a la derecha
     if st.button("📅 Ver / Cambiar", key="btn_abrir_guardias"):
         modal_calendario_guardias(supabase)
