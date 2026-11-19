@@ -135,14 +135,21 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     <style>
         div.st-key-btn_abrir_guardias {{
             margin-top: -62px !important;
-            margin-bottom: 22px !important;
-            margin-right: 14px !important;
-            display: flex !important;
-            justify-content: flex-end !important;
+            margin-bottom: 24px !important;
+            padding-right: 16px !important;
+            width: 100% !important;
+            text-align: right !important;
             position: relative !important;
             z-index: 10 !important;
         }}
+        div.st-key-btn_abrir_guardias > div[data-testid="stButton"] {{
+            display: flex !important;
+            justify-content: flex-end !important;
+            width: 100% !important;
+        }}
         div.st-key-btn_abrir_guardias button {{
+            margin-left: auto !important;
+            margin-right: 0 !important;
             width: auto !important;
             min-width: 112px !important;
             padding: 6px 12px !important;
