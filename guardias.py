@@ -117,11 +117,10 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
 
     # 1. Tarjeta HTML pura con espacio reservado a la derecha (padding-right: 135px)
     st.markdown(f"""
-    <div class="metric-card" style="
+    <div class="metric-card guardia-header-card" style="
         border-left: 4px solid {borde_color};
         padding: 12px 135px 12px 16px;
         margin-bottom: 0px;
-        transform: none !important;
     ">
         <div class="metric-card-title" style="font-size: 0.68rem;">
             <span>🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()} (09-12 HS){badge_turno}</span>
@@ -134,6 +133,11 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         </div>
     </div>
     <style>
+        .metric-card.guardia-header-card,
+        .metric-card.guardia-header-card:hover {{
+            transform: none !important;
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35) !important;
+        }}
         div.st-key-btn_abrir_guardias {{
             margin-top: -62px !important;
             margin-bottom: 24px !important;
