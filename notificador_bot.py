@@ -985,7 +985,7 @@ def trigger_reporte_email(authorization: str = Header(None)):
         """
 
         asunto_mail = f"Cierre Operativo Soporte BIMS - {hoy_str}"
-        res_mail = enviar_correo_gmail_api(EMAIL_EMISOR, email_dest, asunto_mail, html_body)[cite: 1]
+        res_mail = enviar_correo_gmail_api(EMAIL_EMISOR, email_dest, asunto_mail, html_body)
         print(f"📧 [Reporte Email] Resultado: {res_mail}")
 
         return PlainTextResponse("OK", status_code=200)
