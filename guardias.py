@@ -164,8 +164,8 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
             box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35) !important;
         }}
         div.st-key-btn_abrir_guardias {{
-            margin-top: -62px !important;
-            margin-bottom: 24px !important;
+            margin-top: -54px !important;
+            margin-bottom: 22px !important;
             padding-right: 16px !important;
             width: 100% !important;
             text-align: right !important;
@@ -181,10 +181,12 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
             margin-left: auto !important;
             margin-right: 0 !important;
             width: auto !important;
-            min-width: 112px !important;
-            padding: 6px 12px !important;
-            font-size: 0.76rem !important;
-            height: 34px !important;
+            min-width: 0 !important;
+            padding: 4px 12px !important;
+            font-size: 0.74rem !important;
+            height: 30px !important;
+            min-height: 30px !important;
+            line-height: 1 !important;
             margin-top: 0 !important;
         }}
     </style>
