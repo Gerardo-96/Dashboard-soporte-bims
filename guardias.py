@@ -84,7 +84,7 @@ def modal_calendario_guardias(supabase):
 
 
 def render_widget_guardia(supabase, usuario_actual_id=None):
-    """Widget compacto con el botón integrado a la derecha dentro de la misma tarjeta."""
+    """Widget compacto con estética .metric-card y el botón integrado a la derecha."""
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
 
     res = (
@@ -117,24 +117,28 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
 
     st.markdown(f"""
     <style>
+        div[data-testid="stVerticalBlock"]:has(> div.stElementContainer .guardia-card-ancla),
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.guardia-card-ancla) {{
             background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
             border: 1px solid #334155 !important;
             border-left: 4px solid {borde_color} !important;
             border-radius: 12px !important;
-            padding: 10px 14px !important;
+            padding: 12px 16px !important;
             box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35) !important;
         }}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.guardia-card-ancla) button {{
+        div[data-testid="stVerticalBlock"]:has(> div.stElementContainer .guardia-card-ancla) div.stElementContainer:first-child {{
+            display: none !important;
+        }}
+        div[data-testid="stVerticalBlock"]:has(> div.stElementContainer .guardia-card-ancla) button {{
             font-size: 0.78rem !important;
-            padding: 6px 10px !important;
-            min-height: 36px !important;
+            padding: 5px 10px !important;
+            min-height: 34px !important;
         }}
     </style>
     """, unsafe_allow_html=True)
 
     with st.container(border=True):
-        st.markdown('<div class="guardia-card-ancla" style="display:none;"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="guardia-card-ancla"></div>', unsafe_allow_html=True)
         col_txt, col_btn = st.columns([1.65, 1], vertical_alignment="center")
 
         with col_txt:
@@ -142,10 +146,10 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
             <div class="metric-card-title" style="font-size: 0.68rem;">
                 <span>🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()} (09-12 HS){badge_turno}</span>
             </div>
-            <div style="font-size: 1.18rem; font-weight: 800; color: #f8fafc; margin-top: 2px; line-height: 1.2;">
+            <div style="font-size: 1.2rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">
                 {agente_actual}
             </div>
-            <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px;">
+            <div style="font-size: 0.73rem; color: #94a3b8; margin-top: 4px;">
                 {texto_siguiente}
             </div>
             """, unsafe_allow_html=True)
