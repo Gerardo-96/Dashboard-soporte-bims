@@ -131,8 +131,8 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
 
     borde_color = "#fbbf24" if es_mi_turno else "#38bdf8"
     badge_turno = (
-        '<span style="background:rgba(251,191,36,0.15); color:#fbbf24; padding:1px 6px; '
-        'border-radius:10px; font-size:0.64rem; margin-left:4px; white-space:nowrap; display:inline-block;">¡Te toca!</span>'
+        '<span style="background:rgba(251,191,36,0.15); color:#fbbf24; padding:1px 7px; '
+        'border-radius:10px; font-size:0.63rem; white-space:nowrap; flex-shrink:0;">¡Te toca!</span>'
         if es_mi_turno else ""
     )
     texto_siguiente = (
@@ -143,11 +143,12 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     st.markdown(f"""
     <div class="metric-card guardia-header-card" style="
         border-left: 4px solid {borde_color};
-        padding: 12px 105px 12px 16px;
+        padding: 12px 95px 12px 16px;
         margin-bottom: 0px;
     ">
-        <div class="metric-card-title" style="font-size: 0.66rem; white-space: nowrap;">
-            <span>🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()}{badge_turno}</span>
+        <div class="metric-card-title" style="font-size: 0.66rem; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">
+            <span style="white-space: nowrap;">🛡️ GUARDIA {formatear_fecha_corta(actual['fecha']).upper()}</span>
+            {badge_turno}
         </div>
         <div style="font-size: 1.18rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">
             {agente_actual}
