@@ -263,20 +263,33 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             # =========================================================================
             # 2. PRIMERA RESPUESTA HUMANA
             # =========================================================================
-            first_admin_reply = statistics.get("first_admin_reply_at")
+            source_obj = conv.get("source") or {}
+            source_author_init = source_obj.get("author") or {}
+            src_author_type = str(source_author_init.get("type", "")).lower()
+            src_author_name = str(source_author_init.get("name", "")).lower()
+            es_iniciada_por_agente = (
+                src_author_type in ["admin", "user_admin"]
+                and not source_author_init.get("from_ai_agent", False)
+                and not any(b in src_author_name for b in ["monica", "mónica", "fin", "bot"])
+            )
 
-            if not first_admin_reply and parts:
-                for p in parts:
-                    if p.get("part_type") == "comment" and p.get("author", {}).get("type") in ["admin", "user_admin"]:
-                        if not p.get("author", {}).get("from_ai_agent", False):
-                            first_admin_reply = p.get("created_at")
-                            break
-
-            if first_admin_reply and first_admin_reply >= ts_inicio_ref:
-                secs_espera = first_admin_reply - ts_inicio_ref
-                primera_respuesta_min = round(secs_espera / 60.0, 2)
+            if es_iniciada_por_agente:
+                primera_respuesta_min = 0
             else:
-                primera_respuesta_min = None
+                first_admin_reply = statistics.get("first_admin_reply_at")
+
+                if not first_admin_reply and parts:
+                    for p in parts:
+                        if p.get("part_type") == "comment" and p.get("author", {}).get("type") in ["admin", "user_admin"]:
+                            if not p.get("author", {}).get("from_ai_agent", False):
+                                first_admin_reply = p.get("created_at")
+                                break
+
+                if first_admin_reply and first_admin_reply >= ts_inicio_ref:
+                    secs_espera = first_admin_reply - ts_inicio_ref
+                    primera_respuesta_min = round(secs_espera / 60.0, 2)
+                else:
+                    primera_respuesta_min = None
 
             # =========================================================================
             # 3. TIEMPO DE GESTIÓN Y CIERRE
@@ -428,6 +441,10 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                 or "bot" in agente_clean_check
             )
             por_agente = "excluido" if es_excluido else "no excluido"
+
+            if es_nivel_2:
+                tiempo_res_hrs = None
+                tiempo_res_min = None
 
             # =========================================================================
             # 5. CSAT / RATING
