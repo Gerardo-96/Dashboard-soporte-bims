@@ -149,6 +149,12 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         f'<div style="font-size: 1.18rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">{agente_actual}</div>'
         f'<div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px;">{texto_siguiente}</div>'
         f'</div>'
+        f'<style>'
+        f'.metric-card.guardia-header-card, .metric-card.guardia-header-card:hover {{ transform: none !important; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35) !important; }}'
+        f'div.st-key-btn_abrir_guardias {{ margin-top: -54px !important; margin-bottom: 22px !important; padding-right: 16px !important; width: 100% !important; text-align: right !important; position: relative !important; z-index: 10 !important; }}'
+        f'div.st-key-btn_abrir_guardias > div[data-testid="stButton"] {{ display: flex !important; justify-content: flex-end !important; width: 100% !important; }}'
+        f'div.st-key-btn_abrir_guardias button {{ margin-left: auto !important; margin-right: 0 !important; width: auto !important; min-width: 0 !important; padding: 4px 12px !important; font-size: 0.74rem !important; height: 30px !important; min-height: 30px !important; line-height: 1 !important; margin-top: 0 !important; }}'
+        f'</style>'
     )
 
     st.markdown(tarjeta_html, unsafe_allow_html=True)
