@@ -545,6 +545,83 @@ def reiniciar_servicio(authorization: str = Header(None)):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+#Recordatorio de guardia sabatina
+@app.post("/notificar-guardia-sabado")
+def notificar_guardia_sabado(authorization: str = Header(None)):
+    if authorization != f"Bearer {CRON_SECRET_TOKEN}":
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    # 1. Leer configuración global (estado del bot, grupo y feriados)
+    cfg_res = (
+        supabase.table("config_notificaciones")
+        .select("bot_activo, jid_grupo_whatsapp, feriados")
+        .eq("id", 1)
+        .limit(1)
+        .execute()
+    )
+    if not cfg_res.data:
+        return {"status": "error", "message": "Falta configuración en config_notificaciones"}
+
+    cfg = cfg_res.data[0]
+    if not cfg.get("bot_activo", True):
+        return {"status": "paused", "message": "Bot pausado manualmente"}
+
+    jid_grupo = (cfg.get("jid_grupo_whatsapp") or "").strip()
+    if not jid_grupo:
+        return {"status": "error", "message": "Falta configurar jid_grupo_whatsapp"}
+
+    # 2. Calcular la fecha de mañana sábado en hora de Paraguay (UTC-3)
+    tz_py = ZoneInfo("America/Asuncion")
+    manana_sabado = (datetime.now(tz_py) + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # 3. Omitir si mañana sábado está cargado en la lista de feriados
+    feriados_activos = [str(f).strip() for f in (cfg.get("feriados") or []) if str(f).strip()]
+    if manana_sabado in feriados_activos:
+        return {
+            "status": "skip",
+            "message": f"Omitido: {manana_sabado} está configurado como feriado."
+        }
+
+    # 4. Consultar guardia programada para mañana sábado
+    guardia_res = (
+        supabase.table("guardias_sabado")
+        .select("id, fecha, notificado_viernes, usuarios_autorizados(nombre, telefono_whatsapp)")
+        .eq("fecha", manana_sabado)
+        .limit(1)
+        .execute()
+    )
+
+    if not guardia_res.data:
+        return {"status": "skip", "message": f"Sin guardia programada para {manana_sabado}"}
+
+    registro = guardia_res.data[0]
+    if registro.get("notificado_viernes"):
+        return {"status": "skip", "message": f"La guardia del {manana_sabado} ya fue notificada"}
+
+    agente = registro.get("usuarios_autorizados") or {}
+    nombre = agente.get("nombre", "Agente")
+    tel_limpio = re.sub(r"\D", "", str(agente.get("telefono_whatsapp") or ""))
+
+    # Mismo formato de mención que tu alerta grupal (fallback a *Nombre* si faltara el teléfono)
+    tag_agente = f"@{tel_limpio}" if tel_limpio else f"*{nombre}*"
+    menciones_list = [tel_limpio] if tel_limpio else []
+
+    fecha_fmt = datetime.strptime(manana_sabado, "%Y-%m-%d").strftime("%d/%m")
+    msg_guardia = (
+        f"🛡️ *Recordatorio de Guardia*\n\n"
+        f"Buen cierre de semana equipo 👋\n"
+        f"Recordamos que mañana *sábado {fecha_fmt}* de *09:00 a 12:00 hs* le corresponde la guardia a {tag_agente}.\n\n"
+        f"Si realizaron algún intercambio, recuerden registrarlo en el dashboard."
+    )
+
+    # 5. Enviar utilizando tu función nativa enviar_whatsapp
+    enviar_whatsapp(jid_grupo, msg_guardia, menciones=menciones_list)
+
+    # 6. Marcar como notificado en Supabase
+    supabase.table("guardias_sabado").update({"notificado_viernes": True}).eq("id", registro["id"]).execute()
+
+    return {"status": "success", "agente": nombre, "fecha": manana_sabado}
+
 # ==========================================
 # ENDPOINT EXCLUSIVO: REPORTE DIARIO CON BARRAS HTML & MÉTRICAS COMPLETAS
 # ==========================================
