@@ -5402,10 +5402,6 @@ def renderizar_panel_admin():
             st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
             if st.button("Limpiar Mensaje de Confirmación"):
                 GLOBAL_SYNC_STATE["status"] = "idle"
-                invalidar_cache_datos_conversaciones()
-                obtener_alertas_compartidas.clear()
-                obtener_cargas_agentes_db.clear()
-                obtener_total_registros_db.clear()
                 st.rerun()
         elif sync_info["status"] == "error":
             st.error(f"❌ Error en la sincronización: {sync_info['error']}")
@@ -5443,6 +5439,12 @@ def renderizar_panel_admin():
                             progress_callback=cb_progreso,
                             por_creacion=solo_creacion
                         )
+                        # La sincronización terminó correctamente: refrescar datos compartidos.
+                        invalidar_cache_datos_conversaciones()
+                        obtener_alertas_compartidas.clear()
+                        obtener_cargas_agentes_db.clear()
+                        obtener_total_registros_db.clear()
+
                         GLOBAL_SYNC_STATE["status"] = "completed"
                         tz_py = timezone(timedelta(hours=-3))
                         hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
