@@ -94,6 +94,24 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
+# CONSULTA COMPARTIDA DE ALERTAS EN VIVO
+# ==========================================
+@st.cache_data(ttl=10, show_spinner=False)
+def obtener_alertas_compartidas():
+    """Comparte entre sesiones la consulta de alertas durante 10 segundos."""
+    COLUMNAS_ALERTAS = "id, created_at, etiquetas, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
+
+    res = supabase.table("conversaciones")\
+        .select(COLUMNAS_ALERTAS)\
+        .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+        .neq("canal", "Correo electrónico")\
+        .order("created_at", desc=True)\
+        .limit(100)\
+        .execute()
+
+    return res.data or []
+
+# ==========================================
 # AUTENTICACIÓN PERSISTENTE ROBUSTA (LOCALSTORAGE + QUERY PARAMS)
 # ==========================================
 if "user_authenticated" not in st.session_state:
@@ -144,7 +162,7 @@ st.html("""
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
 def obtener_estado_sync_global():
-    return {"status": "idle", "processed": 0, "log": "", "error": None}
+    return {"status": "idle", "processed": 0, "log": "", "error": None, "cache_invalidation_pending": False}
 
 GLOBAL_SYNC_STATE = obtener_estado_sync_global()
 
@@ -1152,6 +1170,14 @@ def obtener_df_hoy_procesado(fecha_corte_hoy_str):
         return pd.DataFrame()
     df_hoy = pd.DataFrame(datos_hoy).drop_duplicates(subset=["id"], keep="first").copy()
     return procesar_fechas_df(df_hoy)
+
+def invalidar_cache_datos_conversaciones():
+    """Invalida únicamente las cachés que dependen de conversaciones."""
+    obtener_datos_historicos_q.clear()
+    obtener_datos_hoy.clear()
+    obtener_df_historico_procesado.clear()
+    obtener_df_hoy_procesado.clear()
+
 
 def obtener_datos():
     """Une el histórico cacheado con los datos frescos de hoy en milisegundos."""
@@ -2207,16 +2233,7 @@ def renderizar_alertas_en_vivo():
     datos_todos = []
 
     try:
-        COLUMNAS_ALERTAS = "id, created_at, etiquetas, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
-
-        res = supabase.table("conversaciones")\
-            .select(COLUMNAS_ALERTAS)\
-            .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-            .neq("canal", "Correo electrónico")\
-            .order("created_at", desc=True)\
-            .limit(100)\
-            .execute()
-        datos_todos = res.data or []
+        datos_todos = obtener_alertas_compartidas()
     except Exception as e:
         error_msg = str(e)
 
@@ -2336,7 +2353,8 @@ def renderizar_alertas_en_vivo():
                                     st.error(f"Error al actualizar chat {id_str}: {ex_update}")
 
                         if actualizados > 0:
-                            st.cache_data.clear()
+                            invalidar_cache_datos_conversaciones()
+                            obtener_alertas_compartidas.clear()
                             st.rerun()
 
             
@@ -2747,7 +2765,7 @@ with tab_operativo:
     
                         if guardados > 0:
                             st.success(f"✅ Se actualizaron {guardados} registros.")
-                            st.cache_data.clear()
+                            invalidar_cache_datos_conversaciones()
                             time_lib.sleep(0.5)
                             st.rerun()
                     else:
@@ -5229,6 +5247,14 @@ def obtener_total_registros_db():
     except Exception:
         return 0
 
+# Procesar invalidaciones pendientes en el hilo principal, en cualquier sesión activa.
+if GLOBAL_SYNC_STATE.get("cache_invalidation_pending", False):
+    invalidar_cache_datos_conversaciones()
+    obtener_alertas_compartidas.clear()
+    obtener_cargas_agentes_db.clear()
+    obtener_total_registros_db.clear()
+    GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
+
 @st.fragment
 def renderizar_panel_admin():
     st.markdown("### Panel de Administración y Configuración")
@@ -5369,7 +5395,7 @@ def renderizar_panel_admin():
 
         with c_meta2:
             if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
-                st.cache_data.clear()
+                obtener_total_registros_db.clear()
                 st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -5384,13 +5410,11 @@ def renderizar_panel_admin():
             st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
             if st.button("Limpiar Mensaje de Confirmación"):
                 GLOBAL_SYNC_STATE["status"] = "idle"
-                st.cache_data.clear()
                 st.rerun()
         elif sync_info["status"] == "error":
             st.error(f"❌ Error en la sincronización: {sync_info['error']}")
             if st.button("Reintentar / Limpiar Error"):
                 GLOBAL_SYNC_STATE["status"] = "idle"
-                st.cache_data.clear()
                 st.rerun()
 
         col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
@@ -5411,7 +5435,6 @@ def renderizar_panel_admin():
                 GLOBAL_SYNC_STATE["processed"] = 0
                 GLOBAL_SYNC_STATE["log"] = ""
                 GLOBAL_SYNC_STATE["error"] = None
-
                 def tarea_sync_paralela(f_inicio, f_final, solo_creacion):
                     try:
                         def cb_progreso(proc, tot):
@@ -5423,6 +5446,10 @@ def renderizar_panel_admin():
                             progress_callback=cb_progreso,
                             por_creacion=solo_creacion
                         )
+                        # Solo invalidar si la sincronización realmente procesó registros.
+                        # El hilo marca la invalidación; Streamlit la ejecutará en el hilo principal.
+                        if tot_f > 0:
+                            GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
                         GLOBAL_SYNC_STATE["status"] = "completed"
                         tz_py = timezone(timedelta(hours=-3))
                         hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
@@ -5573,7 +5600,7 @@ def renderizar_panel_admin():
                     try:
                         supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
                         st.success(f"Motivo '{txt_motivo}' creado con éxito.")
-                        st.cache_data.clear()
+                        obtener_lista_motivos_csat.clear()
                         st.rerun()
                     except Exception as ex:
                         st.error(f"Error o motivo duplicado: {ex}")
@@ -5615,7 +5642,7 @@ def renderizar_panel_admin():
                             .execute()
 
                         st.success(f"El motivo ID {id_motivo_sel} ahora está {'Activo' if nuevo_estado else 'Deshabilitado'}.")
-                        st.cache_data.clear()
+                        obtener_lista_motivos_csat.clear()
                         st.rerun()
                     except Exception as ex:
                         st.error(f"Error al actualizar motivo: {ex}")
