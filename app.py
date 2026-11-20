@@ -5435,8 +5435,6 @@ def renderizar_panel_admin():
                 GLOBAL_SYNC_STATE["processed"] = 0
                 GLOBAL_SYNC_STATE["log"] = ""
                 GLOBAL_SYNC_STATE["error"] = None
-                GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
-
                 def tarea_sync_paralela(f_inicio, f_final, solo_creacion):
                     try:
                         def cb_progreso(proc, tot):
