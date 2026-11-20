@@ -694,6 +694,8 @@ def renderizar_panel_carga_asignador():
                 text=df_resumen["Cerrados (Hoy) 🟢"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
                 insidetextanchor="middle",
+                insidetextfont=dict(color="#ffffff", size=14, family="Arial Black"),
+                constraintext="none",
                 hovertemplate="<b>%{x}</b><br>Cerrados Hoy: %{y}<extra></extra>"
             ))
 
@@ -708,18 +710,23 @@ def renderizar_panel_carga_asignador():
                 text=df_resumen["Pendientes (Abiertos) 🔴"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
                 insidetextanchor="middle",
+                insidetextfont=dict(color="#ffffff", size=14, family="Arial Black"),
+                constraintext="none",
                 hovertemplate="<b>%{x}</b><br>Abiertos Pendientes: %{y}<extra></extra>"
             ))
 
             for idx, row in df_resumen.iterrows():
-                fig_carga.add_annotation(
-                    x=row["Agente Grafico"],
-                    y=row["Total Asignados Hoy 📋"],
-                    text=f"<b>{row['Total Asignados Hoy 📋']}</b>",
-                    showarrow=False,
-                    yshift=12,
-                    font=dict(color="#f8fafc", size=13)
-                )
+                if row["Total Asignados Hoy 📋"] > 0:
+                    fig_carga.add_annotation(
+                        x=row["Agente Grafico"],
+                        y=row["Total Asignados Hoy 📋"],
+                        text=f"<b>{row['Total Asignados Hoy 📋']}</b>",
+                        showarrow=False,
+                        yshift=14,
+                        font=dict(color="#f8fafc", size=15)
+                    )
+
+            max_carga_y = max(int(df_resumen["Total Asignados Hoy 📋"].max()), 4)
 
             fig_carga.update_layout(
                 barmode="stack",
@@ -728,7 +735,13 @@ def renderizar_panel_carga_asignador():
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=12),
                 xaxis=dict(gridcolor="#334155", title=None),
-                yaxis=dict(gridcolor="#334155", title="Cantidad de Chats", showgrid=False, showticklabels=False, dtick=1),
+                yaxis=dict(
+                    gridcolor="#334155",
+                    title="Cantidad de Chats",
+                    showgrid=False,
+                    showticklabels=False,
+                    range=[0, max_carga_y * 1.18]
+                ),
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
