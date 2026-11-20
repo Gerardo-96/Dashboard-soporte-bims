@@ -111,26 +111,26 @@ def obtener_alertas_compartidas():
 
     return res.data or []
 
-
 # ==========================================
-# CONSULTA COMPARTIDA DE ALERTAS EN VIVO
+# AUTENTICACIÓN PERSISTENTE ROBUSTA (LOCALSTORAGE + QUERY PARAMS)
 # ==========================================
-@st.cache_data(ttl=10, show_spinner=False)
-def obtener_alertas_compartidas():
-    """Comparte entre sesiones la consulta de alertas durante 10 segundos."""
-    COLUMNAS_ALERTAS = "id, created_at, etiquetas, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
+if "user_authenticated" not in st.session_state:
+    st.session_state["user_authenticated"] = False
+if "user_email" not in st.session_state:
+    st.session_state["user_email"] = ""
 
-    res = supabase.table("conversaciones")\
-        .select(COLUMNAS_ALERTAS)\
-        .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
-        .neq("canal", "Correo electrónico")\
-        .order("created_at", desc=True)\
-        .limit(100)\
-        .execute()
-
-    return res.data or []
-
-turn None
+@st.cache_data(ttl=600, show_spinner=False)
+def validar_token_url_rapido(token_limpio):
+    try:
+        res = supabase.table("usuarios_autorizados")\
+            .select("email, nombre")\
+            .eq("email", token_limpio)\
+            .eq("activo", True)\
+            .limit(1)\
+            .execute()
+        return res.data[0] if (res.data and len(res.data) > 0) else None
+    except Exception:
+        return None
 
 token_url = st.query_params.get("session_token", None)
 if token_url and not st.session_state["user_authenticated"]:
