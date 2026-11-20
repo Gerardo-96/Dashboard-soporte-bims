@@ -5247,6 +5247,14 @@ def obtener_total_registros_db():
     except Exception:
         return 0
 
+# Procesar invalidaciones pendientes en el hilo principal, en cualquier sesión activa.
+if GLOBAL_SYNC_STATE.get("cache_invalidation_pending", False):
+    invalidar_cache_datos_conversaciones()
+    obtener_alertas_compartidas.clear()
+    obtener_cargas_agentes_db.clear()
+    obtener_total_registros_db.clear()
+    GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
+
 @st.fragment
 def renderizar_panel_admin():
     st.markdown("### Panel de Administración y Configuración")
@@ -5372,14 +5380,6 @@ def renderizar_panel_admin():
             </p>
         </div>
         """, unsafe_allow_html=True)
-
-        # Las cachés se invalidan desde el hilo principal de Streamlit, no desde el hilo de sincronización.
-        if GLOBAL_SYNC_STATE.get("cache_invalidation_pending", False):
-            invalidar_cache_datos_conversaciones()
-            obtener_alertas_compartidas.clear()
-            obtener_cargas_agentes_db.clear()
-            obtener_total_registros_db.clear()
-            GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
 
         total_registros_db = obtener_total_registros_db()
 
