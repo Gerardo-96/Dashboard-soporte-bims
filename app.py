@@ -162,7 +162,7 @@ st.html("""
 # Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
 @st.cache_resource
 def obtener_estado_sync_global():
-    return {"status": "idle", "processed": 0, "log": "", "error": None}
+    return {"status": "idle", "processed": 0, "log": "", "error": None, "cache_invalidation_pending": False}
 
 GLOBAL_SYNC_STATE = obtener_estado_sync_global()
 
@@ -5373,6 +5373,14 @@ def renderizar_panel_admin():
         </div>
         """, unsafe_allow_html=True)
 
+        # Las cachés se invalidan desde el hilo principal de Streamlit, no desde el hilo de sincronización.
+        if GLOBAL_SYNC_STATE.get("cache_invalidation_pending", False):
+            invalidar_cache_datos_conversaciones()
+            obtener_alertas_compartidas.clear()
+            obtener_cargas_agentes_db.clear()
+            obtener_total_registros_db.clear()
+            GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
+
         total_registros_db = obtener_total_registros_db()
 
         c_meta1, c_meta2 = st.columns([1, 2])
@@ -5427,6 +5435,7 @@ def renderizar_panel_admin():
                 GLOBAL_SYNC_STATE["processed"] = 0
                 GLOBAL_SYNC_STATE["log"] = ""
                 GLOBAL_SYNC_STATE["error"] = None
+                GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
 
                 def tarea_sync_paralela(f_inicio, f_final, solo_creacion):
                     try:
@@ -5439,12 +5448,8 @@ def renderizar_panel_admin():
                             progress_callback=cb_progreso,
                             por_creacion=solo_creacion
                         )
-                        # La sincronización terminó correctamente: refrescar datos compartidos.
-                        invalidar_cache_datos_conversaciones()
-                        obtener_alertas_compartidas.clear()
-                        obtener_cargas_agentes_db.clear()
-                        obtener_total_registros_db.clear()
-
+                        # El hilo marca la invalidación; Streamlit la ejecutará en el hilo principal.
+                        GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
                         GLOBAL_SYNC_STATE["status"] = "completed"
                         tz_py = timezone(timedelta(hours=-3))
                         hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
