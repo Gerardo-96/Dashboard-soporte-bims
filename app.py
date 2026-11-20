@@ -5448,8 +5448,10 @@ def renderizar_panel_admin():
                             progress_callback=cb_progreso,
                             por_creacion=solo_creacion
                         )
+                        # Solo invalidar si la sincronización realmente procesó registros.
                         # El hilo marca la invalidación; Streamlit la ejecutará en el hilo principal.
-                        GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
+                        if tot_f > 0:
+                            GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
                         GLOBAL_SYNC_STATE["status"] = "completed"
                         tz_py = timezone(timedelta(hours=-3))
                         hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
