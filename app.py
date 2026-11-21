@@ -2730,6 +2730,16 @@ with st.container(key="bims_sidebar_panel"):
         doc.__bimsLogoutListenerInstalled = true;
 
         function showLogoutOverlay() {
+            // Cierra el panel y reinicia su inicialización para que la próxima
+            // sesión autenticada siempre comience con el menú lateral cerrado.
+            doc.documentElement.classList.remove('bims-sidebar-open');
+            doc.__bimsSidebarInitialized = false;
+            const sidebarToggle = doc.getElementById('bims-sidebar-toggle');
+            if (sidebarToggle) {
+                sidebarToggle.textContent = '☰';
+                sidebarToggle.setAttribute('aria-expanded', 'false');
+            }
+
             let overlay = doc.getElementById('bims-logout-loading-overlay');
             if (!overlay) {
                 overlay = doc.createElement('div');
