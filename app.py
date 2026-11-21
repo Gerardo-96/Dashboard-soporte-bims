@@ -6182,7 +6182,7 @@ def renderizar_panel_admin():
 
             with col_status1:
                 if bot_pausado:
-                    st.markdown("""
+                    st.markdown(f"""
                     <div class="metric-card" style="border-left: 4px solid #fbbf24;">
                         <div class="metric-card-title">Estado del Bot WhatsApp</div>
                         <div class="metric-card-value" style="color: #fbbf24;">{icono_estado_svg("pausado", 24)} Pausado Manualmente</div>
@@ -6207,7 +6207,7 @@ def renderizar_panel_admin():
                     """, unsafe_allow_html=True)
 
             with col_status2:
-                st.markdown("")
+                st.write("")
                 if bot_pausado:
                     if st.button("Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
                         supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
@@ -6238,8 +6238,12 @@ def renderizar_panel_admin():
                             st.error(f"Error al comunicar con la API: {ex_r}")
 
         with st.container(border=True):
-            st.markdown("#### Criterios de Cálculo de Tiempos y SLA")
-            st.caption("• Promedio en Pantalla (Dashboard): Se calcula haciendo la media (mean) de los minutos de primera respuesta y gestión de chats válidos (por_agente == 'no excluido') creados dentro de la jornada operativa (horario_evaluado != 'fuera de horario'). • Evaluación de SLA en Excel: Aplica la regla estricta de Lunes a Viernes de 08:00 a 17:00 hs. En la gestión, se descartan automáticamente los chats que contengan la etiqueta \"sin respuesta\" marcándolos como \"excluido por filtro\".")
+            st.markdown("#### Criterios de cálculo de tiempos y SLA")
+            st.markdown("""
+            - **Promedios del dashboard:** consideran chats válidos atendidos dentro de la jornada operativa.
+            - **Primera respuesta y gestión:** se calculan sobre los registros que cumplen los criterios de inclusión correspondientes.
+            - **Evaluación en Excel:** aplica sus reglas de horario y exclusión; en gestión, los chats con la etiqueta **Sin Respuesta** se identifican como **Excluido por filtro**.
+            """)
 
     with admin_tabs[1]:
         with st.container(border=True):
