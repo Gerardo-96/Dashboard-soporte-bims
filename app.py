@@ -2821,7 +2821,7 @@ with tab_operativo:
     # EVOLUCIÓN HISTÓRICA DE CSAT (SEMANAL DESDE Q ANTERIOR)
     q_act_evo = (now_date.month - 1) // 3 + 1
     q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
-    st.markdown("### Evolución semanal del CSAT")
+    st.markdown("### Evolución semanal del CSAT — desde el trimestre anterior")
     if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
         anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
         mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
@@ -2906,11 +2906,6 @@ with tab_operativo:
             min_y = max(60, float(df_evo_csat["CSAT %"].min()) - 6)
 
             fig_csat.update_layout(
-                title=dict(
-                    text=f"<b>Evolución Semanal de Satisfacción al Cliente (Desde Q{q_ant_evo})</b>",
-                    font=dict(size=15, color="#f8fafc"),
-                    x=0.01
-                ),
                 xaxis=dict(
                     title=None,
                     range=[-0.6, total_semanas - 0.4],
@@ -2921,8 +2916,7 @@ with tab_operativo:
                 yaxis=dict(
                     title=None,
                     range=[min_y, 104],
-                    gridcolor="rgba(51, 65, 85, 0.35)",
-                    griddash="dot",
+                    showgrid=False,
                     zeroline=False,
                     showline=False,
                     ticksuffix="%",
@@ -2931,7 +2925,7 @@ with tab_operativo:
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1"),
-                margin=dict(t=55, b=35, l=45, r=35),
+                margin=dict(t=25, b=35, l=45, r=35),
                 height=380,
                 showlegend=False
             )
@@ -3262,7 +3256,7 @@ with tab_operativo:
         df_res_agentes = pd.DataFrame(res_agentes)
         if not df_res_agentes.empty:
             df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
-            st.dataframe(df_res_agentes, use_container_width=True)
+            st.dataframe(df_res_agentes, hide_index=True, use_container_width=True)
         else:
             st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
     else:
