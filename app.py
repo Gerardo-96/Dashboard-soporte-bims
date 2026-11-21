@@ -107,7 +107,7 @@ st.markdown("""
        en la interfaz, sin alterar los modales que insertan en el documento principal. */
     /* Oculta también el contenedor Streamlit del iframe ejecutor:
        ocultar solo el iframe dejaba un bloque vacío antes del dashboard. */
-    div[data-testid="stElementContainer"]:has(> div[data-testid="stIFrame"]),
+    div[data-testid="stElementContainer"]:has([data-testid="stIFrame"]),
     div[data-testid="stElementContainer"]:has(iframe[title="st.iframe"]),
     [data-testid="stIFrame"],
     [data-testid="stIFrame"] iframe,
