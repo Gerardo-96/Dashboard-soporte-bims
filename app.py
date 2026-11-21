@@ -1967,8 +1967,13 @@ def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
     if fecha_str in FERIADOS:
         return "excluido por feriado"
     
-    agente = str(row.get("agente_asignado", "")).strip()
-    if not agente or agente in ["Sin asignar", "None", "nan", "Monica", "Soporte", "soporte", "SOPORTE"]:
+    # Mismo criterio de inclusión que el promedio del Dashboard:
+    # solo se consideran registros marcados como "no excluido".
+    por_agente = str(row.get("por_agente", "")).strip().lower()
+    agente = str(row.get("agente_asignado", "")).strip().lower()
+    agentes_excluidos = ["", "sin asignar", "none", "nan", "monica", "mónica", "monica (bot)", "soporte", "soporte bims"]
+
+    if por_agente != "no excluido" or agente in agentes_excluidos or "bot" in agente:
         return "excluido por agente"
         
     en_horario = False
