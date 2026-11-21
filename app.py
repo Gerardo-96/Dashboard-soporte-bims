@@ -2766,6 +2766,81 @@ with st.container(key="bims_dashboard_header"):
             usuario_actual_id=usuario_id_actual
         )
 
+
+# DIAGNÓSTICO TEMPORAL: identificar el espacio superior del dashboard.
+# Se puede cerrar desde la propia pantalla; no modifica posiciones ni estilos.
+st.iframe("""
+<script>
+(function () {
+    try {
+        const doc = window.parent.document;
+        const id = 'bims-layout-diagnostic';
+        if (doc.getElementById(id)) return;
+
+        const panel = doc.createElement('div');
+        panel.id = id;
+        panel.style.cssText = [
+            'position:fixed', 'top:8px', 'right:8px', 'z-index:2147483647',
+            'width:min(470px, calc(100vw - 24px))', 'max-height:48vh',
+            'overflow:auto', 'padding:12px 14px', 'border:1px solid #38bdf8',
+            'border-radius:10px', 'background:#071321', 'color:#e2e8f0',
+            'box-shadow:0 8px 28px rgba(0,0,0,.45)',
+            'font:12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace',
+            'white-space:pre-wrap'
+        ].join(';');
+
+        function describe(el) {
+            if (!el) return 'no encontrado';
+            const r = el.getBoundingClientRect();
+            const s = doc.defaultView.getComputedStyle(el);
+            return 'top=' + Math.round(r.top) + 'px | alto=' + Math.round(r.height) +
+                'px | padding-top=' + s.paddingTop + ' | margin-top=' + s.marginTop +
+                ' | ' + el.tagName.toLowerCase() +
+                (el.getAttribute('data-testid') ? '[' + el.getAttribute('data-testid') + ']' : '') +
+                (typeof el.className === 'string' && el.className.trim()
+                    ? ' .' + el.className.trim().split(/\\s+/).slice(0, 3).join('.') : '');
+        }
+
+        function render() {
+            const selectors = [
+                ['stAppViewContainer', '[data-testid="stAppViewContainer"]'],
+                ['main', 'section[data-testid="stMain"], section.main'],
+                ['main block container', '[data-testid="stMainBlockContainer"], [data-testid="stAppViewBlockContainer"]'],
+                ['dashboard header', '.st-key-bims_dashboard_header'],
+                ['sidebar wrapper', '[data-testid="stElementContainer"]:has(.st-key-bims_sidebar_panel)'],
+                ['sidebar panel', '.st-key-bims_sidebar_panel']
+            ];
+            const lines = ['BIMS · DIAGNÓSTICO DE ESPACIO SUPERIOR', 'scrollY=' + doc.defaultView.scrollY];
+            selectors.forEach(function (item) {
+                lines.push(item[0] + ': ' + describe(doc.querySelector(item[1])));
+            });
+
+            const main = doc.querySelector('[data-testid="stMainBlockContainer"], [data-testid="stAppViewBlockContainer"]');
+            if (main) {
+                lines.push('--- primeros bloques dentro del contenedor ---');
+                Array.from(main.children).slice(0, 7).forEach(function (el, i) {
+                    lines.push((i + 1) + '. ' + describe(el));
+                });
+            }
+            const close = doc.createElement('button');
+            close.textContent = 'Cerrar diagnóstico ×';
+            close.style.cssText = 'margin-top:9px;padding:5px 9px;border:1px solid #64748b;border-radius:6px;background:#1e293b;color:#fff;cursor:pointer;font:inherit';
+            close.onclick = function () { panel.remove(); };
+            panel.textContent = lines.join('\\n');
+            panel.appendChild(doc.createElement('br'));
+            panel.appendChild(close);
+        }
+
+        doc.body.appendChild(panel);
+        window.setTimeout(render, 900);
+        window.setTimeout(render, 2200);
+    } catch (error) {
+        console.error('BIMS layout diagnostic:', error);
+    }
+})();
+</script>
+""", width=1, height=1)
+
 # 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
 usuario_actual = st.session_state.get("usuario_conectado") or st.session_state.get("user_email", "")
 permisos = obtener_permisos_usuario(usuario_actual)
