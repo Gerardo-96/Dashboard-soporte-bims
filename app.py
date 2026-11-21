@@ -2849,7 +2849,7 @@ with st.container(key="bims_dashboard_header"):
         render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
 
 
-st.html('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
+st.markdown('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
 
 
 # 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
