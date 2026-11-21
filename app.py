@@ -105,6 +105,10 @@ st.markdown("""
         min-height: 104px !important;
         pointer-events: none !important;
     }
+    /* Acerca el primer bloque del dashboard a la cabecera sin invadirla. */
+    div[data-testid="stElementContainer"]:has(.bims-header-spacer) {
+        margin-block-end: -10px !important;
+    }
 
     /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
     section[data-testid="stSidebar"],
