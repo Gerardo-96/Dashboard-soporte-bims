@@ -1930,6 +1930,14 @@ else:
 # ==========================================
 if "bims_sidebar_open" not in st.session_state:
     st.session_state["bims_sidebar_open"] = True
+if "bims_filter_hour_enabled" not in st.session_state:
+    st.session_state["bims_filter_hour_enabled"] = False
+if "act_sonido" not in st.session_state:
+    st.session_state["act_sonido"] = True
+if "bims_hora_inicio" not in st.session_state:
+    st.session_state["bims_hora_inicio"] = time(8, 0)
+if "bims_hora_fin" not in st.session_state:
+    st.session_state["bims_hora_fin"] = time(18, 0)
 
 _sidebar_abierto = st.session_state["bims_sidebar_open"]
 col_panel_bims, col_contenido_bims = st.columns(
@@ -2115,7 +2123,7 @@ with col_panel_bims:
             
     st.markdown('<h3 style="margin-top: 0; padding-top: 0; font-size: 1.15rem;">Filtros de Consulta</h3>', unsafe_allow_html=True)
 
-    usar_filtro_hora = st.checkbox("Restringir Franja Horaria", value=False)
+    usar_filtro_hora = st.checkbox("Restringir Franja Horaria", key="bims_filter_hour_enabled")
 
     def set_fechas_hoy():
         hoy = obtener_fecha_local_hoy()
@@ -2158,15 +2166,26 @@ with col_panel_bims:
         if usar_filtro_hora:
             st.caption("Franja Horaria")
             h_col1, h_col2 = st.columns(2)
-            hora_inicio = h_col1.time_input("Inicio", time(8, 0))
-            hora_fin = h_col2.time_input("Fin", time(18, 0))
+            hora_inicio = h_col1.time_input("Inicio", key="bims_hora_inicio")
+            hora_fin = h_col2.time_input("Fin", key="bims_hora_fin")
         else:
             hora_inicio, hora_fin = time(8, 0), time(18, 0)
 
-        act_sonido = st.checkbox("Alertas Sonoras", value=True)
+        act_sonido = st.checkbox("Alertas Sonoras", key="act_sonido")
 
         btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
 
+    st.session_state["f_desde_key"] = fecha_desde
+    st.session_state["f_hasta_key"] = fecha_hasta
+else:
+    # El panel cerrado conserva los filtros aplicados y permite que el dashboard
+    # siga calculándose normalmente aunque sus controles no estén visibles.
+    fecha_desde = st.session_state.get("input_f_desde", hoy_local)
+    fecha_hasta = st.session_state.get("input_f_hasta", hoy_local)
+    usar_filtro_hora = bool(st.session_state.get("bims_filter_hour_enabled", False))
+    hora_inicio = st.session_state.get("bims_hora_inicio", time(8, 0))
+    hora_fin = st.session_state.get("bims_hora_fin", time(18, 0))
+    act_sonido = bool(st.session_state.get("act_sonido", True))
     st.session_state["f_desde_key"] = fecha_desde
     st.session_state["f_hasta_key"] = fecha_hasta
 
