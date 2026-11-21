@@ -65,6 +65,128 @@ st.markdown("""
         display: none !important;
     }
     
+
+    /* =========================================================
+       BIMS EXECUTIVE — segunda etapa: Control Operativo & SLA
+       Estilos acotados a la pestaña mediante su ancla visual.
+       Sin cambios en métricas, cálculos ni comportamiento.
+       ========================================================= */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card {
+        min-height: 128px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 18px 18px 16px;
+        background: linear-gradient(145deg, #18263a 0%, #121d2e 100%) !important;
+        border: 1px solid #304158 !important;
+        border-radius: 13px !important;
+        box-shadow: 0 5px 16px rgba(0, 0, 0, 0.16) !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card:hover {
+        transform: none !important;
+        border-color: #3b5875 !important;
+        background: #19283c !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #a9b8ca !important;
+        font-size: 0.70rem !important;
+        line-height: 1.35;
+        letter-spacing: 0.075em;
+        font-weight: 700 !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-value {
+        margin-top: 7px;
+        color: #f3f7fc !important;
+        font-size: clamp(1.35rem, 1.8vw, 1.8rem) !important;
+        line-height: 1.15;
+        font-weight: 760 !important;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-sub {
+        margin-top: auto;
+        color: #91a3b8 !important;
+        font-size: 0.73rem !important;
+        line-height: 1.4;
+    }
+
+    /* Secciones y separadores con jerarquía visual consistente. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) h3 {
+        margin-top: 1.25rem;
+        margin-bottom: 0.85rem;
+        color: #e7eef8 !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) hr {
+        border-color: rgba(125, 148, 176, 0.20) !important;
+        margin: 1.5rem 0 !important;
+    }
+
+    /* Tablas: superficie sobria, bordes suaves y esquinas uniformes. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stDataFrame"],
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stTable"] {
+        border: 1px solid #2b3b50 !important;
+        border-radius: 11px !important;
+        background: #121d2e !important;
+        overflow: hidden;
+    }
+
+    /* Expansores de detalle más claros, sin competir con los indicadores. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stExpander"] > details {
+        border: 1px solid #2b3b50 !important;
+        border-radius: 10px !important;
+        background: rgba(21, 31, 48, 0.72) !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stExpander"] summary {
+        color: #dbe6f3 !important;
+        font-weight: 600 !important;
+    }
+
+    /* La alerta crítica conserva el rojo como señal, sin pulso permanente. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details {
+        border: 1px solid rgba(248, 113, 113, 0.72) !important;
+        border-left: 4px solid #ef4444 !important;
+        border-radius: 11px !important;
+        background: linear-gradient(100deg, rgba(91, 35, 28, 0.42), rgba(25, 31, 53, 0.94)) !important;
+        box-shadow: 0 5px 18px rgba(239, 68, 68, 0.09) !important;
+        animation: none !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) div[data-testid="stExpander"]:has(.alerta-ancla-activa) summary {
+        color: #fecaca !important;
+        font-weight: 750 !important;
+    }
+
+    @media (max-width: 1100px) {
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card {
+            min-height: 116px;
+            padding: 15px 14px 13px;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-title {
+            font-size: 0.66rem !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-value {
+            font-size: 1.35rem !important;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) * {
+            scroll-behavior: auto !important;
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2528,6 +2650,7 @@ def renderizar_alertas_en_vivo():
 # ==========================================
 
 with tab_operativo:
+    st.markdown('<div class="bims-operativo-sla-scope" style="display:none;"></div>', unsafe_allow_html=True)
     renderizar_alertas_en_vivo()
 
     sla_1ra_th = st.session_state["sla_1ra_th"]
