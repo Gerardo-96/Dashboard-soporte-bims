@@ -3264,7 +3264,12 @@ with tab_operativo:
                 }
                 for col in df_res_agentes.select_dtypes(include="number").columns
             ]
-            df_res_agentes_styled = df_res_agentes.style.set_table_styles(estilos_encabezados)
+            df_res_agentes_styled = (
+                df_res_agentes.style
+                .hide(axis="index")
+                .set_table_styles(estilos_encabezados)
+                .format({"Prom. 1a Resp (min)": "{:.2f}"})
+            )
             st.table(df_res_agentes_styled)
         else:
             st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
