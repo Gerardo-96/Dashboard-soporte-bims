@@ -6178,7 +6178,7 @@ def renderizar_panel_admin():
                 estado_bot = "CRITICAL"
                 wa_state = "offline"
 
-            col_status1, col_status2, col_status3 = st.columns([1.8, 1.1, 1.1])
+            col_status1, col_status2, col_status3 = st.columns([1.8, 1.1, 1.1], vertical_alignment="center")
 
             with col_status1:
                 if bot_pausado:
@@ -6207,7 +6207,6 @@ def renderizar_panel_admin():
                     """, unsafe_allow_html=True)
 
             with col_status2:
-                st.write("")
                 if bot_pausado:
                     if st.button("Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
                         supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
@@ -6236,13 +6235,6 @@ def renderizar_panel_admin():
                         except Exception as ex_r:
                             st.error(f"Error al comunicar con la API: {ex_r}")
 
-        with st.container(border=True):
-            st.markdown("#### Criterios de cálculo de tiempos y SLA")
-            st.markdown("""
-            - **Promedio en pantalla (dashboard):** media de los minutos de primera respuesta y gestión de chats válidos (por_agente == no excluido) creados dentro de la jornada operativa (horario_evaluado != fuera de horario).
-            - **Evaluación de SLA en Excel:** aplica la regla estricta de **lunes a viernes, de 08:00 a 17:00 hs**.
-            - **Exclusión en gestión:** los chats con la etiqueta **Sin Respuesta** se marcan como **Excluido por filtro**.
-            """)
 
     with admin_tabs[1]:
         with st.container(border=True):
