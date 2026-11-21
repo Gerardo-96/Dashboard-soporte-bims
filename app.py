@@ -2238,6 +2238,21 @@ st.markdown("""
         transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
     }
     #bims-sidebar-toggle:hover { background: #223650; }
+    .st-key-bims_guardia_header button {
+        min-width: 36px !important;
+        width: 36px !important;
+        height: 36px !important;
+        padding: 0 !important;
+        border: 1px solid rgba(96,165,250,.22) !important;
+        border-radius: 10px !important;
+        background: rgba(30,41,59,.38) !important;
+        color: #93c5fd !important;
+    }
+    .st-key-bims_guardia_header button:hover {
+        border-color: rgba(96,165,250,.55) !important;
+        background: rgba(30,41,59,.75) !important;
+        color: #bfdbfe !important;
+    }
     html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
     @media (max-width: 600px) {
         .st-key-bims_sidebar_panel { width: 88vw !important; }
@@ -2869,8 +2884,8 @@ with st.container(key="bims_dashboard_header"):
             </span>
         """
 
-    badge_html = f"""
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; margin:0; min-height:50px;">
+    titulo_header_html = f"""
+    <div style="display:flex; align-items:center; min-width:0; min-height:50px;">
         <div style="min-width:0;">
             <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
                 Dashboard Soporte BIMS
@@ -2879,16 +2894,17 @@ with st.container(key="bims_dashboard_header"):
                 PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
             </div>
         </div>
-        {estado_bot_html}
     </div>
     """
 
-    col_header_info, col_header_alert = st.columns([20, 1], vertical_alignment="center")
+    col_header_info, col_header_guardia, col_header_bot = st.columns([20, 1.2, 4], vertical_alignment="center")
     with col_header_info:
-        st.html(badge_html)
-    with col_header_alert:
+        st.html(titulo_header_html)
+    with col_header_guardia:
         usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
         render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
+    with col_header_bot:
+        st.html(f'<div style="display:flex; justify-content:flex-end; align-items:center; min-height:50px;">{estado_bot_html}</div>')
 
 
 st.markdown('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
