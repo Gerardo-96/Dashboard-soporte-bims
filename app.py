@@ -1628,7 +1628,9 @@ st.markdown("""
     }
 
     .block-container {
-        padding-top: 1.35rem !important;
+        padding-top: 0 !important;
+        padding-block-start: 0 !important;
+        margin-top: 0 !important;
         padding-bottom: 2rem !important;
     }
 
