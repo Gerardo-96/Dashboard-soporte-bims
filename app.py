@@ -6222,7 +6222,6 @@ def renderizar_panel_admin():
                         st.rerun()
 
             with col_status3:
-                st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
                     with st.spinner("Enviando orden de reinicio a Render..."):
                         try:
@@ -6266,8 +6265,6 @@ def renderizar_panel_admin():
                 if st.button("Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
                     obtener_total_registros_db.clear()
                     st.rerun()
-
-            st.markdown("<br>", unsafe_allow_html=True)
 
             sync_info = GLOBAL_SYNC_STATE
 
@@ -6360,8 +6357,6 @@ def renderizar_panel_admin():
 
             st.markdown("**Alerta de chat nuevo**")
             cfg_alerta_nuevo = st.number_input("Alertar tras (minutos sin responder)", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
-
-            st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Guardar Configuración de Parámetros", use_container_width=True):
                 st.session_state["auto_refresh"] = cfg_auto
                 st.session_state["refresh_interval"] = cfg_interval
@@ -6436,7 +6431,6 @@ def renderizar_panel_admin():
                 st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
 
         # ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
-        st.markdown("<br>", unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown("#### Teléfonos de WhatsApp de los agentes")
             st.caption("Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.")
@@ -6480,7 +6474,6 @@ def renderizar_panel_admin():
 
     with admin_tabs[4]:
         # GESTIÓN DINÁMICA DE MOTIVOS CSAT
-        st.markdown("<br>", unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown("#### Motivos de clasificación CSAT")
             st.caption("Crea y desactiva los motivos que se muestran al categorizar chats negativos.")
@@ -6549,7 +6542,6 @@ def renderizar_panel_admin():
                 st.error(f"No se pudieron cargar los motivos: {e}")
 
         # GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES
-        st.markdown("<br>", unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown("#### Notificaciones y alertas")
             st.caption("Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.")
@@ -6604,7 +6596,6 @@ def renderizar_panel_admin():
 
     with admin_tabs[5]:
         # GESTIÓN DINÁMICA DE FERIADOS
-        st.markdown("<br>", unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown("#### Calendario de Feriados Oficiales & Móviles")
             st.caption("Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.")
