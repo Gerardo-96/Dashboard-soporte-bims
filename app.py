@@ -26,54 +26,6 @@ st.set_page_config(
 # Oculta exclusivamente el aviso flotante 'Running...' sin ocultar el header principal
 st.markdown("""
 <style>
-    /* Se elimina la franja visual nativa, pero se conserva el control real
-       del sidebar, reubicado y estilizado como botón de Filtros. */
-    header[data-testid="stHeader"] {
-        height: 0 !important;
-        min-height: 0 !important;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-    }
-
-    header[data-testid="stHeader"] [data-testid="stToolbar"] {
-        display: none !important;
-    }
-
-    header[data-testid="stHeader"] button[data-testid="stSidebarCollapsedControl"] {
-        display: inline-flex !important;
-        position: fixed !important;
-        top: 12px !important;
-        left: 14px !important;
-        z-index: 1000001 !important;
-        width: auto !important;
-        min-width: 94px !important;
-        height: 36px !important;
-        padding: 0 11px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 7px !important;
-        color: #e2e8f0 !important;
-        background: #18263a !important;
-        border: 1px solid #3b506b !important;
-        border-radius: 8px !important;
-        box-shadow: 0 3px 10px rgba(0,0,0,.18) !important;
-    }
-
-    header[data-testid="stHeader"] button[data-testid="stSidebarCollapsedControl"]::after {
-        content: "Filtros";
-        color: #e2e8f0;
-        font-size: 0.78rem;
-        font-weight: 650;
-    }
-
-    [data-testid="stSidebar"] button[data-testid="stSidebarCollapseButton"] {
-        color: #e2e8f0 !important;
-        background: #18263a !important;
-        border: 1px solid #3b506b !important;
-        border-radius: 8px !important;
-    }
-
     [data-testid="stStatusWidget"] {
         display: none !important;
         visibility: hidden !important;
