@@ -84,7 +84,7 @@ st.markdown("""
         top: 0 !important;
         z-index: 900 !important;
         background: linear-gradient(180deg, #0b1120 0%, #0b1120 88%, rgba(11,17,32,.97) 100%) !important;
-        padding: 4px 0 9px !important;
+        padding: 4px 0 12px !important;
         margin: 0 0 2px 0 !important;
         border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
         box-shadow: 0 8px 18px rgba(0, 0, 0, .12) !important;
@@ -1691,6 +1691,9 @@ st.markdown("""
     }
 
     /* Navegación más limpia, manteniendo las pestañas y sus permisos. */
+    .stTabs {
+        margin-top: -6px !important;
+    }
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.35rem;
         border-bottom: 1px solid var(--bims-border) !important;
@@ -1698,7 +1701,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] {
         color: #b7c4d6 !important;
         font-weight: 550 !important;
-        padding: 0.65rem 0.85rem !important;
+        padding: 0.48rem 0.85rem !important;
         border-radius: 8px 8px 0 0;
         transition: color 140ms ease, background-color 140ms ease;
     }
@@ -1752,7 +1755,7 @@ st.markdown("""
             padding-right: 1rem !important;
         }
         .stTabs [data-baseweb="tab"] {
-            padding: 0.55rem 0.65rem !important;
+            padding: 0.42rem 0.65rem !important;
             font-size: 0.88rem !important;
         }
     }
