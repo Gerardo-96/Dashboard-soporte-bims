@@ -6290,42 +6290,49 @@ def renderizar_panel_admin():
 
             total_registros_db = obtener_total_registros_db()
 
-            c_meta1, c_meta2 = st.columns([1, 2])
+            c_meta1, c_meta2 = st.columns([1.35, 1], gap="large", vertical_alignment="center")
             with c_meta1:
                 st.markdown(f"""
-                <div class="metric-card" style="border-left: 4px solid #10b981;">
-                    <div class="metric-card-title">Total Registros en Supabase</div>
+                <div class="metric-card" style="border-left: 4px solid #10b981; padding: 14px 18px;">
+                    <div class="metric-card-title">CONVERSACIONES EN SUPABASE</div>
                     <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
-                    <div class="metric-card-sub">Conversaciones guardadas</div>
+                    <div class="metric-card-sub">Total de registros almacenados</div>
                 </div>
                 """, unsafe_allow_html=True)
 
             with c_meta2:
-                if st.button("Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
+                st.markdown("**Estado del contador**")
+                st.caption("Consulta el total actualizado en la base de datos.")
+                if st.button("↻ Actualizar contador", type="secondary", key="btn_refresh_counter"):
                     obtener_total_registros_db.clear()
                     st.rerun()
 
             sync_info = GLOBAL_SYNC_STATE
 
             if sync_info["status"] == "running":
-                st.info(f"⏳ **Sincronización activa en segundo plano...** Registros procesados y guardados: `{sync_info['processed']}`.")
+                st.info(f"⏳ **Sincronización activa en segundo plano.** Registros procesados y guardados: `{sync_info['processed']}`.")
                 time_lib.sleep(2)
                 st.rerun()
             elif sync_info["status"] == "completed":
                 st.success(f"¡Sincronización finalizada con éxito! {sync_info['log']}")
-                if st.button("Limpiar Mensaje de Confirmación"):
+                if st.button("Limpiar confirmación", type="secondary", key="btn_limpiar_sync_ok"):
                     GLOBAL_SYNC_STATE["status"] = "idle"
                     st.rerun()
             elif sync_info["status"] == "error":
                 st.error(f"Error en la sincronización: {sync_info['error']}")
-                if st.button("Reintentar / Limpiar Error"):
+                if st.button("Limpiar error y reintentar", type="secondary", key="btn_limpiar_sync_error"):
                     GLOBAL_SYNC_STATE["status"] = "idle"
                     st.rerun()
 
-            st.markdown("#### Rango de sincronización")
-            col_f1, col_f2 = st.columns(2)
-            f_sync_desde = col_f1.date_input("Desde", value=date(2026, 1, 1), key="input_sync_desde")
-            f_sync_hasta = col_f2.date_input("Hasta", value=date(2026, 1, 31), key="input_sync_hasta")
+            st.divider()
+            st.markdown("#### Parámetros de sincronización")
+            st.caption("Selecciona el período que deseas actualizar y el criterio de filtrado.")
+
+            col_f1, col_f2 = st.columns(2, gap="large")
+            with col_f1:
+                f_sync_desde = st.date_input("Fecha inicial", value=date(2026, 1, 1), key="input_sync_desde")
+            with col_f2:
+                f_sync_hasta = st.date_input("Fecha final", value=date(2026, 1, 31), key="input_sync_hasta")
 
             chk_por_creacion = st.checkbox(
                 "Limitar a conversaciones creadas dentro del rango",
@@ -6336,7 +6343,9 @@ def renderizar_panel_admin():
 
             btn_bloqueado = (sync_info["status"] == "running")
 
-            if st.button("Iniciar sincronización", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
+            _, col_btn_sync = st.columns([1.5, 1], gap="medium")
+            with col_btn_sync:
+                if st.button("▶ Iniciar sincronización", type="primary", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
                 if SYNC_AVAILABLE:
                     GLOBAL_SYNC_STATE["status"] = "running"
                     GLOBAL_SYNC_STATE["processed"] = 0
