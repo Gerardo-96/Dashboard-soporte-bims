@@ -2011,23 +2011,44 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.html("""
-<button id="bims-sidebar-toggle" type="button" aria-label="Abrir o cerrar panel lateral" aria-expanded="true">‹</button>
+# El iframe actúa como ejecutor same-origin y crea el control directamente
+# en el documento principal, evitando depender del DOM interno de st.html.
+st.iframe("""
 <script>
-(() => {
-    const doc = window.parent.document;
-    const root = doc.documentElement;
-    const button = doc.getElementById('bims-sidebar-toggle');
-    if (!button || button.dataset.bimsBound === '1') return;
-    button.dataset.bimsBound = '1';
-    button.addEventListener('click', () => {
-        const closed = root.classList.toggle('bims-sidebar-closed');
-        button.textContent = closed ? '☰' : '‹';
-        button.setAttribute('aria-expanded', String(!closed));
-    });
+(function() {
+    try {
+        const doc = window.parent.document;
+        const root = doc.documentElement;
+        if (doc.__bimsSidebarControlInstalled) return;
+        doc.__bimsSidebarControlInstalled = true;
+
+        function installButton() {
+            if (doc.getElementById('bims-sidebar-toggle')) return;
+            const button = doc.createElement('button');
+            button.id = 'bims-sidebar-toggle';
+            button.type = 'button';
+            button.setAttribute('aria-label', 'Abrir o cerrar panel lateral');
+            button.setAttribute('aria-expanded', 'true');
+            button.textContent = '‹';
+            doc.body.appendChild(button);
+
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                const closed = root.classList.toggle('bims-sidebar-closed');
+                button.textContent = closed ? '☰' : '‹';
+                button.setAttribute('aria-expanded', String(!closed));
+            });
+        }
+
+        if (doc.body) installButton();
+        else doc.addEventListener('DOMContentLoaded', installButton, { once: true });
+    } catch (error) {
+        console.error('No se pudo instalar el control lateral BIMS:', error);
+    }
 })();
 </script>
-""", unsafe_allow_javascript=True)
+""", width=1, height=1)
 
 with st.container(key="bims_sidebar_panel"):
     st.markdown("### BIMS")
