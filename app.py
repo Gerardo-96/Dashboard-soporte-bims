@@ -3256,50 +3256,16 @@ with tab_operativo:
         df_res_agentes = pd.DataFrame(res_agentes)
         if not df_res_agentes.empty:
             df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
-            # Render HTML para controlar la alineación de encabezados y valores.
-            # "Agente" queda a la izquierda; todas las columnas métricas a la derecha.
-            columnas_metricas = list(df_res_agentes.columns[1:])
-            estilos_columnas = ", ".join(
-                f".bims-agent-metrics-table th:nth-child({i}), "
-                f".bims-agent-metrics-table td:nth-child({i})"
-                for i in range(2, len(df_res_agentes.columns) + 1)
-            )
-            html_tabla_agentes = df_res_agentes.to_html(
-                index=False,
-                escape=True,
-                border=0,
-                classes="bims-agent-metrics-table"
-            )
-            st.markdown(
-                f"""
-                <style>
-                    .bims-agent-metrics-table {{
-                        width: 100%;
-                        border-collapse: collapse;
-                        color: #cbd5e1;
-                        font-size: 0.88rem;
-                    }}
-                    .bims-agent-metrics-table th,
-                    .bims-agent-metrics-table td {{
-                        padding: 10px 12px;
-                        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-                        text-align: left;
-                        white-space: nowrap;
-                    }}
-                    {estilos_columnas} {{
-                        text-align: right !important;
-                    }}
-                    .bims-agent-metrics-table th {{
-                        color: #94a3b8;
-                        font-weight: 700;
-                    }}
-                </style>
-                <div style="width:100%; overflow-x:auto;">
-                    {html_tabla_agentes}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            # Tabla nativa de Streamlit con estilos pandas; evita HTML personalizado.
+            estilos_encabezados = [
+                {
+                    "selector": f"th.col_heading.level0.col{df_res_agentes.columns.get_loc(col)}",
+                    "props": [("text-align", "right")]
+                }
+                for col in df_res_agentes.select_dtypes(include="number").columns
+            ]
+            df_res_agentes_styled = df_res_agentes.style.set_table_styles(estilos_encabezados)
+            st.table(df_res_agentes_styled)
         else:
             st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
     else:
