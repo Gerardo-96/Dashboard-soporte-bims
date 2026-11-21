@@ -2324,50 +2324,40 @@ st.iframe("""
                 doc.body.appendChild(button);
             }
 
-            // Mantener el botón sincronizado con el único estado real del panel.
             function syncButton() {
                 const open = root.classList.contains('bims-sidebar-open');
                 button.textContent = open ? '‹' : '☰';
                 button.setAttribute('aria-expanded', String(open));
             }
 
-            // Un solo listener delegado evita carreras entre el toggle y el
-            // cierre por clic exterior (antes estaban en fases distintas).
-            if (!doc.__bimsSidebarUnifiedClickHandler) {
-                doc.__bimsSidebarUnifiedClickHandler = function(event) {
-                    const target = event.target;
-                    const toggle = target && target.closest
-                        ? target.closest('#bims-sidebar-toggle')
-                        : null;
-
-                    if (toggle) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        root.classList.toggle('bims-sidebar-open');
-                        const currentButton = doc.getElementById('bims-sidebar-toggle');
-                        if (currentButton) {
-                            const open = root.classList.contains('bims-sidebar-open');
-                            currentButton.textContent = open ? '‹' : '☰';
-                            currentButton.setAttribute('aria-expanded', String(open));
-                        }
-                        return;
-                    }
-
-                    if (!root.classList.contains('bims-sidebar-open')) return;
-                    const panel = doc.querySelector('.st-key-bims_sidebar_panel');
-                    if (panel && !panel.contains(target)) {
-                        root.classList.remove('bims-sidebar-open');
-                        const currentButton = doc.getElementById('bims-sidebar-toggle');
-                        if (currentButton) {
-                            currentButton.textContent = '☰';
-                            currentButton.setAttribute('aria-expanded', 'false');
-                        }
-                    }
-                };
-                doc.addEventListener('click', doc.__bimsSidebarUnifiedClickHandler, false);
+            // El clic se escucha directamente en el botón del documento padre.
+            // No depende de delegación ni de la propagación desde el iframe.
+            if (!button.__bimsClickBound) {
+                button.__bimsClickBound = true;
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    root.classList.toggle('bims-sidebar-open');
+                    syncButton();
+                }, false);
             }
 
-            // La primera carga de cada sesión autenticada comienza cerrada.
+            // Cerrar al hacer clic fuera del panel, sin interferir con el botón.
+            if (!doc.__bimsSidebarOutsideClickBound) {
+                doc.__bimsSidebarOutsideClickBound = true;
+                doc.addEventListener('click', function(event) {
+                    if (!root.classList.contains('bims-sidebar-open')) return;
+                    const target = event.target;
+                    const currentButton = doc.getElementById('bims-sidebar-toggle');
+                    const panel = doc.querySelector('.st-key-bims_sidebar_panel');
+                    if ((currentButton && currentButton.contains(target)) ||
+                        (panel && panel.contains(target))) return;
+                    root.classList.remove('bims-sidebar-open');
+                    syncButton();
+                }, true);
+            }
+
+            // No reinicializar el estado en cada rerun de Streamlit.
             if (!doc.__bimsSidebarInitialized) {
                 doc.__bimsSidebarInitialized = true;
                 root.classList.remove('bims-sidebar-open');
