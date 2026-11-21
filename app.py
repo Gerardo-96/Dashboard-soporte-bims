@@ -1419,8 +1419,19 @@ st.markdown("""
     .stApp { background-color: #0b1120; color: #f8fafc; }
     
     .block-container {
-        padding-top: 0.65rem !important;
+        padding-top: 0 !important;
+        padding-block-start: 0 !important;
+        margin-top: 0 !important;
         padding-bottom: 1.5rem !important;
+    }
+
+    /* Neutraliza la reserva superior de Streamlit en el contenedor real del contenido. */
+    div[data-testid="stMainBlockContainer"].block-container,
+    section[data-testid="stMain"] .block-container,
+    section.main .block-container {
+        padding-top: 0 !important;
+        padding-block-start: 0 !important;
+        margin-top: 0 !important;
     }
 
     header[data-testid="stHeader"] {
