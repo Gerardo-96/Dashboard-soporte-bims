@@ -88,19 +88,21 @@ st.markdown("""
         box-sizing: border-box !important;
         z-index: 1100 !important;
         background: #0b1120 !important;
-        /* Reserva a la izquierda el espacio del botón flotante del panel. */
-        padding: 2px max(1rem, calc((100vw - 1600px) / 2)) 2px 64px !important;
+        /* Reserva espacio para el botón flotante y la navegación inferior. */
+        padding: 5px max(1rem, calc((100vw - 1600px) / 2)) 0 76px !important;
         margin: 0 !important;
-        min-height: 56px !important;
+        min-height: 104px !important;
         border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
         box-shadow: 0 8px 18px rgba(0, 0, 0, .12) !important;
     }
     .st-key-bims_dashboard_header [data-testid="stVerticalBlock"] {
-        gap: .25rem !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
     }
     .bims-header-spacer {
-        height: 56px !important;
-        min-height: 56px !important;
+        height: 104px !important;
+        min-height: 104px !important;
         pointer-events: none !important;
     }
 
@@ -301,40 +303,43 @@ st.markdown("""
         height: 0 !important;
     }
 
-    /* Navegación fija debajo del encabezado. Se cubren ambos selectores DOM de Streamlit. */
-    .stTabs,
-    div[data-testid="stTabs"] {
-        padding-top: 43px !important;
-        transform: none !important;
+    /* La lista de pestañas se integra en la cabecera fija mediante el script inferior. */
+    #bims-fixed-tabs-placeholder {
+        height: 42px !important;
+        min-height: 42px !important;
+        width: 100% !important;
     }
-    .stTabs [data-baseweb="tab-list"],
-    div[data-testid="stTabs"] [data-baseweb="tab-list"] {
-        position: fixed !important;
-        top: 56px !important;
-        left: 0 !important;
-        right: 0 !important;
-        width: 100vw !important;
-        max-width: 100vw !important;
+    .st-key-bims_dashboard_header [data-baseweb="tab-list"] {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
         box-sizing: border-box !important;
-        z-index: 1200 !important;
+        z-index: 1201 !important;
         display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
         background: #0b1120 !important;
-        padding: 2px max(1rem, calc((100vw - 1600px) / 2)) 0 !important;
+        padding: 2px 0 0 !important;
+        margin: 0 !important;
         border-bottom: 1px solid var(--bims-border) !important;
-        box-shadow: 0 5px 12px rgba(0,0,0,.16) !important;
+        box-shadow: none !important;
     }
-    /* Evita que un ancestro cree un nuevo contexto para position:fixed. */
-    div[data-testid="stMainBlockContainer"],
-    div[data-testid="stAppViewBlockContainer"],
-    section[data-testid="stMain"] {
-        transform: none !important;
-    }
+    .stTabs, div[data-testid="stTabs"] { padding-top: 0 !important; }
     @media (max-width: 600px) {
-        .st-key-bims_dashboard_header { padding-left: 60px !important; padding-right: .75rem !important; }
-        .bims-header-spacer { height: 72px !important; min-height: 72px !important; }
-        .stTabs, div[data-testid="stTabs"] { padding-top: 43px !important; }
-        .stTabs [data-baseweb="tab-list"],
-        div[data-testid="stTabs"] [data-baseweb="tab-list"] { top: 72px !important; padding-left: .75rem !important; padding-right: .75rem !important; }
+        .st-key-bims_dashboard_header {
+            padding-left: 64px !important;
+            padding-right: .75rem !important;
+            min-height: 112px !important;
+        }
+        .bims-header-spacer { height: 112px !important; min-height: 112px !important; }
+        #bims-fixed-tabs-placeholder { height: 42px !important; min-height: 42px !important; }
+        .st-key-bims_dashboard_header [data-baseweb="tab-list"] {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
     }
 
 </style>
@@ -2890,6 +2895,42 @@ titulos_tabs.append("FAQ")
 
 # 3. Crear las pestañas
 tabs_creadas = st.tabs(titulos_tabs)
+
+# Integra la navegación real de Streamlit dentro de la cabecera fija.
+# Se conserva el nodo original para mantener los eventos y el estado de las pestañas.
+st.html("""
+<script>
+(function () {
+    const doc = window.parent.document;
+    const selector = 'div[data-testid="stTabs"] [data-baseweb="tab-list"]';
+    const headerSelector = '.st-key-bims_dashboard_header';
+    const placeholderId = 'bims-fixed-tabs-placeholder';
+
+    function integrarNavegacion() {
+        const header = doc.querySelector(headerSelector);
+        const headerInner = header && header.querySelector('[data-testid="stVerticalBlock"]');
+        const tabList = doc.querySelector(selector);
+        if (!headerInner || !tabList) return;
+
+        let placeholder = doc.getElementById(placeholderId);
+        if (!placeholder) {
+            placeholder = doc.createElement('div');
+            placeholder.id = placeholderId;
+            tabList.parentNode.insertBefore(placeholder, tabList);
+        }
+
+        if (tabList.parentNode !== headerInner) {
+            headerInner.appendChild(tabList);
+        }
+    }
+
+    integrarNavegacion();
+    const observer = new MutationObserver(integrarNavegacion);
+    observer.observe(doc.body, { childList: true, subtree: true });
+    setTimeout(() => observer.disconnect(), 15000);
+})();
+</script>
+""", unsafe_allow_javascript=True)
 
 
 # Mapear las pestañas a variables de forma segura
