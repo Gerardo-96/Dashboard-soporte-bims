@@ -140,10 +140,12 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     if primera_proxima["usuarios_autorizados"].get("id") != usuario_actual_id:
         return
 
-    fecha = formatear_fecha_larga(primera_proxima["fecha"])
-    with st.popover("⚠️", help="Tienes asignada la próxima guardia", use_container_width=False):
-        st.markdown("**Tienes una guardia asignada**")
-        st.write(fecha)
-        st.caption("Horario: 09:00 a 12:00 hs")
-        if st.button("Ver calendario", key="btn_abrir_guardias_popover", use_container_width=True):
+    with st.container(key="bims_guardia_header"):
+        if st.button(
+            " ",
+            icon=":material/event_available:",
+            help="Tienes asignada la próxima guardia. Haz clic para consultar fecha, horario y calendario.",
+            key="btn_abrir_guardias_header",
+            type="tertiary"
+        ):
             modal_calendario_guardias(supabase)
