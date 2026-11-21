@@ -2238,20 +2238,21 @@ st.markdown("""
         transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
     }
     #bims-sidebar-toggle:hover { background: #223650; }
-    .st-key-bims_guardia_header button {
-        min-width: 36px !important;
-        width: 36px !important;
-        height: 36px !important;
+    .st-key-btn_abrir_guardias_header button {
+        min-width: 30px !important;
+        width: 30px !important;
+        height: 34px !important;
         padding: 0 !important;
-        border: 1px solid rgba(96,165,250,.22) !important;
-        border-radius: 10px !important;
-        background: rgba(30,41,59,.38) !important;
-        color: #93c5fd !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+        background: transparent !important;
+        color: #fbbf24 !important;
+        font-size: 1.18rem !important;
+        box-shadow: none !important;
     }
-    .st-key-bims_guardia_header button:hover {
-        border-color: rgba(96,165,250,.55) !important;
-        background: rgba(30,41,59,.75) !important;
-        color: #bfdbfe !important;
+    .st-key-btn_abrir_guardias_header button:hover {
+        background: rgba(251,191,36,.10) !important;
+        color: #fcd34d !important;
     }
     html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
     @media (max-width: 600px) {
@@ -2897,14 +2898,16 @@ with st.container(key="bims_dashboard_header"):
     </div>
     """
 
-    col_header_info, col_header_guardia, col_header_bot = st.columns([20, 1.2, 4], vertical_alignment="center")
+    col_header_info, col_header_bot = st.columns([20, 5.2], vertical_alignment="center")
     with col_header_info:
         st.html(titulo_header_html)
-    with col_header_guardia:
-        usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
-        render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
     with col_header_bot:
-        st.html(f'<div style="display:flex; justify-content:flex-end; align-items:center; min-height:50px;">{estado_bot_html}</div>')
+        col_guardia_alerta, col_estado_bot = st.columns([0.75, 4], vertical_alignment="center")
+        with col_guardia_alerta:
+            usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
+            render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
+        with col_estado_bot:
+            st.html(f'<div style="display:flex; justify-content:flex-end; align-items:center; min-height:50px;">{estado_bot_html}</div>')
 
 
 st.markdown('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
