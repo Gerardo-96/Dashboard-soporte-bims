@@ -32,8 +32,12 @@ st.markdown("""
         height: 0 !important;
     }
 
-    div[data-testid="stAppViewBlockContainer"] {
+    /* Streamlit aplica el espacio superior en el contenedor principal, no en el header. */
+    div[data-testid="stAppViewBlockContainer"],
+    div[data-testid="stMainBlockContainer"],
+    section.main > div.block-container {
         padding-top: 0 !important;
+        padding-block-start: 0 !important;
     }
 
     /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
@@ -1936,7 +1940,7 @@ else:
 
 # ==========================================
 # PANEL LATERAL PROPIO BIMS
-# Sustituye el sidebar nativo por una columna integrada al dashboard.
+# Control visual en el navegador: abrir/cerrar sin rerun de Streamlit.
 # ==========================================
 if "bims_filter_hour_enabled" not in st.session_state:
     st.session_state["bims_filter_hour_enabled"] = False
@@ -1946,16 +1950,6 @@ if "bims_hora_inicio" not in st.session_state:
     st.session_state["bims_hora_inicio"] = time(8, 0)
 if "bims_hora_fin" not in st.session_state:
     st.session_state["bims_hora_fin"] = time(18, 0)
-
-# Panel lateral superpuesto: no reserva ancho ni desplaza el dashboard.
-if "bims_sidebar_open" not in st.session_state:
-    st.session_state["bims_sidebar_open"] = True
-
-if st.button(
-    "‹" if st.session_state["bims_sidebar_open"] else "☰",
-    key="bims_sidebar_toggle_btn"
-):
-    st.session_state["bims_sidebar_open"] = not st.session_state["bims_sidebar_open"]
 
 st.markdown("""
 <style>
@@ -1974,43 +1968,66 @@ st.markdown("""
         border-right: 1px solid #26364b !important;
         box-shadow: 18px 0 48px rgba(0,0,0,.34) !important;
         z-index: 1000000 !important;
-        transition: transform .32s cubic-bezier(.22,.8,.25,1) !important;
+        transform: translate3d(0,0,0);
+        transition: transform .28s cubic-bezier(.22,.8,.25,1) !important;
     }
-    .st-key-bims_sidebar_toggle_btn {
-        position: fixed !important;
-        top: 14px !important;
-        left: 270px !important;
-        width: 38px !important;
-        z-index: 1000001 !important;
-        transition: left .32s cubic-bezier(.22,.8,.25,1) !important;
+    html.bims-sidebar-closed .st-key-bims_sidebar_panel {
+        transform: translate3d(-105%,0,0) !important;
+        box-shadow: none !important;
+        pointer-events: none !important;
     }
-    .st-key-bims_sidebar_toggle_btn button {
-        min-height: 38px !important;
-        width: 38px !important;
-        padding: 0 !important;
-        border: 1px solid #3b506b !important;
-        border-radius: 10px !important;
-        background: #17263a !important;
-        color: #e2e8f0 !important;
-        box-shadow: 0 5px 18px rgba(0,0,0,.28) !important;
+    #bims-sidebar-toggle {
+        position: fixed;
+        top: 12px;
+        left: 270px;
+        width: 38px;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid #3b506b;
+        border-radius: 10px;
+        background: #17263a;
+        color: #e2e8f0;
+        font: inherit;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        z-index: 1000002;
+        box-shadow: 0 5px 18px rgba(0,0,0,.28);
+        transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
     }
+    #bims-sidebar-toggle:hover { background: #223650; }
+    html.bims-sidebar-closed #bims-sidebar-toggle { left: 14px; }
     @media (max-width: 600px) {
         .st-key-bims_sidebar_panel { width: 88vw !important; }
-        .st-key-bims_sidebar_toggle_btn { left: calc(88vw - 52px) !important; }
+        #bims-sidebar-toggle { left: calc(88vw - 52px); }
+        html.bims-sidebar-closed #bims-sidebar-toggle { left: 14px; }
     }
     @media (prefers-reduced-motion: reduce) {
-        .st-key-bims_sidebar_panel, .st-key-bims_sidebar_toggle_btn { transition-duration: .01ms !important; }
+        .st-key-bims_sidebar_panel, #bims-sidebar-toggle { transition-duration: .01ms !important; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-if not st.session_state["bims_sidebar_open"]:
-    st.markdown("""
-    <style>
-        .st-key-bims_sidebar_panel { transform: translate3d(-105%,0,0) !important; box-shadow: none !important; pointer-events: none !important; }
-        .st-key-bims_sidebar_toggle_btn { left: 14px !important; }
-    </style>
-    """, unsafe_allow_html=True)
+st.html("""
+<button id="bims-sidebar-toggle" type="button" aria-label="Abrir o cerrar panel lateral" aria-expanded="true">‹</button>
+<script>
+(() => {
+    const doc = window.parent.document;
+    const root = doc.documentElement;
+    const button = doc.getElementById('bims-sidebar-toggle');
+    if (!button || button.dataset.bimsBound === '1') return;
+    button.dataset.bimsBound = '1';
+    button.addEventListener('click', () => {
+        const closed = root.classList.toggle('bims-sidebar-closed');
+        button.textContent = closed ? '☰' : '‹';
+        button.setAttribute('aria-expanded', String(!closed));
+    });
+})();
+</script>
+""", unsafe_allow_javascript=True)
 
 with st.container(key="bims_sidebar_panel"):
     st.markdown("### BIMS")
