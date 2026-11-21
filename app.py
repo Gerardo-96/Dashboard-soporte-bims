@@ -2479,7 +2479,7 @@ badge_html = f"""
 col_header_izq, col_header_der = st.columns([2.2, 1], vertical_alignment="center")
 
 with col_header_izq:
-    st.markdown(badge_html, unsafe_allow_html=True)
+    st.html(badge_html)
 
 with col_header_der:
     usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
