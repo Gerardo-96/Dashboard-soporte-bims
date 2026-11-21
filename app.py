@@ -35,9 +35,16 @@ st.markdown("""
     /* Streamlit aplica el espacio superior en el contenedor principal, no en el header. */
     div[data-testid="stAppViewBlockContainer"],
     div[data-testid="stMainBlockContainer"],
-    section.main > div.block-container {
+    div[data-testid="stMain"] > div,
+    section.main > div.block-container,
+    .stMainBlockContainer {
         padding-top: 0 !important;
         padding-block-start: 0 !important;
+        margin-top: 0 !important;
+    }
+    div[data-testid="stMain"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
     }
 
     /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
@@ -1953,6 +1960,7 @@ if "bims_hora_fin" not in st.session_state:
 
 st.markdown("""
 <style>
+    /* Acabado compacto y consistente del panel de control */
     .st-key-bims_sidebar_panel {
         position: fixed !important;
         inset: 0 auto 0 0 !important;
@@ -1962,14 +1970,57 @@ st.markdown("""
         overflow-y: auto !important;
         overflow-x: hidden !important;
         box-sizing: border-box !important;
-        padding: 22px 18px 30px !important;
+        padding: 20px 17px 18px !important;
         margin: 0 !important;
-        background: #0b1120 !important;
+        background: linear-gradient(180deg, #101a2b 0%, #0b1120 58%) !important;
         border-right: 1px solid #26364b !important;
         box-shadow: 18px 0 48px rgba(0,0,0,.34) !important;
         z-index: 1000000 !important;
         transform: translate3d(0,0,0);
         transition: transform .28s cubic-bezier(.22,.8,.25,1) !important;
+    }
+    .bims-sidebar-heading {
+        padding: 1px 2px 13px;
+        margin: 0 0 12px;
+        border-bottom: 1px solid rgba(148,163,184,.18);
+    }
+    .bims-sidebar-heading-title {
+        color: #f1f5f9;
+        font-size: 1.12rem;
+        line-height: 1.3;
+        font-weight: 700;
+        letter-spacing: -.015em;
+    }
+    .bims-sidebar-heading-subtitle {
+        margin-top: 3px;
+        color: #8fa2ba;
+        font-size: .72rem;
+        letter-spacing: .035em;
+    }
+    .st-key-bims_sidebar_panel [data-testid="stVerticalBlock"] {
+        gap: .62rem;
+    }
+    .st-key-bims_sidebar_panel hr {
+        margin: 7px 0 10px !important;
+        border-color: rgba(148,163,184,.18) !important;
+    }
+    .st-key-bims_sidebar_panel [data-testid="stForm"] {
+        border: 1px solid rgba(100,116,139,.22);
+        border-radius: 11px;
+        padding: 11px 10px 10px;
+        background: rgba(15,23,42,.32);
+    }
+    .st-key-bims_sidebar_panel [data-testid="stForm"] [data-testid="stVerticalBlock"] {
+        gap: .55rem;
+    }
+    .st-key-bims_sidebar_panel button {
+        border-radius: 9px !important;
+    }
+    .st-key-bims_sidebar_panel .db-info-box {
+        margin: 0 !important;
+        padding: 9px 11px !important;
+        border-radius: 9px !important;
+        line-height: 1.55 !important;
     }
     html.bims-sidebar-closed .st-key-bims_sidebar_panel {
         transform: translate3d(-105%,0,0) !important;
@@ -2051,9 +2102,12 @@ st.iframe("""
 """, width=1, height=1)
 
 with st.container(key="bims_sidebar_panel"):
-    st.markdown("### BIMS")
-    st.caption("PANEL DE CONTROL")
-    st.divider()
+    st.markdown("""
+    <div class="bims-sidebar-heading">
+        <div class="bims-sidebar-heading-title">Panel de control</div>
+        <div class="bims-sidebar-heading-subtitle">Filtros y preferencias</div>
+    </div>
+    """, unsafe_allow_html=True)
     if not df_all.empty and "updated_at_local" in df_all.columns:
         # Tomamos la fecha máxima real parseada
         max_updated_dt = df_all["updated_at_local"].dropna().max()
