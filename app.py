@@ -78,19 +78,29 @@ st.markdown("""
         margin-block-end: -16px !important;
     }
 
-    /* Encabezado operativo fijo: el desplazamiento visual queda para pestañas y contenido. */
+    /* Cabecera fija: el contenido de las pestañas se desplaza por debajo. */
     .st-key-bims_dashboard_header {
-        position: sticky !important;
+        position: fixed !important;
         top: 0 !important;
-        z-index: 900 !important;
-        background: linear-gradient(180deg, #0b1120 0%, #0b1120 88%, rgba(11,17,32,.97) 100%) !important;
-        padding: 2px 0 2px !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100vw !important;
+        box-sizing: border-box !important;
+        z-index: 1100 !important;
+        background: #0b1120 !important;
+        padding: 2px max(1rem, calc((100vw - 1600px) / 2)) !important;
         margin: 0 !important;
+        min-height: 56px !important;
         border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
         box-shadow: 0 8px 18px rgba(0, 0, 0, .12) !important;
     }
     .st-key-bims_dashboard_header [data-testid="stVerticalBlock"] {
-        gap: .35rem !important;
+        gap: .25rem !important;
+    }
+    .bims-header-spacer {
+        height: 56px !important;
+        min-height: 56px !important;
+        pointer-events: none !important;
     }
 
     /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
@@ -290,19 +300,28 @@ st.markdown("""
         height: 0 !important;
     }
 
-    /* Encabezado y navegación permanecen visibles durante el desplazamiento. */
-    .st-key-bims_dashboard_header {
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 950 !important;
+    /* Navegación fija debajo del encabezado; los paneles siguen en scroll normal. */
+    .stTabs {
+        padding-top: 43px !important;
     }
     .stTabs [data-baseweb="tab-list"] {
-        position: sticky !important;
+        position: fixed !important;
         top: 56px !important;
-        z-index: 940 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100vw !important;
+        box-sizing: border-box !important;
+        z-index: 1050 !important;
         background: #0b1120 !important;
-        padding-top: 2px !important;
+        padding: 2px max(1rem, calc((100vw - 1600px) / 2)) 0 !important;
+        border-bottom: 1px solid var(--bims-border) !important;
         box-shadow: 0 5px 12px rgba(0,0,0,.16) !important;
+    }
+    @media (max-width: 600px) {
+        .st-key-bims_dashboard_header { padding-left: .75rem !important; padding-right: .75rem !important; }
+        .bims-header-spacer { height: 72px !important; min-height: 72px !important; }
+        .stTabs { padding-top: 43px !important; }
+        .stTabs [data-baseweb="tab-list"] { top: 72px !important; padding-left: .75rem !important; padding-right: .75rem !important; }
     }
 
 </style>
@@ -2822,7 +2841,15 @@ with st.container(key="bims_dashboard_header"):
     </div>
     """
 
-    st.html(badge_html)
+    col_header_info, col_header_alert = st.columns([20, 1], vertical_alignment="center")
+    with col_header_info:
+        st.html(badge_html)
+    with col_header_alert:
+        usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
+        render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
+
+
+st.html('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
 
 
 # 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
@@ -2851,12 +2878,6 @@ titulos_tabs.append("FAQ")
 # 3. Crear las pestañas
 tabs_creadas = st.tabs(titulos_tabs)
 
-# La tarjeta de guardia queda debajo de la navegación, fuera del encabezado fijo.
-usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
-render_widget_guardia(
-    supabase=supabase,
-    usuario_actual_id=usuario_id_actual
-)
 
 # Mapear las pestañas a variables de forma segura
 idx = 0
