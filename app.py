@@ -26,7 +26,7 @@ st.set_page_config(
 # Oculta exclusivamente el aviso flotante 'Running...' sin ocultar el header principal
 st.markdown("""
 <style>
-    /* El panel lateral propio reemplaza por completo al sidebar nativo. */
+    /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
     section[data-testid="stSidebar"],
     [data-testid="stSidebarCollapsedControl"] {
         display: none !important;
@@ -1956,463 +1956,462 @@ with col_panel_bims:
         st.rerun()
 
     if _sidebar_abierto:
-        with st.container():
-            st.markdown("### BIMS")
-            st.caption("PANEL DE CONTROL")
-            st.divider()
-    if not df_all.empty and "updated_at_local" in df_all.columns:
-        # Tomamos la fecha máxima real parseada
-        max_updated_dt = df_all["updated_at_local"].dropna().max()
-        tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
+        st.markdown("### BIMS")
+        st.caption("PANEL DE CONTROL")
+        st.divider()
+        if not df_all.empty and "updated_at_local" in df_all.columns:
+            # Tomamos la fecha máxima real parseada
+            max_updated_dt = df_all["updated_at_local"].dropna().max()
+            tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
 
-        # Obtiene el timestamp global del servidor (compartido por todos los clientes)
-        ultima_sync_dt = obtener_timestamp_sync()
-        sync_hace_str = obtener_tiempo_transcurrido(ultima_sync_dt)
-        
-        st.markdown(f"""
-        <div class="db-info-box">
-            • <b>Última actividad:</b> {tiempo_hace_str}<br>
-            • <b>Última sync:</b> {sync_hace_str}<br>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="db-info-box">
-            <b>Ultima sincronizacion:</b> Sin registros<br>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # ==========================================
-    # GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (CON SWITCH Y MODAL SIN PARPADEO)
-    # ==========================================
-    nombre_usuario_sesion = st.session_state.get("user_name", "")
-    email_usuario_sesion = st.session_state.get("user_email", "")
-
-    if nombre_usuario_sesion:
-        @st.fragment
-        def renderizar_selector_presencia_sidebar():
-            st.markdown("### Mi Estado:")
+            # Obtiene el timestamp global del servidor (compartido por todos los clientes)
+            ultima_sync_dt = obtener_timestamp_sync()
+            sync_hace_str = obtener_tiempo_transcurrido(ultima_sync_dt)
             
-            clave_sesion_away = f"estado_away_{email_usuario_sesion}"
-            clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
+            st.markdown(f"""
+            <div class="db-info-box">
+                • <b>Última actividad:</b> {tiempo_hace_str}<br>
+                • <b>Última sync:</b> {sync_hace_str}<br>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="db-info-box">
+                <b>Ultima sincronizacion:</b> Sin registros<br>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # 1. Consultar a Supabase SOLO la primera vez que carga la sesión
-            if clave_sesion_away not in st.session_state:
-                try:
-                    res_mi_estado = (
-                        supabase.table("estado_agentes")
-                        .select("away")
-                        .ilike("nombre", nombre_usuario_sesion.strip())
-                        .limit(1)
-                        .execute()
-                    )
-                    st.session_state[clave_sesion_away] = (
-                        bool(res_mi_estado.data[0].get("away", False))
-                        if res_mi_estado.data else False
-                    )
-                except Exception:
-                    st.session_state[clave_sesion_away] = False
+        # ==========================================
+        # GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (CON SWITCH Y MODAL SIN PARPADEO)
+        # ==========================================
+        nombre_usuario_sesion = st.session_state.get("user_name", "")
+        email_usuario_sesion = st.session_state.get("user_email", "")
 
-            esta_disponible = not st.session_state[clave_sesion_away]
-            etiqueta_switch = "Disponible (Activo)" if esta_disponible else "Ausente (Pausado)"
+        if nombre_usuario_sesion:
+            @st.fragment
+            def renderizar_selector_presencia_sidebar():
+                st.markdown("### Mi Estado:")
+                
+                clave_sesion_away = f"estado_away_{email_usuario_sesion}"
+                clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
 
-            # 2. Callback instantáneo al alternar el switch
-            def guardar_cambio_presencia():
-                disponible_ahora = st.session_state["switch_mi_presencia"]
-                nuevo_away = not disponible_ahora
-                st.session_state[clave_sesion_away] = nuevo_away
-                st.session_state[clave_notificar] = "Disponible" if disponible_ahora else "Ausente"
+                # 1. Consultar a Supabase SOLO la primera vez que carga la sesión
+                if clave_sesion_away not in st.session_state:
+                    try:
+                        res_mi_estado = (
+                            supabase.table("estado_agentes")
+                            .select("away")
+                            .ilike("nombre", nombre_usuario_sesion.strip())
+                            .limit(1)
+                            .execute()
+                        )
+                        st.session_state[clave_sesion_away] = (
+                            bool(res_mi_estado.data[0].get("away", False))
+                            if res_mi_estado.data else False
+                        )
+                    except Exception:
+                        st.session_state[clave_sesion_away] = False
 
-                try:
-                    supabase.table("estado_agentes").upsert({
-                        "id": email_usuario_sesion.lower().strip() or nombre_usuario_sesion.lower().strip(),
-                        "nombre": nombre_usuario_sesion.strip(),
-                        "email": email_usuario_sesion.strip(),
-                        "away": nuevo_away,
-                        "updated_at": datetime.now(timezone.utc).isoformat()
-                    }, on_conflict="id").execute()
-                    obtener_mapa_estados_agentes.clear()
-                except Exception as ex_st:
-                    st.caption(f"Error guardando estado: {ex_st}")
+                esta_disponible = not st.session_state[clave_sesion_away]
+                etiqueta_switch = "Disponible (Activo)" if esta_disponible else "Ausente (Pausado)"
 
-            st.toggle(
-                label=etiqueta_switch,
-                value=esta_disponible,
-                key="switch_mi_presencia",
-                on_change=guardar_cambio_presencia
-            )
+                # 2. Callback instantáneo al alternar el switch
+                def guardar_cambio_presencia():
+                    disponible_ahora = st.session_state["switch_mi_presencia"]
+                    nuevo_away = not disponible_ahora
+                    st.session_state[clave_sesion_away] = nuevo_away
+                    st.session_state[clave_notificar] = "Disponible" if disponible_ahora else "Ausente"
 
-            # 3. Modal visual efímero (se muestra y desaparece solo sin recargar la página)
-            if st.session_state.get(clave_notificar):
-                estado_nuevo = st.session_state.pop(clave_notificar)
-                es_ausente = "Ausente" in estado_nuevo
-                color_borde = "#fbbf24" if es_ausente else "#10b981"
-                icono = icono_estado_svg("ausente" if es_ausente else "disponible", 36)
-                titulo_txt = "Estado: Ausente" if es_ausente else "Estado: Disponible"
-                sub_txt = (
-                    "No recibirás nuevas asignaciones mientras estés ausente."
-                    if es_ausente else
-                    "Estás activo y visible para recibir chats en la bandeja."
+                    try:
+                        supabase.table("estado_agentes").upsert({
+                            "id": email_usuario_sesion.lower().strip() or nombre_usuario_sesion.lower().strip(),
+                            "nombre": nombre_usuario_sesion.strip(),
+                            "email": email_usuario_sesion.strip(),
+                            "away": nuevo_away,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }, on_conflict="id").execute()
+                        obtener_mapa_estados_agentes.clear()
+                    except Exception as ex_st:
+                        st.caption(f"Error guardando estado: {ex_st}")
+
+                st.toggle(
+                    label=etiqueta_switch,
+                    value=esta_disponible,
+                    key="switch_mi_presencia",
+                    on_change=guardar_cambio_presencia
                 )
 
-                st.iframe(f"""
-                <script>
-                (function() {{
-                    const doc = window.parent.document;
-                    const prev = doc.getElementById('bims-presencia-modal');
-                    if (prev) prev.remove();
+                # 3. Modal visual efímero (se muestra y desaparece solo sin recargar la página)
+                if st.session_state.get(clave_notificar):
+                    estado_nuevo = st.session_state.pop(clave_notificar)
+                    es_ausente = "Ausente" in estado_nuevo
+                    color_borde = "#fbbf24" if es_ausente else "#10b981"
+                    icono = icono_estado_svg("ausente" if es_ausente else "disponible", 36)
+                    titulo_txt = "Estado: Ausente" if es_ausente else "Estado: Disponible"
+                    sub_txt = (
+                        "No recibirás nuevas asignaciones mientras estés ausente."
+                        if es_ausente else
+                        "Estás activo y visible para recibir chats en la bandeja."
+                    )
 
-                    const modal = doc.createElement('div');
-                    modal.id = 'bims-presencia-modal';
-                    modal.innerHTML = `
-                        <div style="
-                            position: fixed;
-                            inset: 0;
-                            z-index: 2147483647;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            background: rgba(11, 17, 32, 0.55);
-                            backdrop-filter: blur(4px);
-                            opacity: 1;
-                            transition: opacity 0.35s ease;
-                            font-family: 'Segoe UI', Arial, sans-serif;
-                        " id="bims-presencia-backdrop">
+                    st.iframe(f"""
+                    <script>
+                    (function() {{
+                        const doc = window.parent.document;
+                        const prev = doc.getElementById('bims-presencia-modal');
+                        if (prev) prev.remove();
+
+                        const modal = doc.createElement('div');
+                        modal.id = 'bims-presencia-modal';
+                        modal.innerHTML = `
                             <div style="
-                                background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-                                border: 1px solid #334155;
-                                border-left: 5px solid {color_borde};
-                                border-radius: 14px;
-                                padding: 24px 32px;
-                                box-shadow: 0 20px 45px rgba(0,0,0,0.6);
-                                text-align: center;
-                                max-width: 380px;
-                                transform: scale(1);
-                                transition: transform 0.25s ease;
-                            ">
-                                <div style="margin-bottom: 8px;">{icono}</div>
-                                <div style="color: #f8fafc; font-weight: 700; font-size: 1.15rem; margin-bottom: 6px;">
-                                    {titulo_txt}
-                                </div>
-                                <div style="color: #94a3b8; font-size: 0.88rem; line-height: 1.45;">
-                                    {sub_txt}
+                                position: fixed;
+                                inset: 0;
+                                z-index: 2147483647;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                background: rgba(11, 17, 32, 0.55);
+                                backdrop-filter: blur(4px);
+                                opacity: 1;
+                                transition: opacity 0.35s ease;
+                                font-family: 'Segoe UI', Arial, sans-serif;
+                            " id="bims-presencia-backdrop">
+                                <div style="
+                                    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+                                    border: 1px solid #334155;
+                                    border-left: 5px solid {color_borde};
+                                    border-radius: 14px;
+                                    padding: 24px 32px;
+                                    box-shadow: 0 20px 45px rgba(0,0,0,0.6);
+                                    text-align: center;
+                                    max-width: 380px;
+                                    transform: scale(1);
+                                    transition: transform 0.25s ease;
+                                ">
+                                    <div style="margin-bottom: 8px;">{icono}</div>
+                                    <div style="color: #f8fafc; font-weight: 700; font-size: 1.15rem; margin-bottom: 6px;">
+                                        {titulo_txt}
+                                    </div>
+                                    <div style="color: #94a3b8; font-size: 0.88rem; line-height: 1.45;">
+                                        {sub_txt}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    `;
-                    doc.body.appendChild(modal);
+                        `;
+                        doc.body.appendChild(modal);
 
-                    setTimeout(() => {{
-                        const bd = doc.getElementById('bims-presencia-backdrop');
-                        if (bd) bd.style.opacity = '0';
                         setTimeout(() => {{
-                            if (modal) modal.remove();
-                        }}, 350);
-                    }}, 1800);
-                }})();
-                </script>
-                """, width=1, height=1)
+                            const bd = doc.getElementById('bims-presencia-backdrop');
+                            if (bd) bd.style.opacity = '0';
+                            setTimeout(() => {{
+                                if (modal) modal.remove();
+                            }}, 350);
+                        }}, 1800);
+                    }})();
+                    </script>
+                    """, width=1, height=1)
 
-        renderizar_selector_presencia_sidebar()
-        
-        # Separador compacto sin márgenes excesivos
-        st.markdown(
-            '<hr style="margin: 8px 0 12px 0; border: none; border-top: 1px solid #334155;">',
-            unsafe_allow_html=True
-        )
+            renderizar_selector_presencia_sidebar()
             
-    st.markdown('<h3 style="margin-top: 0; padding-top: 0; font-size: 1.15rem;">Filtros de Consulta</h3>', unsafe_allow_html=True)
-
-    usar_filtro_hora = st.checkbox("Restringir Franja Horaria", key="bims_filter_hour_enabled")
-
-    def set_fechas_hoy():
-        hoy = obtener_fecha_local_hoy()
-        st.session_state["input_f_desde"] = hoy
-        st.session_state["input_f_hasta"] = hoy
-
-    def set_fechas_semana():
-        hoy = obtener_fecha_local_hoy()
-        inicio_semana = hoy - timedelta(days=hoy.weekday())
-        fin_semana = inicio_semana + timedelta(days=6)
-        st.session_state["input_f_desde"] = inicio_semana
-        st.session_state["input_f_hasta"] = fin_semana
-
-    def set_fechas_mes():
-        hoy = obtener_fecha_local_hoy()
-        inicio_mes = hoy.replace(day=1)
-        if hoy.month == 12:
-            fin_mes = date(hoy.year, 12, 31)
-        else:
-            fin_mes = date(hoy.year, hoy.month + 1, 1) - timedelta(days=1)
-            
-        st.session_state["input_f_desde"] = inicio_mes
-        st.session_state["input_f_hasta"] = fin_mes
-
-    col_b_hoy, col_b_sem, col_b_mes = st.columns(3)
-    col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
-    col_b_sem.button("Semana", on_click=set_fechas_semana, use_container_width=True)
-    col_b_mes.button("Mes", on_click=set_fechas_mes, use_container_width=True)
-
-    with st.form("form_filtros"):
-        st.caption("Rango de Fechas")
-        f_col1, f_col2 = st.columns(2)
-        
-        val_desde = st.session_state.get("input_f_desde", hoy_local)
-        val_hasta = st.session_state.get("input_f_hasta", hoy_local)
-
-        fecha_desde = f_col1.date_input("Desde", value=val_desde, key="input_f_desde")
-        fecha_hasta = f_col2.date_input("Hasta", value=val_hasta, key="input_f_hasta")
-
-        if usar_filtro_hora:
-            st.caption("Franja Horaria")
-            h_col1, h_col2 = st.columns(2)
-            hora_inicio = h_col1.time_input("Inicio", key="bims_hora_inicio")
-            hora_fin = h_col2.time_input("Fin", key="bims_hora_fin")
-        else:
-            hora_inicio, hora_fin = time(8, 0), time(18, 0)
-
-        act_sonido = st.checkbox("Alertas Sonoras", key="act_sonido")
-
-        btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
-
-    st.session_state["f_desde_key"] = fecha_desde
-    st.session_state["f_hasta_key"] = fecha_hasta
-else:
-    # El panel cerrado conserva los filtros aplicados y permite que el dashboard
-    # siga calculándose normalmente aunque sus controles no estén visibles.
-    fecha_desde = st.session_state.get("input_f_desde", hoy_local)
-    fecha_hasta = st.session_state.get("input_f_hasta", hoy_local)
-    usar_filtro_hora = bool(st.session_state.get("bims_filter_hour_enabled", False))
-    hora_inicio = st.session_state.get("bims_hora_inicio", time(8, 0))
-    hora_fin = st.session_state.get("bims_hora_fin", time(18, 0))
-    act_sonido = bool(st.session_state.get("act_sonido", True))
-    st.session_state["f_desde_key"] = fecha_desde
-    st.session_state["f_hasta_key"] = fecha_hasta
-
-    def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
-        output = io.BytesIO()
-        horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
-
-        sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
-        sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
-
-        tz_py = timezone(timedelta(hours=-3))
-        now_py_str = datetime.now(tz_py).strftime("%Y-%m-%d %H:%M:%S")
-
-        df_reporte = pd.DataFrame()
-        df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
-        df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
-        df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
-        df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
-        df_reporte["Company"] = df_exp.get("company", "Sin datos")
-        df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
-        df_reporte["Por Agente"] = df_exp.get("por_agente", "")
-     
-        # 1. Evaluamos primero los SLA de 1ra Respuesta
-        sla_norm_series = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
-        sla_ext_series = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
-
-        df_reporte["SLA Normal"] = sla_norm_series
-        df_reporte["SLA Extendido"] = sla_ext_series
-
-        # 2. Filtrar Primera Respuesta (min): solo si SLA Normal o Extendido es 'cumple' o 'no cumple'
-        if not df_exp.empty:
-            prim_resp_raw = df_exp.get("primera_respuesta_min", pd.Series(dtype=float))
-            es_valido_1ra = sla_norm_series.isin(["cumple", "no cumple"]) | sla_ext_series.isin(["cumple", "no cumple"])
-            df_reporte["Primera respuesta (min)"] = np.where(es_valido_1ra, prim_resp_raw, np.nan)
-        else:
-            df_reporte["Primera respuesta (min)"] = None
-        
-        if "rating" in df_exp and not df_exp.empty:
-            df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
-        else:
-            df_reporte["Calificacion"] = ""
-
-        df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "")
-        df_reporte["Ticket Relacionado"] = df_exp.get("ticket_relacionado", "") 
-        df_reporte["Feedback"] = df_exp.get("feedback", "")
-        df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
-        df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
-
-        df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
-        df_reporte["Modulo"] = df_exp.get("modulo", "")
-        df_reporte["Cliente"] = df_exp.get("cliente", "")
-        df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
-        df_reporte["Nivel"] = df_exp.get("nivel", "")
-        
-        # Evaluar SLA de Gestión primero
-        sla_gest_series = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
-        df_reporte["SLA Tiempo Gestion"] = sla_gest_series
-
-        # Filtrar tiempo de resolución en minutos y horas: solo se completa si es 'cumple' o 'no cumple'
-        if not df_exp.empty:
-            minutos_raw = df_exp.get("tiempo_resolucion_minutos", pd.Series(dtype=float))
-            es_valido_gestion = sla_gest_series.isin(["cumple", "no cumple"])
-            
-            df_reporte["Tiempo resolucion (min)"] = np.where(es_valido_gestion, minutos_raw, np.nan)
-            df_reporte["Tiempo resolucion (horas)"] = np.where(es_valido_gestion, (minutos_raw / 60.0).round(2), np.nan)
-        else:
-            df_reporte["Tiempo resolucion (min)"] = None
-            df_reporte["Tiempo resolucion (horas)"] = None
-
-        df_reporte["AI Title"] = df_exp.get("ai_title", "No Generado")
-
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df_meta = pd.DataFrame([
-                ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
-                ["Rango de Fechas Consultado:", f"Desde {f_desde_val} hasta {f_hasta_val}"],
-                ["Franja Horaria Aplicada:", horario_texto],
-                ["Fecha de Generacion:", now_py_str],
-                ["", ""]
-            ])
-            df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
-            df_reporte.to_excel(writer, index=False, sheet_name="Detalle", startrow=6)
-            
-            ws = writer.sheets["Detalle"]
-            for i, col in enumerate(df_reporte.columns, 1):
-                ws.column_dimensions[get_column_letter(i)].width = 24
-
-        output.seek(0)
-        return output
-
-    # ==========================================
-    # DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
-    # ==========================================
-    @st.dialog("Exportar Reporte a Excel")
-    def modal_exportar_excel():
-        st.caption("Selecciona el rango de fechas que deseas incluir en el archivo Excel:")
-        
-        col_d1, col_d2 = st.columns(2)
-        hoy = obtener_fecha_local_hoy()
-        f_exp_inicio = col_d1.date_input("Fecha Desde:", value=hoy, key="modal_exp_desde")
-        f_exp_fin = col_d2.date_input("Fecha Hasta:", value=hoy, key="modal_exp_hasta")
-        
-        usar_hora_exp = st.checkbox("Restringir Franja Horaria en Excel", value=False)
-        if usar_hora_exp:
-            col_h1, col_h2 = st.columns(2)
-            h_exp_ini = col_h1.time_input("Hora Inicio", time(8, 0), key="modal_exp_h_ini")
-            h_exp_fin = col_h2.time_input("Hora Fin", time(18, 0), key="modal_exp_h_fin")
-        else:
-            h_exp_ini, h_exp_fin = time(8, 0), time(18, 0)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        if not df_all.empty and "fecha_solo" in df_all.columns:
-            df_exp_filt = df_all[
-                (df_all["fecha_solo"] >= pd.to_datetime(f_exp_inicio).date()) & 
-                (df_all["fecha_solo"] <= pd.to_datetime(f_exp_fin).date())
-            ].copy()
-            
-            if usar_hora_exp and not df_exp_filt.empty:
-                df_exp_filt = df_exp_filt[
-                    (df_exp_filt["hora_solo"] >= h_exp_ini) & 
-                    (df_exp_filt["hora_solo"] <= h_exp_fin)
-                ]
-        else:
-            df_exp_filt = pd.DataFrame()
-
-        if not df_exp_filt.empty:
-            st.success(f" Se encontraron **{len(df_exp_filt)} registros** para el rango seleccionado.")
-            
-            excel_bytes = generar_excel_reporte(
-                df_exp_filt, 
-                f_exp_inicio, 
-                f_exp_fin, 
-                usar_hora_exp, 
-                h_exp_ini, 
-                h_exp_fin
+            # Separador compacto sin márgenes excesivos
+            st.markdown(
+                '<hr style="margin: 8px 0 12px 0; border: none; border-top: 1px solid #334155;">',
+                unsafe_allow_html=True
             )
+                
+        st.markdown('<h3 style="margin-top: 0; padding-top: 0; font-size: 1.15rem;">Filtros de Consulta</h3>', unsafe_allow_html=True)
+
+        usar_filtro_hora = st.checkbox("Restringir Franja Horaria", key="bims_filter_hour_enabled")
+
+        def set_fechas_hoy():
+            hoy = obtener_fecha_local_hoy()
+            st.session_state["input_f_desde"] = hoy
+            st.session_state["input_f_hasta"] = hoy
+
+        def set_fechas_semana():
+            hoy = obtener_fecha_local_hoy()
+            inicio_semana = hoy - timedelta(days=hoy.weekday())
+            fin_semana = inicio_semana + timedelta(days=6)
+            st.session_state["input_f_desde"] = inicio_semana
+            st.session_state["input_f_hasta"] = fin_semana
+
+        def set_fechas_mes():
+            hoy = obtener_fecha_local_hoy()
+            inicio_mes = hoy.replace(day=1)
+            if hoy.month == 12:
+                fin_mes = date(hoy.year, 12, 31)
+            else:
+                fin_mes = date(hoy.year, hoy.month + 1, 1) - timedelta(days=1)
+                
+            st.session_state["input_f_desde"] = inicio_mes
+            st.session_state["input_f_hasta"] = fin_mes
+
+        col_b_hoy, col_b_sem, col_b_mes = st.columns(3)
+        col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
+        col_b_sem.button("Semana", on_click=set_fechas_semana, use_container_width=True)
+        col_b_mes.button("Mes", on_click=set_fechas_mes, use_container_width=True)
+
+        with st.form("form_filtros"):
+            st.caption("Rango de Fechas")
+            f_col1, f_col2 = st.columns(2)
             
-            st.download_button(
-                label=" Descargar Archivo Excel",
-                data=excel_bytes,
-                file_name=f"reporte_intercom_{f_exp_inicio}_a_{f_exp_fin}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        else:
-            st.warning("No existen registros cargados en la base de datos para las fechas seleccionadas.")
+            val_desde = st.session_state.get("input_f_desde", hoy_local)
+            val_hasta = st.session_state.get("input_f_hasta", hoy_local)
 
-    # SECCIÓN DE BOTONES EN LA BARRA LATERAL
-    st.markdown("---")
+            fecha_desde = f_col1.date_input("Desde", value=val_desde, key="input_f_desde")
+            fecha_hasta = f_col2.date_input("Hasta", value=val_hasta, key="input_f_hasta")
 
-    if st.button("Exportar Reporte a Excel", use_container_width=True):
-        modal_exportar_excel()
+            if usar_filtro_hora:
+                st.caption("Franja Horaria")
+                h_col1, h_col2 = st.columns(2)
+                hora_inicio = h_col1.time_input("Inicio", time(8, 0))
+                hora_fin = h_col2.time_input("Fin", time(18, 0))
+            else:
+                hora_inicio, hora_fin = time(8, 0), time(18, 0)
 
-    # -------------------------------------------------------------------------
-    # MODAL GLOBAL DE CIERRE DE SESIÓN (INSERTADO DIRECTAMENTE EN EL DOCUMENTO)
-    # -------------------------------------------------------------------------
-    st.iframe("""
-    <script>
-    (function() {
-        const doc = window.parent.document;
-        if (doc.__bimsLogoutListenerInstalled) return;
-        doc.__bimsLogoutListenerInstalled = true;
+            act_sonido = st.checkbox("Alertas Sonoras", key="act_sonido")
 
-        function showLogoutOverlay() {
-            let overlay = doc.getElementById('bims-logout-loading-overlay');
-            if (!overlay) {
-                overlay = doc.createElement('div');
-                overlay.id = 'bims-logout-loading-overlay';
-                overlay.innerHTML = `
-                    <div class="bims-logout-card">
-                        <div class="bims-logout-spinner"></div>
-                        <div class="bims-logout-title">Cerrando tu sesión...</div>
-                        <div class="bims-logout-subtitle">Volviendo a la pantalla de acceso</div>
-                    </div>`;
-                doc.body.appendChild(overlay);
-            }
-            overlay.style.setProperty('display', 'flex', 'important');
-            overlay.style.setProperty('z-index', '2147483647', 'important');
-            try {
-                localStorage.removeItem('bims_user_session');
-                sessionStorage.setItem('bims_just_logged_out', 'true');
-            } catch (e) {}
-        }
+            btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
 
-        const styleId = 'bims-logout-overlay-style';
-        if (!doc.getElementById(styleId)) {
-            const style = doc.createElement('style');
-            style.id = styleId;
-            style.textContent = `
-                #bims-logout-loading-overlay { position:fixed !important; inset:0 !important; width:100vw !important; height:100vh !important;
-                    z-index:2147483647 !important; display:none; align-items:center; justify-content:center; pointer-events:auto;
-                    background:rgba(11,17,32,.96); backdrop-filter:blur(10px); font-family:Arial,sans-serif; }
-                #bims-logout-loading-overlay .bims-logout-card { display:flex; flex-direction:column;
-                    align-items:center; gap:13px; padding:30px 38px; border-radius:18px;
-                    background:linear-gradient(145deg,#1e293b,#0f172a); border:1px solid #334155;
-                    box-shadow:0 20px 45px rgba(0,0,0,.5); text-align:center; }
-                #bims-logout-loading-overlay .bims-logout-spinner { width:38px;height:38px;border-radius:50%;
-                    border:3px solid rgba(56,189,248,.2);border-top-color:#38bdf8;
-                    animation:bimsLogoutSpin .75s linear infinite; }
-                #bims-logout-loading-overlay .bims-logout-title {color:#f8fafc;font-weight:700;font-size:17px;}
-                #bims-logout-loading-overlay .bims-logout-subtitle {color:#94a3b8;font-size:13px;}
-                @keyframes bimsLogoutSpin {to{transform:rotate(360deg);}}
-            `;
-            doc.head.appendChild(style);
-        }
+        st.session_state["f_desde_key"] = fecha_desde
+        st.session_state["f_hasta_key"] = fecha_hasta
 
-        doc.addEventListener('click', function(event) {
-            const button = event.target.closest('button');
-            if (button && button.innerText && button.innerText.includes('Cerrar Sesión')) {
-                showLogoutOverlay();
-            }
-        }, true);
-    })();
-    </script>
-    """, width=1, height=1)
+        def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
+            output = io.BytesIO()
+            horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
 
-    if st.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
-        # El listener muestra el overlay de inmediato. Esta limpieza adicional
-        # evita que una sesión antigua de localStorage vuelva a autenticarse.
-        st.query_params.clear()
-        
-        st.session_state["user_authenticated"] = False
-        st.session_state["user_email"] = ""
-        if "admin_authenticated" in st.session_state:
-            st.session_state["admin_authenticated"] = False
+            sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
+            sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
+
+            tz_py = timezone(timedelta(hours=-3))
+            now_py_str = datetime.now(tz_py).strftime("%Y-%m-%d %H:%M:%S")
+
+            df_reporte = pd.DataFrame()
+            df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
+            df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
+            df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
+            df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
+            df_reporte["Company"] = df_exp.get("company", "Sin datos")
+            df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
+            df_reporte["Por Agente"] = df_exp.get("por_agente", "")
+         
+            # 1. Evaluamos primero los SLA de 1ra Respuesta
+            sla_norm_series = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+            sla_ext_series = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+
+            df_reporte["SLA Normal"] = sla_norm_series
+            df_reporte["SLA Extendido"] = sla_ext_series
+
+            # 2. Filtrar Primera Respuesta (min): solo si SLA Normal o Extendido es 'cumple' o 'no cumple'
+            if not df_exp.empty:
+                prim_resp_raw = df_exp.get("primera_respuesta_min", pd.Series(dtype=float))
+                es_valido_1ra = sla_norm_series.isin(["cumple", "no cumple"]) | sla_ext_series.isin(["cumple", "no cumple"])
+                df_reporte["Primera respuesta (min)"] = np.where(es_valido_1ra, prim_resp_raw, np.nan)
+            else:
+                df_reporte["Primera respuesta (min)"] = None
             
-        st.rerun()
+            if "rating" in df_exp and not df_exp.empty:
+                df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
+            else:
+                df_reporte["Calificacion"] = ""
+
+            df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "")
+            df_reporte["Ticket Relacionado"] = df_exp.get("ticket_relacionado", "") 
+            df_reporte["Feedback"] = df_exp.get("feedback", "")
+            df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
+            df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
+
+            df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
+            df_reporte["Modulo"] = df_exp.get("modulo", "")
+            df_reporte["Cliente"] = df_exp.get("cliente", "")
+            df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
+            df_reporte["Nivel"] = df_exp.get("nivel", "")
+            
+            # Evaluar SLA de Gestión primero
+            sla_gest_series = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+            df_reporte["SLA Tiempo Gestion"] = sla_gest_series
+
+            # Filtrar tiempo de resolución en minutos y horas: solo se completa si es 'cumple' o 'no cumple'
+            if not df_exp.empty:
+                minutos_raw = df_exp.get("tiempo_resolucion_minutos", pd.Series(dtype=float))
+                es_valido_gestion = sla_gest_series.isin(["cumple", "no cumple"])
+                
+                df_reporte["Tiempo resolucion (min)"] = np.where(es_valido_gestion, minutos_raw, np.nan)
+                df_reporte["Tiempo resolucion (horas)"] = np.where(es_valido_gestion, (minutos_raw / 60.0).round(2), np.nan)
+            else:
+                df_reporte["Tiempo resolucion (min)"] = None
+                df_reporte["Tiempo resolucion (horas)"] = None
+
+            df_reporte["AI Title"] = df_exp.get("ai_title", "No Generado")
+
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df_meta = pd.DataFrame([
+                    ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
+                    ["Rango de Fechas Consultado:", f"Desde {f_desde_val} hasta {f_hasta_val}"],
+                    ["Franja Horaria Aplicada:", horario_texto],
+                    ["Fecha de Generacion:", now_py_str],
+                    ["", ""]
+                ])
+                df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
+                df_reporte.to_excel(writer, index=False, sheet_name="Detalle", startrow=6)
+                
+                ws = writer.sheets["Detalle"]
+                for i, col in enumerate(df_reporte.columns, 1):
+                    ws.column_dimensions[get_column_letter(i)].width = 24
+
+            output.seek(0)
+            return output
+
+        # ==========================================
+        # DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
+        # ==========================================
+        @st.dialog("Exportar Reporte a Excel")
+        def modal_exportar_excel():
+            st.caption("Selecciona el rango de fechas que deseas incluir en el archivo Excel:")
+            
+            col_d1, col_d2 = st.columns(2)
+            hoy = obtener_fecha_local_hoy()
+            f_exp_inicio = col_d1.date_input("Fecha Desde:", value=hoy, key="modal_exp_desde")
+            f_exp_fin = col_d2.date_input("Fecha Hasta:", value=hoy, key="modal_exp_hasta")
+            
+            usar_hora_exp = st.checkbox("Restringir Franja Horaria en Excel", value=False)
+            if usar_hora_exp:
+                col_h1, col_h2 = st.columns(2)
+                h_exp_ini = col_h1.time_input("Hora Inicio", time(8, 0), key="modal_exp_h_ini")
+                h_exp_fin = col_h2.time_input("Hora Fin", time(18, 0), key="modal_exp_h_fin")
+            else:
+                h_exp_ini, h_exp_fin = time(8, 0), time(18, 0)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if not df_all.empty and "fecha_solo" in df_all.columns:
+                df_exp_filt = df_all[
+                    (df_all["fecha_solo"] >= pd.to_datetime(f_exp_inicio).date()) & 
+                    (df_all["fecha_solo"] <= pd.to_datetime(f_exp_fin).date())
+                ].copy()
+                
+                if usar_hora_exp and not df_exp_filt.empty:
+                    df_exp_filt = df_exp_filt[
+                        (df_exp_filt["hora_solo"] >= h_exp_ini) & 
+                        (df_exp_filt["hora_solo"] <= h_exp_fin)
+                    ]
+            else:
+                df_exp_filt = pd.DataFrame()
+
+            if not df_exp_filt.empty:
+                st.success(f" Se encontraron **{len(df_exp_filt)} registros** para el rango seleccionado.")
+                
+                excel_bytes = generar_excel_reporte(
+                    df_exp_filt, 
+                    f_exp_inicio, 
+                    f_exp_fin, 
+                    usar_hora_exp, 
+                    h_exp_ini, 
+                    h_exp_fin
+                )
+                
+                st.download_button(
+                    label=" Descargar Archivo Excel",
+                    data=excel_bytes,
+                    file_name=f"reporte_intercom_{f_exp_inicio}_a_{f_exp_fin}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            else:
+                st.warning("No existen registros cargados en la base de datos para las fechas seleccionadas.")
+
+        # SECCIÓN DE BOTONES EN LA BARRA LATERAL
+        st.markdown("---")
+
+        if st.button("Exportar Reporte a Excel", use_container_width=True):
+            modal_exportar_excel()
+
+        # -------------------------------------------------------------------------
+        # MODAL GLOBAL DE CIERRE DE SESIÓN (INSERTADO DIRECTAMENTE EN EL DOCUMENTO)
+        # -------------------------------------------------------------------------
+        st.iframe("""
+        <script>
+        (function() {
+            const doc = window.parent.document;
+            if (doc.__bimsLogoutListenerInstalled) return;
+            doc.__bimsLogoutListenerInstalled = true;
+
+            function showLogoutOverlay() {
+                let overlay = doc.getElementById('bims-logout-loading-overlay');
+                if (!overlay) {
+                    overlay = doc.createElement('div');
+                    overlay.id = 'bims-logout-loading-overlay';
+                    overlay.innerHTML = `
+                        <div class="bims-logout-card">
+                            <div class="bims-logout-spinner"></div>
+                            <div class="bims-logout-title">Cerrando tu sesión...</div>
+                            <div class="bims-logout-subtitle">Volviendo a la pantalla de acceso</div>
+                        </div>`;
+                    doc.body.appendChild(overlay);
+                }
+                overlay.style.setProperty('display', 'flex', 'important');
+                overlay.style.setProperty('z-index', '2147483647', 'important');
+                try {
+                    localStorage.removeItem('bims_user_session');
+                    sessionStorage.setItem('bims_just_logged_out', 'true');
+                } catch (e) {}
+            }
+
+            const styleId = 'bims-logout-overlay-style';
+            if (!doc.getElementById(styleId)) {
+                const style = doc.createElement('style');
+                style.id = styleId;
+                style.textContent = `
+                    #bims-logout-loading-overlay { position:fixed !important; inset:0 !important; width:100vw !important; height:100vh !important;
+                        z-index:2147483647 !important; display:none; align-items:center; justify-content:center; pointer-events:auto;
+                        background:rgba(11,17,32,.96); backdrop-filter:blur(10px); font-family:Arial,sans-serif; }
+                    #bims-logout-loading-overlay .bims-logout-card { display:flex; flex-direction:column;
+                        align-items:center; gap:13px; padding:30px 38px; border-radius:18px;
+                        background:linear-gradient(145deg,#1e293b,#0f172a); border:1px solid #334155;
+                        box-shadow:0 20px 45px rgba(0,0,0,.5); text-align:center; }
+                    #bims-logout-loading-overlay .bims-logout-spinner { width:38px;height:38px;border-radius:50%;
+                        border:3px solid rgba(56,189,248,.2);border-top-color:#38bdf8;
+                        animation:bimsLogoutSpin .75s linear infinite; }
+                    #bims-logout-loading-overlay .bims-logout-title {color:#f8fafc;font-weight:700;font-size:17px;}
+                    #bims-logout-loading-overlay .bims-logout-subtitle {color:#94a3b8;font-size:13px;}
+                    @keyframes bimsLogoutSpin {to{transform:rotate(360deg);}}
+                `;
+                doc.head.appendChild(style);
+            }
+
+            doc.addEventListener('click', function(event) {
+                const button = event.target.closest('button');
+                if (button && button.innerText && button.innerText.includes('Cerrar Sesión')) {
+                    showLogoutOverlay();
+                }
+            }, true);
+        })();
+        </script>
+        """, width=1, height=1)
+
+        if st.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
+            # El listener muestra el overlay de inmediato. Esta limpieza adicional
+            # evita que una sesión antigua de localStorage vuelva a autenticarse.
+            st.query_params.clear()
+            
+            st.session_state["user_authenticated"] = False
+            st.session_state["user_email"] = ""
+            if "admin_authenticated" in st.session_state:
+                st.session_state["admin_authenticated"] = False
+                
+            st.rerun()
+
+    else:
+        # Los valores permanecen disponibles para todos los cálculos del dashboard.
+        fecha_desde = st.session_state.get("input_f_desde", hoy_local)
+        fecha_hasta = st.session_state.get("input_f_hasta", hoy_local)
+        usar_filtro_hora = bool(st.session_state.get("bims_filter_hour_enabled", False))
+        hora_inicio = st.session_state.get("bims_hora_inicio", time(8, 0))
+        hora_fin = st.session_state.get("bims_hora_fin", time(18, 0))
+        act_sonido = bool(st.session_state.get("act_sonido", True))
+        st.session_state["f_desde_key"] = fecha_desde
+        st.session_state["f_hasta_key"] = fecha_hasta
 
 with col_contenido_bims:
     # ==========================================
