@@ -2796,13 +2796,12 @@ with tab_operativo:
 
     def render_metric_card(title, value, diff, comp_texto, sub_text):
         diff_color = "#34d399" if diff >= 0 else "#f43f5e"
-        diff_bg = "rgba(52, 211, 153, 0.12)" if diff >= 0 else "rgba(244, 63, 94, 0.12)"
         diff_symbol = "▲" if diff >= 0 else "▼"
         return f"""
         <div class="metric-card" style="border-left: 4px solid #38bdf8;">
             <div class="metric-card-title">{title}</div>
             <div class="metric-card-value">{value}</div>
-            <div style="display: inline-block; background: {diff_bg}; color: {diff_color}; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; margin-top: 4px;">
+            <div style="display: inline-block; background: transparent; color: {diff_color}; padding: 2px 0; border-radius: 0; font-size: 0.78rem; font-weight: 700; margin-top: 4px;">
                 {diff_symbol} {abs(diff)}% {comp_texto}
             </div>
             <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem; margin-top: 6px;">{sub_text}</div>
@@ -3257,16 +3256,50 @@ with tab_operativo:
         df_res_agentes = pd.DataFrame(res_agentes)
         if not df_res_agentes.empty:
             df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
-            columnas_numericas = df_res_agentes.select_dtypes(include="number").columns
-            estilos_encabezados = [
-                {
-                    "selector": f"th.col_heading.level0.col{df_res_agentes.columns.get_loc(col)}",
-                    "props": [("text-align", "right")]
-                }
-                for col in columnas_numericas
-            ]
-            df_res_agentes_styled = df_res_agentes.style.set_table_styles(estilos_encabezados)
-            st.dataframe(df_res_agentes_styled, hide_index=True, use_container_width=True)
+            # Render HTML para controlar la alineación de encabezados y valores.
+            # "Agente" queda a la izquierda; todas las columnas métricas a la derecha.
+            columnas_metricas = list(df_res_agentes.columns[1:])
+            estilos_columnas = ", ".join(
+                f".bims-agent-metrics-table th:nth-child({i}), "
+                f".bims-agent-metrics-table td:nth-child({i})"
+                for i in range(2, len(df_res_agentes.columns) + 1)
+            )
+            html_tabla_agentes = df_res_agentes.to_html(
+                index=False,
+                escape=True,
+                border=0,
+                classes="bims-agent-metrics-table"
+            )
+            st.markdown(
+                f"""
+                <style>
+                    .bims-agent-metrics-table {{
+                        width: 100%;
+                        border-collapse: collapse;
+                        color: #cbd5e1;
+                        font-size: 0.88rem;
+                    }}
+                    .bims-agent-metrics-table th,
+                    .bims-agent-metrics-table td {{
+                        padding: 10px 12px;
+                        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+                        text-align: left;
+                        white-space: nowrap;
+                    }}
+                    {estilos_columnas} {{
+                        text-align: right !important;
+                    }}
+                    .bims-agent-metrics-table th {{
+                        color: #94a3b8;
+                        font-weight: 700;
+                    }}
+                </style>
+                <div style="width:100%; overflow-x:auto;">
+                    {html_tabla_agentes}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
         else:
             st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
     else:
