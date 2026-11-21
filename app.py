@@ -1885,9 +1885,11 @@ st.markdown("""
         }
     }
 
-    /* Compactar aún más el espacio superior exclusivo de la alerta en vivo. */
-    div[data-testid="stElementContainer"]:has(div[data-testid="stExpander"]:has(.alerta-ancla-activa)) {
-        margin-block-start: -20px !important;
+    /* Elevar directamente la alerta para eliminar el hueco superior de Streamlit. */
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) {
+        position: relative !important;
+        top: -24px !important;
+        margin-block-end: -24px !important;
     }
 
     /* Fondo oscuro limpio para el contenido interno cuando se despliega */
