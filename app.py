@@ -6239,9 +6239,9 @@ def renderizar_panel_admin():
         with st.container(border=True):
             st.markdown("#### Criterios de cálculo de tiempos y SLA")
             st.markdown("""
-            - **Promedios del dashboard:** consideran chats válidos atendidos dentro de la jornada operativa.
-            - **Primera respuesta y gestión:** se calculan sobre los registros que cumplen los criterios de inclusión correspondientes.
-            - **Evaluación en Excel:** aplica sus reglas de horario y exclusión; en gestión, los chats con la etiqueta **Sin Respuesta** se identifican como **Excluido por filtro**.
+            - **Promedio en pantalla (dashboard):** media de los minutos de primera respuesta y gestión de chats válidos (por_agente == no excluido) creados dentro de la jornada operativa (horario_evaluado != fuera de horario).
+            - **Evaluación de SLA en Excel:** aplica la regla estricta de **lunes a viernes, de 08:00 a 17:00 hs**.
+            - **Exclusión en gestión:** los chats con la etiqueta **Sin Respuesta** se marcan como **Excluido por filtro**.
             """)
 
     with admin_tabs[1]:
