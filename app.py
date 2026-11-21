@@ -2205,10 +2205,15 @@ st.markdown("""
         border-radius: 9px !important;
         line-height: 1.55 !important;
     }
-    html.bims-sidebar-closed .st-key-bims_sidebar_panel {
+    /* El panel permanece cerrado por defecto incluso antes de que cargue el JS. */
+    html:not(.bims-sidebar-open) .st-key-bims_sidebar_panel {
         transform: translate3d(-105%,0,0) !important;
         box-shadow: none !important;
         pointer-events: none !important;
+    }
+    html.bims-sidebar-open .st-key-bims_sidebar_panel {
+        transform: translate3d(0,0,0) !important;
+        pointer-events: auto !important;
     }
     #bims-sidebar-toggle {
         position: fixed;
@@ -2233,11 +2238,11 @@ st.markdown("""
         transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
     }
     #bims-sidebar-toggle:hover { background: #223650; }
-    html.bims-sidebar-closed #bims-sidebar-toggle { left: 14px; }
+    html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
     @media (max-width: 600px) {
         .st-key-bims_sidebar_panel { width: 88vw !important; }
         #bims-sidebar-toggle { left: calc(88vw - 52px); }
-        html.bims-sidebar-closed #bims-sidebar-toggle { left: 14px; }
+        html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
     }
     @media (prefers-reduced-motion: reduce) {
         .st-key-bims_sidebar_panel, #bims-sidebar-toggle { transition-duration: .01ms !important; }
@@ -2253,47 +2258,59 @@ st.iframe("""
     try {
         const doc = window.parent.document;
         const root = doc.documentElement;
-        if (doc.__bimsSidebarControlInstalled) return;
-        doc.__bimsSidebarControlInstalled = true;
 
-        function installButton() {
-            if (doc.getElementById('bims-sidebar-toggle')) return;
-            const button = doc.createElement('button');
-            button.id = 'bims-sidebar-toggle';
-            button.type = 'button';
-            button.setAttribute('aria-label', 'Abrir o cerrar panel lateral');
-            button.setAttribute('aria-expanded', 'false');
-            button.textContent = '☰';
-            doc.body.appendChild(button);
-
-            function setPanelClosed(closed) {
-                root.classList.toggle('bims-sidebar-closed', closed);
+        function setPanelClosed(closed) {
+            root.classList.toggle('bims-sidebar-open', !closed);
+            const button = doc.getElementById('bims-sidebar-toggle');
+            if (button) {
                 button.textContent = closed ? '☰' : '‹';
                 button.setAttribute('aria-expanded', String(!closed));
             }
+        }
 
-            /* El panel inicia cerrado en cada carga completa de la página. */
-            setPanelClosed(true);
+        function installButton() {
+            let button = doc.getElementById('bims-sidebar-toggle');
+            if (!button) {
+                button = doc.createElement('button');
+                button.id = 'bims-sidebar-toggle';
+                button.type = 'button';
+                button.setAttribute('aria-label', 'Abrir o cerrar panel lateral');
+                button.setAttribute('aria-expanded', 'false');
+                button.textContent = '☰';
+                doc.body.appendChild(button);
+            }
 
-            button.addEventListener('click', function(event) {
-                event.preventDefault();
-                event.stopPropagation();
-                setPanelClosed(!root.classList.contains('bims-sidebar-closed'));
-            });
+            if (!button.__bimsClickHandlerInstalled) {
+                button.__bimsClickHandlerInstalled = true;
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setPanelClosed(root.classList.contains('bims-sidebar-open'));
+                });
+            }
 
-            /* Cierra al hacer clic en cualquier zona exterior al panel. */
-            doc.addEventListener('click', function(event) {
-                if (root.classList.contains('bims-sidebar-closed')) return;
-                const panel = doc.querySelector('.st-key-bims_sidebar_panel');
-                if (!panel || panel.contains(event.target) || button.contains(event.target)) return;
+            if (!doc.__bimsOutsideClickHandlerInstalled) {
+                doc.__bimsOutsideClickHandlerInstalled = true;
+                doc.addEventListener('click', function(event) {
+                    if (!root.classList.contains('bims-sidebar-open')) return;
+                    const panel = doc.querySelector('.st-key-bims_sidebar_panel');
+                    const toggle = doc.getElementById('bims-sidebar-toggle');
+                    if (!panel || panel.contains(event.target) || (toggle && toggle.contains(event.target))) return;
+                    setPanelClosed(true);
+                }, true);
+            }
+
+            /* Primera instalación: estado inicial cerrado. En reruns conserva la elección del usuario. */
+            if (!doc.__bimsSidebarInitialized) {
+                doc.__bimsSidebarInitialized = true;
                 setPanelClosed(true);
-            }, true);
+            }
         }
 
         if (doc.body) installButton();
         else doc.addEventListener('DOMContentLoaded', installButton, { once: true });
     } catch (error) {
-        console.error('No se pudo instalar el control lateral BIMS:', error);
+        console.error('BIMS: no se pudo instalar el control lateral', error);
     }
 })();
 </script>
