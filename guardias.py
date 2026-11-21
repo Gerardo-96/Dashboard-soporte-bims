@@ -141,7 +141,7 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     )
 
     tarjeta_html = (
-        f'<div class="metric-card guardia-header-card" style="border-left: 4px solid {borde_color}; padding: 12px 95px 12px 16px; margin-bottom: 0px;">'
+        f'<div class="metric-card guardia-header-card" style="border-left: 4px solid {borde_color}; padding: 9px 95px 9px 16px; margin-bottom: 0px;">'
         f'<div class="metric-card-title" style="font-size: 0.66rem; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">'
         f'<span style="white-space: nowrap;">GUARDIA {formatear_fecha_corta(actual["fecha"]).upper()} (09-12 HS)</span>'
         f'{badge_turno}'
@@ -151,7 +151,7 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         f'</div>'
         f'<style>'
         f'.metric-card.guardia-header-card, .metric-card.guardia-header-card:hover {{ transform: none !important; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35) !important; }}'
-        f'div.st-key-btn_abrir_guardias {{ margin-top: -54px !important; margin-bottom: 22px !important; padding-right: 16px !important; width: 100% !important; text-align: right !important; position: relative !important; z-index: 10 !important; }}'
+        f'div.st-key-btn_abrir_guardias {{ margin-top: -54px !important; margin-bottom: 18px !important; padding-right: 16px !important; width: 100% !important; text-align: right !important; position: relative !important; z-index: 10 !important; }}'
         f'div.st-key-btn_abrir_guardias > div[data-testid="stButton"] {{ display: flex !important; justify-content: flex-end !important; width: 100% !important; }}'
         f'div.st-key-btn_abrir_guardias button {{ margin-left: auto !important; margin-right: 0 !important; width: auto !important; min-width: 0 !important; padding: 4px 12px !important; font-size: 0.74rem !important; height: 30px !important; min-height: 30px !important; line-height: 1 !important; margin-top: 0 !important; }}'
         f'</style>'
