@@ -592,6 +592,25 @@ if not st.session_state["user_authenticated"]:
 # ==========================================
 
 # ==========================================
+
+def icono_estado_svg(estado, size=18):
+    """Devuelve un icono SVG estilo Lucide para estados operativos."""
+    estilos = {
+        "disponible": ("#10b981", '<path d="m9 12 2 2 4-4"/>'),
+        "ausente": ("#f59e0b", '<path d="M12 8v4"/><path d="M12 16h.01"/>'),
+        "desconectado": ("#ef4444", '<path d="m9 9 6 6"/><path d="m15 9-6 6"/>'),
+        "pausado": ("#f59e0b", '<path d="M9 8v8"/><path d="M15 8v8"/>')
+    }
+    color, trazo = estilos.get(str(estado).lower(), estilos["disponible"])
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" '
+        f'stroke-linecap="round" stroke-linejoin="round" '
+        f'style="display:inline-block;vertical-align:-3px;flex:none;">'
+        f'<circle cx="12" cy="12" r="9"/>{trazo}</svg>'
+    )
+
+
 # MAPA EN TIEMPO REAL DE PRESENCIA DE AGENTES
 # ==========================================
 @st.cache_data(ttl=30, show_spinner=False)
@@ -600,7 +619,7 @@ def obtener_mapa_estados_agentes():
     try:
         res = supabase.table("estado_agentes").select("nombre, away").execute()
         return {
-            r["nombre"].strip().lower(): ("🟡 Ausente" if r.get("away") else "🟢 Disponible")
+            r["nombre"].strip().lower(): ("Ausente" if r.get("away") else "Disponible")
             for r in (res.data or [])
         }
     except Exception:
@@ -668,7 +687,7 @@ def renderizar_panel_carga_asignador():
         or dia_semana not in [0, 1, 2, 3, 4]
         or not (time(8, 0, 0) <= hora_actual <= time(18, 0, 0))
     ):
-        st.info(f"⏸️ **Panel pausado fuera de jornada laboral.** Horario operativo: L-V de 08:00 a 18:00 hs (PY). Hora actual: {now_dt.strftime('%H:%M:%S')} hs.")
+        st.markdown(f"""<div style="display:flex;align-items:center;gap:8px;color:#cbd5e1;">{icono_estado_svg("pausado", 18)}<span><strong>Panel pausado fuera de jornada laboral.</strong> Horario operativo: L-V de 08:00 a 18:00 hs (PY). Hora actual: {now_dt.strftime('%H:%M:%S')} hs.</span></div>""", unsafe_allow_html=True)
         return
 
     try:
@@ -770,32 +789,32 @@ def renderizar_panel_carga_asignador():
             total_asignados = pendientes + cerrados_hoy
 
             # Presencia actual con coincidencia flexible por nombre
-            estado_presencia = "🟢 Disponible"
+            estado_presencia = "Disponible"
             agente_lower = agente.lower()
             for k_nombre, v_estado in mapa_estados.items():
                 if k_nombre in agente_lower or agente_lower in k_nombre:
                     estado_presencia = v_estado
                     break
 
-            etiqueta_grafico = f"{'🟢' if 'Disponible' in estado_presencia else '🟡'} {agente}"
+            etiqueta_grafico = agente
 
             resumen.append({
                 "Estado": estado_presencia,
                 "Agente de Soporte": agente,
                 "Agente Grafico": etiqueta_grafico,
-                "Total Asignados Hoy 📋": total_asignados,
-                "Cerrados (Hoy) 🟢": cerrados_hoy,
-                "Pendientes (Abiertos) 🔴": pendientes
+                "Total Asignados Hoy": total_asignados,
+                "Cerrados Hoy": cerrados_hoy,
+                "Pendientes (Abiertos)": pendientes
             })
 
         df_resumen = pd.DataFrame(resumen)
 
         if not df_resumen.empty:
-            df_resumen = df_resumen.sort_values(by="Total Asignados Hoy 📋", ascending=False)
+            df_resumen = df_resumen.sort_values(by="Total Asignados Hoy", ascending=False)
 
             col1, col2, col3 = st.columns(3)
-            col1.metric("Total Chats Pendientes", df_resumen["Pendientes (Abiertos) 🔴"].sum())
-            col2.metric("Total Cerrados Hoy", df_resumen["Cerrados (Hoy) 🟢"].sum())
+            col1.metric("Total Chats Pendientes", df_resumen["Pendientes (Abiertos)"].sum())
+            col2.metric("Total Cerrados Hoy", df_resumen["Cerrados Hoy"].sum())
             col3.metric("Última actualización", now_dt.strftime("%H:%M:%S hs"))
 
             st.markdown("<br>", unsafe_allow_html=True)
@@ -807,13 +826,13 @@ def renderizar_panel_carga_asignador():
 
             fig_carga.add_trace(go.Bar(
                 x=df_resumen["Agente Grafico"],
-                y=df_resumen["Cerrados (Hoy) 🟢"],
+                y=df_resumen["Cerrados Hoy"],
                 name="Cerrados Hoy",
                 marker=dict(
                     color="#10b981",
                     cornerradius=8
                 ),
-                text=df_resumen["Cerrados (Hoy) 🟢"].apply(lambda v: str(v) if v > 0 else ""),
+                text=df_resumen["Cerrados Hoy"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
                 insidetextanchor="middle",
                 insidetextfont=dict(color="#ffffff", size=14, family="Arial Black"),
@@ -823,13 +842,13 @@ def renderizar_panel_carga_asignador():
 
             fig_carga.add_trace(go.Bar(
                 x=df_resumen["Agente Grafico"],
-                y=df_resumen["Pendientes (Abiertos) 🔴"],
+                y=df_resumen["Pendientes (Abiertos)"],
                 name="Abiertos Pendientes",
                 marker=dict(
                     color="#f97316",
                     cornerradius=8
                 ),
-                text=df_resumen["Pendientes (Abiertos) 🔴"].apply(lambda v: str(v) if v > 0 else ""),
+                text=df_resumen["Pendientes (Abiertos)"].apply(lambda v: str(v) if v > 0 else ""),
                 textposition="inside",
                 insidetextanchor="middle",
                 insidetextfont=dict(color="#ffffff", size=14, family="Arial Black"),
@@ -838,17 +857,17 @@ def renderizar_panel_carga_asignador():
             ))
 
             for idx, row in df_resumen.iterrows():
-                if row["Total Asignados Hoy 📋"] > 0:
+                if row["Total Asignados Hoy"] > 0:
                     fig_carga.add_annotation(
                         x=row["Agente Grafico"],
-                        y=row["Total Asignados Hoy 📋"],
-                        text=f"<b>{row['Total Asignados Hoy 📋']}</b>",
+                        y=row["Total Asignados Hoy"],
+                        text=f"<b>{row['Total Asignados Hoy']}</b>",
                         showarrow=False,
                         yshift=14,
                         font=dict(color="#f8fafc", size=15)
                     )
 
-            max_carga_y = max(int(df_resumen["Total Asignados Hoy 📋"].max()), 4)
+            max_carga_y = max(int(df_resumen["Total Asignados Hoy"].max()), 4)
 
             fig_carga.update_layout(
                 barmode="stack",
@@ -879,16 +898,16 @@ def renderizar_panel_carga_asignador():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            cols_tabla = ["Estado", "Agente de Soporte", "Total Asignados Hoy 📋", "Cerrados (Hoy) 🟢", "Pendientes (Abiertos) 🔴"]
+            cols_tabla = ["Estado", "Agente de Soporte", "Total Asignados Hoy", "Cerrados Hoy", "Pendientes (Abiertos)"]
 
             st.dataframe(
                 df_resumen[cols_tabla],
                 column_config={
                     "Estado": st.column_config.TextColumn("Presencia", help="Disponibilidad en Intercom"),
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
-                    "Total Asignados Hoy 📋": st.column_config.NumberColumn("Total Asignados Hoy", help="Total gestionados durante la jornada"),
-                    "Cerrados (Hoy) 🟢": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día de hoy"),
-                    "Pendientes (Abiertos) 🔴": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados pendientes en este momento")
+                    "Total Asignados Hoy": st.column_config.NumberColumn("Total Asignados Hoy", help="Total gestionados durante la jornada"),
+                    "Cerrados Hoy": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día de hoy"),
+                    "Pendientes (Abiertos)": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados pendientes en este momento")
                 },
                 hide_index=True,
                 use_container_width=True
@@ -1953,14 +1972,14 @@ if nombre_usuario_sesion:
                 st.session_state[clave_sesion_away] = False
 
         esta_disponible = not st.session_state[clave_sesion_away]
-        etiqueta_switch = "🟢 Disponible (Activo)" if esta_disponible else "🟡 Ausente (Pausado)"
+        etiqueta_switch = "Disponible (Activo)" if esta_disponible else "Ausente (Pausado)"
 
         # 2. Callback instantáneo al alternar el switch
         def guardar_cambio_presencia():
             disponible_ahora = st.session_state["switch_mi_presencia"]
             nuevo_away = not disponible_ahora
             st.session_state[clave_sesion_away] = nuevo_away
-            st.session_state[clave_notificar] = "🟢 Disponible" if disponible_ahora else "🟡 Ausente"
+            st.session_state[clave_notificar] = "Disponible" if disponible_ahora else "Ausente"
 
             try:
                 supabase.table("estado_agentes").upsert({
@@ -1986,7 +2005,7 @@ if nombre_usuario_sesion:
             estado_nuevo = st.session_state.pop(clave_notificar)
             es_ausente = "Ausente" in estado_nuevo
             color_borde = "#fbbf24" if es_ausente else "#10b981"
-            icono = "🟡" if es_ausente else "🟢"
+            icono = icono_estado_svg("ausente" if es_ausente else "disponible", 36)
             titulo_txt = "Estado: Ausente" if es_ausente else "Estado: Disponible"
             sub_txt = (
                 "No recibirás nuevas asignaciones mientras estés ausente."
@@ -2029,7 +2048,7 @@ if nombre_usuario_sesion:
                             transform: scale(1);
                             transition: transform 0.25s ease;
                         ">
-                            <div style="font-size: 2.2rem; margin-bottom: 8px;">{icono}</div>
+                            <div style="margin-bottom: 8px;">{icono}</div>
                             <div style="color: #f8fafc; font-weight: 700; font-size: 1.15rem; margin-bottom: 6px;">
                                 {titulo_txt}
                             </div>
@@ -4947,7 +4966,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 use_container_width=True
             )
         else:
-            st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 1 esta semana.")
+            st.markdown(f"""<div style="display:flex;align-items:center;gap:8px;color:#cbd5e1;">{icono_estado_svg("disponible", 18)}<span><strong>Excelente:</strong> No se registraron calificaciones negativas en Nivel 1 esta semana.</span></div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
@@ -5053,7 +5072,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 use_container_width=True
             )
         else:
-            st.info("🟢 Excelente: No se registraron calificaciones negativas en Nivel 3 esta semana.")
+            st.markdown(f"""<div style="display:flex;align-items:center;gap:8px;color:#cbd5e1;">{icono_estado_svg("disponible", 18)}<span><strong>Excelente:</strong> No se registraron calificaciones negativas en Nivel 3 esta semana.</span></div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("##### Detalle de Casos L3 & Tickets Relacionados")
@@ -5591,7 +5610,7 @@ def renderizar_panel_admin():
                 st.markdown("""
                 <div class="metric-card" style="border-left: 4px solid #fbbf24;">
                     <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                    <div class="metric-card-value" style="color: #fbbf24;">⏸️ Pausado Manualmente</div>
+                    <div class="metric-card-value" style="color: #fbbf24;">{icono_estado_svg("pausado", 24)} Pausado Manualmente</div>
                     <div class="metric-card-sub">Alertas y envíos detenidos por administrador</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -5599,7 +5618,7 @@ def renderizar_panel_admin():
                 st.markdown(f"""
                 <div class="metric-card" style="border-left: 4px solid #10b981;">
                     <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                    <div class="metric-card-value" style="color: #34d399;">🟢 Operativo ({wa_state})</div>
+                    <div class="metric-card-value" style="color: #34d399;">{icono_estado_svg("disponible", 24)} Operativo ({wa_state})</div>
                     <div class="metric-card-sub">Sesión activa y conectada</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -5607,7 +5626,7 @@ def renderizar_panel_admin():
                 st.markdown(f"""
                 <div class="metric-card" style="border-left: 4px solid #ef4444;">
                     <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                    <div class="metric-card-value" style="color: #f87171;">🔴 Desconectado ({wa_state})</div>
+                    <div class="metric-card-value" style="color: #f87171;">{icono_estado_svg("desconectado", 24)} Desconectado ({wa_state})</div>
                     <div class="metric-card-sub">El Auto-Healing intentará reconectar automáticamente</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -6105,7 +6124,7 @@ with tab_faq:
 
     with st.expander("2. ¿Cómo se computa el tiempo hábil para el SLA de Gestión?", expanded=False):
         st.markdown(r"""
-        ### ⏱️ El SLA mide tiempo operativo real, no horas reloj
+        ### El SLA mide tiempo operativo real, no horas reloj
 
         El tiempo de resolución **no cuenta el tiempo calendario transcurrido**, sino únicamente los minutos transcurridos dentro de los turnos hábiles definidos:
 
@@ -6153,8 +6172,8 @@ with tab_faq:
           * **Alerta Grupal Recurrente (Antigüedad de Chats):** Para chats abiertos asignados a agentes humanos, el bot notifica en el grupo de WhatsApp cada vez que se cumple un múltiplo de horas hábiles (cada 3 hs hábiles). En cada reiteración menciona directamente al agente responsable con su `@telefono`.
         
         * **Indicador de Estado (Cabecera):**
-          * **🟢 Bot Operativo (open):** Sesión de WhatsApp activa y lista para emitir alertas.
-          * **🔴 Bot Desconectado:** La sesión se cerró o se desvinculó. Dispone de un mecanismo de auto-recuperación y un botón de reinicio manual en la pestaña de Administración.
+          * **Bot Operativo (open):** Sesión de WhatsApp activa y lista para emitir alertas.
+          * **Bot Desconectado:** La sesión se cerró o se desvinculó. Dispone de un mecanismo de auto-recuperación y un botón de reinicio manual en la pestaña de Administración.
         
         * **Reporte Diario por Correo:**
           * Se despacha automáticamente al correo configurado al finalizar la jornada (Lunes a Viernes a las 18:30 hs) vía Gmail API, incluyendo el resumen ejecutivo de volumen, cumplimiento de SLA, CSAT y el gráfico de distribución por agente.
