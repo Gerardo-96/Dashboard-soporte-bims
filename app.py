@@ -6162,8 +6162,6 @@ def renderizar_panel_admin():
             </div>
             """, unsafe_allow_html=True)
 
-            col_status1, col_status2 = st.columns([2, 1])
-
             # Consulta de salud y estado de pausa del bot
             estado_bot = "CRITICAL"
             wa_state = "disconnected"
@@ -6260,7 +6258,7 @@ def renderizar_panel_admin():
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">1. Sincronizacion por Rango de Fechas (Segundo Plano)</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">Sincronización de conversaciones</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                     El proceso se ejecuta en un <b>hilo paralelo libre de desconexión</b>.
                 </p>
@@ -6303,19 +6301,21 @@ def renderizar_panel_admin():
                     GLOBAL_SYNC_STATE["status"] = "idle"
                     st.rerun()
 
-            col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
-            f_sync_desde = col_f1.date_input("Fecha Inicio:", value=date(2026, 1, 1), key="input_sync_desde")
-            f_sync_hasta = col_f2.date_input("Fecha Fin:", value=date(2026, 1, 31), key="input_sync_hasta")
-            chk_por_creacion = col_f3.checkbox(
-                "Filtrar solo por fecha de creación (created_at)",
+            st.markdown("#### Rango de sincronización")
+            col_f1, col_f2 = st.columns(2)
+            f_sync_desde = col_f1.date_input("Desde", value=date(2026, 1, 1), key="input_sync_desde")
+            f_sync_hasta = col_f2.date_input("Hasta", value=date(2026, 1, 31), key="input_sync_hasta")
+
+            chk_por_creacion = st.checkbox(
+                "Limitar a conversaciones creadas dentro del rango",
                 value=False,
                 key="chk_sync_por_creacion",
-                help="Si se marca, trae únicamente conversaciones creadas en el rango (evita traer tickets antiguos reasignados masivamente)."
+                help="Al activarlo, filtra por created_at. Si se desactiva, la sincronización considera updated_at."
             )
 
             btn_bloqueado = (sync_info["status"] == "running")
 
-            if col_f3.button("Sincronizar Rango en Segundo Plano", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
+            if st.button("Iniciar sincronización", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
                 if SYNC_AVAILABLE:
                     GLOBAL_SYNC_STATE["status"] = "running"
                     GLOBAL_SYNC_STATE["processed"] = 0
@@ -6360,7 +6360,7 @@ def renderizar_panel_admin():
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">2. Parametros Globales del Dashboard</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">Parámetros generales del dashboard</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
             </div>
             """, unsafe_allow_html=True)
@@ -6395,7 +6395,7 @@ def renderizar_panel_admin():
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">3. Gestion de Usuarios Autorizados</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">Usuarios autorizados</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
             </div>
             """, unsafe_allow_html=True)
@@ -6464,7 +6464,7 @@ def renderizar_panel_admin():
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">6. Mapeo de Agentes y Teléfonos de WhatsApp</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">Teléfonos de WhatsApp de los agentes</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                     Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.
                 </p>
@@ -6514,7 +6514,7 @@ def renderizar_panel_admin():
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">4. Gestión de Motivos Normalizados (CSAT)</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">Motivos de clasificación CSAT</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                     Crea y desactiva los motivos que se muestran al categorizar chats negativos.
                 </p>
@@ -6589,7 +6589,7 @@ def renderizar_panel_admin():
         with st.container():
             st.markdown("""
             <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">5. Configuración de Notificaciones & Alertas (WhatsApp / Email)</h4>
+                <h4 style="margin-top:0; color:#38bdf8;">Notificaciones y alertas</h4>
                 <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                     Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.
                 </p>
