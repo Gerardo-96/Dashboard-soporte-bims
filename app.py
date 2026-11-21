@@ -2015,6 +2015,22 @@ if "bims_hora_fin" not in st.session_state:
 
 st.markdown("""
 <style>
+    /* El contenedor externo de Streamlit también sale del flujo normal.
+       El panel interior ya es fixed; sin esto, el wrapper puede reservar altura
+       antes del encabezado aunque el panel esté cerrado. */
+    div[data-testid="stElementContainer"]:has(.st-key-bims_sidebar_panel) {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        z-index: 1000000 !important;
+    }
+
     /* Acabado compacto y consistente del panel de control */
     .st-key-bims_sidebar_panel {
         position: fixed !important;
