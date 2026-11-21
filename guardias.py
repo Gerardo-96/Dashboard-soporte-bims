@@ -140,12 +140,10 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     if primera_proxima["usuarios_autorizados"].get("id") != usuario_actual_id:
         return
 
-    with st.container(key="bims_guardia_header"):
-        if st.button(
-            " ",
-            icon=":material/event_available:",
-            help="Tienes asignada la próxima guardia. Haz clic para consultar fecha, horario y calendario.",
-            key="btn_abrir_guardias_header",
-            type="tertiary"
-        ):
-            modal_calendario_guardias(supabase)
+    if st.button(
+        "⚠️",
+        help="Tienes asignada la próxima guardia. Haz clic para consultar fecha, horario y calendario.",
+        key="btn_abrir_guardias_header",
+        type="tertiary"
+    ):
+        modal_calendario_guardias(supabase)
