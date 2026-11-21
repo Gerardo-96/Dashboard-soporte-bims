@@ -2820,8 +2820,12 @@ st.iframe("""
                 lines.push('--- primeros bloques dentro del contenedor ---');
                 Array.from(main.children).slice(0, 5).forEach(function (el, i) {
                     lines.push((i + 1) + '. ' + describe(el));
+                    lines.push('   HTML: ' + String(el.outerHTML || '').replace(/\\s+/g, ' ').slice(0, 420));
                     Array.from(el.children).slice(0, 8).forEach(function (child, j) {
-                        lines.push('   ' + (i + 1) + '.' + (j + 1) + ' ' + describe(child));
+                        const cs = doc.defaultView.getComputedStyle(child);
+                        lines.push('   ' + (i + 1) + '.' + (j + 1) + ' ' + describe(child) +
+                            ' | display=' + cs.display + ' | position=' + cs.position);
+                        lines.push('      HTML: ' + String(child.outerHTML || '').replace(/\\s+/g, ' ').slice(0, 320));
                     });
                 });
             }
