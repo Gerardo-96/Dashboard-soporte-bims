@@ -1885,6 +1885,11 @@ st.markdown("""
         }
     }
 
+    /* Compactar el espacio superior exclusivo de la alerta en vivo. */
+    div[data-testid="stElementContainer"]:has(div[data-testid="stExpander"]:has(.alerta-ancla-activa)) {
+        margin-block-start: -12px !important;
+    }
+
     /* Fondo oscuro limpio para el contenido interno cuando se despliega */
     div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > div[data-testid="stExpanderDetails"] {
         background-color: #0b1120 !important;
