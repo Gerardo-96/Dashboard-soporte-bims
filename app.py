@@ -2308,9 +2308,14 @@ st.iframe("""
                 doc.body.appendChild(button);
             }
 
-            if (!button.__bimsClickHandlerInstalled) {
-                button.__bimsClickHandlerInstalled = true;
-                button.addEventListener('click', function(event) {
+            // Delegación en el documento: el botón puede ser reemplazado
+            // por Streamlit durante el rerun posterior al inicio de sesión.
+            // Un listener directo al nodo quedaría perdido en ese escenario.
+            if (!doc.__bimsToggleClickHandlerInstalled) {
+                doc.__bimsToggleClickHandlerInstalled = true;
+                doc.addEventListener('click', function(event) {
+                    const toggle = event.target.closest('#bims-sidebar-toggle');
+                    if (!toggle) return;
                     event.preventDefault();
                     event.stopPropagation();
                     setPanelClosed(root.classList.contains('bims-sidebar-open'));
