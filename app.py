@@ -2239,9 +2239,11 @@ st.markdown("""
     }
     #bims-sidebar-toggle:hover { background: #223650; }
     .st-key-btn_abrir_guardias_header button {
-        min-width: 40px !important;
-        width: 40px !important;
-        height: 40px !important;
+        min-width: 44px !important;
+        width: 44px !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        overflow: visible !important;
         padding: 0 !important;
         border: 0 !important;
         border-radius: 8px !important;
@@ -2912,7 +2914,7 @@ with st.container(key="bims_dashboard_header"):
     with col_header_info:
         st.html(titulo_header_html)
     with col_header_bot:
-        col_guardia_alerta, col_estado_bot = st.columns([0.35, 4], gap="small", vertical_alignment="center")
+        col_guardia_alerta, col_estado_bot = st.columns([0.8, 4], gap="small", vertical_alignment="center")
         with col_guardia_alerta:
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
