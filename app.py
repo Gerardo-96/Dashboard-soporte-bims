@@ -2460,7 +2460,7 @@ with st.container(key="bims_sidebar_panel"):
 
         st.rerun()
 
-col_contenido_bims = st.container()
+with st.container():
 
     # ==========================================
     # INDICADOR DE ESTADO EN VIVO (CABECERA)
