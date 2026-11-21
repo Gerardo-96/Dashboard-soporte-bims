@@ -23,17 +23,17 @@ st.set_page_config(
     layout="wide"
 )
 
-# Oculta exclusivamente el aviso flotante 'Running...' sin ocultar el header principal
+# Oculta la barra superior nativa y recupera el espacio para el dashboard
 st.markdown("""
 <style>
-    /* Recupera también la franja superior nativa: el panel ya tiene su propio control. */
+    /* El panel BIMS tiene su propio control; no necesitamos la barra nativa. */
     header[data-testid="stHeader"] {
         display: none !important;
         height: 0 !important;
     }
 
     div[data-testid="stAppViewBlockContainer"] {
-        padding-top: 1rem !important;
+        padding-top: 0 !important;
     }
 
     /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
@@ -1953,8 +1953,7 @@ if "bims_sidebar_open" not in st.session_state:
 
 if st.button(
     "‹" if st.session_state["bims_sidebar_open"] else "☰",
-    key="bims_sidebar_toggle_btn",
-    help="Mostrar u ocultar el panel de control"
+    key="bims_sidebar_toggle_btn"
 ):
     st.session_state["bims_sidebar_open"] = not st.session_state["bims_sidebar_open"]
 
