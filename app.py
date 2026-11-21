@@ -1350,7 +1350,7 @@ st.markdown("""
     .stApp { background-color: #0b1120; color: #f8fafc; }
     
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 0.65rem !important;
         padding-bottom: 1.5rem !important;
     }
 
@@ -2413,56 +2413,68 @@ st.html("""
 </style>
 """)
 
+periodo_header = (
+    f"{fecha_desde.strftime('%d %b %Y')} — {fecha_hasta.strftime('%d %b %Y')}"
+    if fecha_desde != fecha_hasta
+    else fecha_desde.strftime("%d %b %Y")
+)
+
 if bot_online:
-    badge_html = f"""
-    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 1rem;">
-        <h1 style="margin: 0; padding: 0;">Dashboard Soporte BIMS</h1>
+    estado_bot_html = """
         <span style="
-            background: rgba(6, 95, 70, 0.35); 
-            color: #34d399; 
-            border: 1px solid rgba(5, 150, 105, 0.6); 
-            padding: 4px 12px; 
-            border-radius: 20px; 
-            font-size: 0.82rem; 
-            font-weight: 600; 
-            display: inline-flex; 
-            align-items: center; 
+            background: rgba(6, 95, 70, 0.25);
+            color: #34d399;
+            border: 1px solid rgba(5, 150, 105, 0.55);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
             gap: 7px;
-            box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);" 
-            title="Conexión de WhatsApp Activa ({bot_state})">
+            white-space: nowrap;">
             <span class="bims-pulse-container">
                 <span class="bims-pulse-ring" style="background-color: #34d399;"></span>
                 <span class="bims-pulse-dot" style="background-color: #10b981;"></span>
             </span>
             Bot Operativo
         </span>
-    </div>
     """
 else:
-    badge_html = f"""
-    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 1rem;">
-        <h1 style="margin: 0; padding: 0;">Dashboard Soporte BIMS</h1>
+    estado_bot_html = """
         <span style="
-            background: rgba(127, 29, 29, 0.35); 
-            color: #f87171; 
-            border: 1px solid rgba(220, 38, 38, 0.6); 
-            padding: 4px 12px; 
-            border-radius: 20px; 
-            font-size: 0.82rem; 
-            font-weight: 600; 
-            display: inline-flex; 
-            align-items: center; 
+            background: rgba(127, 29, 29, 0.25);
+            color: #f87171;
+            border: 1px solid rgba(220, 38, 38, 0.55);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
             gap: 7px;
-            box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);" 
-            title="Conexión de WhatsApp Caída ({bot_state})">
+            white-space: nowrap;">
             <span class="bims-pulse-container">
                 <span class="bims-pulse-ring" style="background-color: #f87171;"></span>
                 <span class="bims-pulse-dot" style="background-color: #ef4444;"></span>
             </span>
             Bot Desconectado
         </span>
-    </div>
     """
+
+badge_html = f"""
+<div style="display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; margin:0; min-height:58px;">
+    <div style="min-width:0;">
+        <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
+            Dashboard Soporte BIMS
+        </h1>
+        <div style="font-size:0.72rem; color:#94a3b8; margin-top:5px; letter-spacing:0.04em;">
+            PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
+        </div>
+    </div>
+    {estado_bot_html}
+</div>
+"""
 
 col_header_izq, col_header_der = st.columns([2.2, 1], vertical_alignment="center")
 
