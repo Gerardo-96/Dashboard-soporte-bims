@@ -733,8 +733,26 @@ if not st.session_state["user_authenticated"]:
                     st.query_params["session_token"] = email_user
                     st.html(f"""
                     <script>
-                        localStorage.setItem('bims_user_session', {email_user!r});
-                        sessionStorage.removeItem('bims_just_logged_out');
+                        try {{
+                            localStorage.setItem('bims_user_session', {email_user!r});
+                            sessionStorage.removeItem('bims_just_logged_out');
+
+                            // Cada autenticación inicia una nueva sesión visual:
+                            // forzamos el panel cerrado y reiniciamos el instalador
+                            // para que el botón vuelva a enlazarse en el documento actual.
+                            const doc = window.parent.document;
+                            const root = doc.documentElement;
+                            root.classList.remove('bims-sidebar-open');
+                            doc.__bimsSidebarInitialized = false;
+
+                            const sidebarToggle = doc.getElementById('bims-sidebar-toggle');
+                            if (sidebarToggle) {{
+                                sidebarToggle.textContent = '☰';
+                                sidebarToggle.setAttribute('aria-expanded', 'false');
+                            }}
+                        }} catch (e) {{
+                            console.warn('BIMS: no se pudo reiniciar el estado del panel lateral', e);
+                        }}
                     </script>
                     """, unsafe_allow_javascript=True)
 
