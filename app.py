@@ -67,6 +67,10 @@ st.markdown("""
     /* Los iframes se utilizan únicamente como ejecutores invisibles de JavaScript.
        Ocultamos su contenedor para evitar que aparezca una pequeña línea o guion
        en la interfaz, sin alterar los modales que insertan en el documento principal. */
+    /* Oculta también el contenedor Streamlit del iframe ejecutor:
+       ocultar solo el iframe dejaba un bloque vacío antes del dashboard. */
+    div[data-testid="stElementContainer"]:has(> div[data-testid="stIFrame"]),
+    div[data-testid="stElementContainer"]:has(iframe[title="st.iframe"]),
     [data-testid="stIFrame"],
     [data-testid="stIFrame"] iframe,
     iframe[title="st.iframe"] {
@@ -2083,13 +2087,25 @@ st.iframe("""
             button.textContent = '‹';
             doc.body.appendChild(button);
 
+            function setPanelClosed(closed) {
+                root.classList.toggle('bims-sidebar-closed', closed);
+                button.textContent = closed ? '☰' : '‹';
+                button.setAttribute('aria-expanded', String(!closed));
+            }
+
             button.addEventListener('click', function(event) {
                 event.preventDefault();
                 event.stopPropagation();
-                const closed = root.classList.toggle('bims-sidebar-closed');
-                button.textContent = closed ? '☰' : '‹';
-                button.setAttribute('aria-expanded', String(!closed));
+                setPanelClosed(!root.classList.contains('bims-sidebar-closed'));
             });
+
+            /* Cierra al hacer clic en cualquier zona exterior al panel. */
+            doc.addEventListener('click', function(event) {
+                if (root.classList.contains('bims-sidebar-closed')) return;
+                const panel = doc.querySelector('.st-key-bims_sidebar_panel');
+                if (!panel || panel.contains(event.target) || button.contains(event.target)) return;
+                setPanelClosed(true);
+            }, true);
         }
 
         if (doc.body) installButton();
