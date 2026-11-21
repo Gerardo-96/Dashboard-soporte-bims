@@ -33,18 +33,32 @@ st.markdown("""
     }
 
     /* Streamlit aplica el espacio superior en el contenedor principal, no en el header. */
-    div[data-testid="stAppViewBlockContainer"],
-    div[data-testid="stMainBlockContainer"],
+    /* Eliminar el espacio reservado por el layout de Streamlit.
+       Se conservan los márgenes laterales para no ensanchar ni deformar el dashboard. */
+    div[data-testid="stAppViewContainer"],
+    div[data-testid="stAppViewContainer"] > .main,
+    div[data-testid="stMain"],
     div[data-testid="stMain"] > div,
+    div[data-testid="stMainBlockContainer"],
+    div[data-testid="stAppViewBlockContainer"],
+    section.main,
+    section.main > div,
     section.main > div.block-container,
     .stMainBlockContainer {
-        padding-top: 0 !important;
+        margin-block-start: 0 !important;
         padding-block-start: 0 !important;
-        margin-top: 0 !important;
     }
-    div[data-testid="stMain"] {
+    div[data-testid="stMainBlockContainer"],
+    div[data-testid="stAppViewBlockContainer"],
+    section.main > div.block-container {
         padding-top: 0 !important;
-        margin-top: 0 !important;
+    }
+    /* Evita que el primer bloque de contenido vuelva a introducir separación. */
+    div[data-testid="stMainBlockContainer"] > div:first-child,
+    div[data-testid="stAppViewBlockContainer"] > div:first-child,
+    section.main > div.block-container > div:first-child {
+        margin-block-start: 0 !important;
+        padding-block-start: 0 !important;
     }
 
     /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
