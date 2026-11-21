@@ -2134,8 +2134,8 @@ st.iframe("""
             button.id = 'bims-sidebar-toggle';
             button.type = 'button';
             button.setAttribute('aria-label', 'Abrir o cerrar panel lateral');
-            button.setAttribute('aria-expanded', 'true');
-            button.textContent = '‹';
+            button.setAttribute('aria-expanded', 'false');
+            button.textContent = '☰';
             doc.body.appendChild(button);
 
             function setPanelClosed(closed) {
@@ -2143,6 +2143,9 @@ st.iframe("""
                 button.textContent = closed ? '☰' : '‹';
                 button.setAttribute('aria-expanded', String(!closed));
             }
+
+            /* El panel inicia cerrado en cada carga completa de la página. */
+            setPanelClosed(true);
 
             button.addEventListener('click', function(event) {
                 event.preventDefault();
