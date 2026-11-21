@@ -141,7 +141,7 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         return
 
     if st.button(
-        "⚠️",
+        "⚠︎",
         help="Tienes asignada la próxima guardia. Haz clic para consultar fecha, horario y calendario.",
         key="btn_abrir_guardias_header",
         type="tertiary"
