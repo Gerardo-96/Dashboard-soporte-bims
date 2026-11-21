@@ -3256,21 +3256,21 @@ with tab_operativo:
         df_res_agentes = pd.DataFrame(res_agentes)
         if not df_res_agentes.empty:
             df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
-            # Tabla nativa de Streamlit con estilos pandas; evita HTML personalizado.
-            estilos_encabezados = [
-                {
-                    "selector": f"th.col_heading.level0.col{df_res_agentes.columns.get_loc(col)}",
-                    "props": [("text-align", "right")]
-                }
-                for col in df_res_agentes.select_dtypes(include="number").columns
-            ]
-            df_res_agentes_styled = (
-                df_res_agentes.style
-                .hide(axis="index")
-                .set_table_styles(estilos_encabezados)
-                .format({"Prom. 1a Resp (min)": "{:.2f}"})
+            # Usar el DataFrame directamente y ocultar explícitamente su índice.
+            # st.table + pandas Styler puede volver a mostrar la columna de índice.
+            df_res_agentes = df_res_agentes.reset_index(drop=True)
+            st.dataframe(
+                df_res_agentes,
+                column_config={
+                    "Prom. 1a Resp (min)": st.column_config.NumberColumn(
+                        "Prom. 1a Resp (min)",
+                        format="%.2f"
+                    )
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="tabla_metricas_agentes_sla"
             )
-            st.table(df_res_agentes_styled)
         else:
             st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
     else:
