@@ -3027,7 +3027,17 @@ st.iframe("""
         function integrarNavegacion() {
             const header = doc.querySelector(headerSelector);
             const headerInner = header && header.querySelector('[data-testid="stVerticalBlock"]');
-            const tabList = doc.querySelector(tabSelector);
+            // Identificar una sola vez la navegación principal. Al moverla fuera
+            // de .stTabs, el selector genérico podía encontrar después las pestañas
+            // secundarias de Administración y trasladarlas también al encabezado.
+            let tabList = doc.getElementById('bims-main-tablist');
+            if (!tabList) {
+                const firstTabList = doc.querySelector(tabSelector);
+                if (firstTabList) {
+                    firstTabList.id = 'bims-main-tablist';
+                    tabList = firstTabList;
+                }
+            }
             if (!headerInner || !tabList) return;
 
             let placeholder = doc.getElementById(placeholderId);
