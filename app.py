@@ -2165,8 +2165,8 @@ with col_panel_bims:
             if usar_filtro_hora:
                 st.caption("Franja Horaria")
                 h_col1, h_col2 = st.columns(2)
-                hora_inicio = h_col1.time_input("Inicio", time(8, 0))
-                hora_fin = h_col2.time_input("Fin", time(18, 0))
+                hora_inicio = h_col1.time_input("Inicio", key="bims_hora_inicio")
+                hora_fin = h_col2.time_input("Fin", key="bims_hora_fin")
             else:
                 hora_inicio, hora_fin = time(8, 0), time(18, 0)
 
