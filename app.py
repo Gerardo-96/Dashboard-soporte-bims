@@ -6138,7 +6138,7 @@ def renderizar_panel_admin():
         "📅 Calendario",
     ])
 
-with admin_tabs[0]:
+    with admin_tabs[0]:
         # ==========================================
         # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
         # ==========================================
@@ -6246,7 +6246,7 @@ with admin_tabs[0]:
             </div>
             """, unsafe_allow_html=True)
 
-with admin_tabs[1]:
+    with admin_tabs[1]:
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -6346,7 +6346,7 @@ with admin_tabs[1]:
                 else:
                     st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
 
-with admin_tabs[2]:
+    with admin_tabs[2]:
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -6381,7 +6381,7 @@ with admin_tabs[2]:
                 st.success("Configuración actualizada correctamente.")
                 st.rerun()
 
-with admin_tabs[3]:
+    with admin_tabs[3]:
         with st.container():
             st.markdown("""
             <div class="admin-card">
@@ -6498,7 +6498,7 @@ with admin_tabs[3]:
             except Exception as ex_u:
                 st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
 
-with admin_tabs[4]:
+    with admin_tabs[4]:
         # GESTIÓN DINÁMICA DE MOTIVOS CSAT
         st.markdown("<br>", unsafe_allow_html=True)
         with st.container():
@@ -6634,7 +6634,7 @@ with admin_tabs[4]:
                     except Exception as ex_g:
                         st.error(f"Error al guardar configuración: {ex_g}")
 
-with admin_tabs[5]:
+    with admin_tabs[5]:
         # GESTIÓN DINÁMICA DE FERIADOS
         st.markdown("<br>", unsafe_allow_html=True)
         with st.container():
