@@ -1885,9 +1885,9 @@ st.markdown("""
         }
     }
 
-    /* Compactar el espacio superior exclusivo de la alerta en vivo. */
+    /* Compactar aún más el espacio superior exclusivo de la alerta en vivo. */
     div[data-testid="stElementContainer"]:has(div[data-testid="stExpander"]:has(.alerta-ancla-activa)) {
-        margin-block-start: -12px !important;
+        margin-block-start: -20px !important;
     }
 
     /* Fondo oscuro limpio para el contenido interno cuando se despliega */
