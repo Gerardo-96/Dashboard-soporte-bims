@@ -19,7 +19,7 @@ import extra_streamlit_components as stx
 # ==========================================
 st.set_page_config(
     page_title="Dashboard Soporte BIMS",
-    page_icon="📊",
+    page_icon="📈",
     layout="wide"
 )
 
