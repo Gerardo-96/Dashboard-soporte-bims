@@ -6346,45 +6346,45 @@ def renderizar_panel_admin():
             _, col_btn_sync = st.columns([1.5, 1], gap="medium")
             with col_btn_sync:
                 if st.button("▶ Iniciar sincronización", type="primary", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
-                if SYNC_AVAILABLE:
-                    GLOBAL_SYNC_STATE["status"] = "running"
-                    GLOBAL_SYNC_STATE["processed"] = 0
-                    GLOBAL_SYNC_STATE["log"] = ""
-                    GLOBAL_SYNC_STATE["error"] = None
-                    def tarea_sync_paralela(f_inicio, f_final, solo_creacion):
-                        try:
-                            def cb_progreso(proc, tot):
-                                GLOBAL_SYNC_STATE["processed"] = proc
+                    if SYNC_AVAILABLE:
+                        GLOBAL_SYNC_STATE["status"] = "running"
+                        GLOBAL_SYNC_STATE["processed"] = 0
+                        GLOBAL_SYNC_STATE["log"] = ""
+                        GLOBAL_SYNC_STATE["error"] = None
+                        def tarea_sync_paralela(f_inicio, f_final, solo_creacion):
+                            try:
+                                def cb_progreso(proc, tot):
+                                    GLOBAL_SYNC_STATE["processed"] = proc
 
-                            tot_f = sincronizar_intercom(
-                                fecha_desde=f_inicio,
-                                fecha_hasta=f_final,
-                                progress_callback=cb_progreso,
-                                por_creacion=solo_creacion
-                            )
-                            # Solo invalidar si la sincronización realmente procesó registros.
-                            # El hilo marca la invalidación; Streamlit la ejecutará en el hilo principal.
-                            if tot_f > 0:
-                                GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
-                            GLOBAL_SYNC_STATE["status"] = "completed"
-                            tz_py = timezone(timedelta(hours=-3))
-                            hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
-                            criterio_txt = "created_at" if solo_creacion else "updated_at"
+                                tot_f = sincronizar_intercom(
+                                    fecha_desde=f_inicio,
+                                    fecha_hasta=f_final,
+                                    progress_callback=cb_progreso,
+                                    por_creacion=solo_creacion
+                                )
+                                # Solo invalidar si la sincronización realmente procesó registros.
+                                # El hilo marca la invalidación; Streamlit la ejecutará en el hilo principal.
+                                if tot_f > 0:
+                                    GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
+                                GLOBAL_SYNC_STATE["status"] = "completed"
+                                tz_py = timezone(timedelta(hours=-3))
+                                hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
+                                criterio_txt = "created_at" if solo_creacion else "updated_at"
 
-                            GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros ({criterio_txt}) para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
-                        except Exception as ex_thread:
-                            GLOBAL_SYNC_STATE["status"] = "error"
-                            GLOBAL_SYNC_STATE["error"] = str(ex_thread)
+                                GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros ({criterio_txt}) para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
+                            except Exception as ex_thread:
+                                GLOBAL_SYNC_STATE["status"] = "error"
+                                GLOBAL_SYNC_STATE["error"] = str(ex_thread)
 
-                    hilo_sync = threading.Thread(
-                        target=tarea_sync_paralela,
-                        args=(f_sync_desde, f_sync_hasta, chk_por_creacion),
-                        daemon=True
-                    )
-                    hilo_sync.start()
-                    st.rerun()
-                else:
-                    st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
+                        hilo_sync = threading.Thread(
+                            target=tarea_sync_paralela,
+                            args=(f_sync_desde, f_sync_hasta, chk_por_creacion),
+                            daemon=True
+                        )
+                        hilo_sync.start()
+                        st.rerun()
+                    else:
+                        st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
 
     with admin_tabs[2]:
         with st.container(border=True):
