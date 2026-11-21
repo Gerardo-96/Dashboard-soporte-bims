@@ -88,7 +88,8 @@ st.markdown("""
         box-sizing: border-box !important;
         z-index: 1100 !important;
         background: #0b1120 !important;
-        padding: 2px max(1rem, calc((100vw - 1600px) / 2)) !important;
+        /* Reserva a la izquierda el espacio del botón flotante del panel. */
+        padding: 2px max(1rem, calc((100vw - 1600px) / 2)) 2px 64px !important;
         margin: 0 !important;
         min-height: 56px !important;
         border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
@@ -300,28 +301,40 @@ st.markdown("""
         height: 0 !important;
     }
 
-    /* Navegación fija debajo del encabezado; los paneles siguen en scroll normal. */
-    .stTabs {
+    /* Navegación fija debajo del encabezado. Se cubren ambos selectores DOM de Streamlit. */
+    .stTabs,
+    div[data-testid="stTabs"] {
         padding-top: 43px !important;
+        transform: none !important;
     }
-    .stTabs [data-baseweb="tab-list"] {
+    .stTabs [data-baseweb="tab-list"],
+    div[data-testid="stTabs"] [data-baseweb="tab-list"] {
         position: fixed !important;
         top: 56px !important;
         left: 0 !important;
         right: 0 !important;
         width: 100vw !important;
+        max-width: 100vw !important;
         box-sizing: border-box !important;
-        z-index: 1050 !important;
+        z-index: 1200 !important;
+        display: flex !important;
         background: #0b1120 !important;
         padding: 2px max(1rem, calc((100vw - 1600px) / 2)) 0 !important;
         border-bottom: 1px solid var(--bims-border) !important;
         box-shadow: 0 5px 12px rgba(0,0,0,.16) !important;
     }
+    /* Evita que un ancestro cree un nuevo contexto para position:fixed. */
+    div[data-testid="stMainBlockContainer"],
+    div[data-testid="stAppViewBlockContainer"],
+    section[data-testid="stMain"] {
+        transform: none !important;
+    }
     @media (max-width: 600px) {
-        .st-key-bims_dashboard_header { padding-left: .75rem !important; padding-right: .75rem !important; }
+        .st-key-bims_dashboard_header { padding-left: 60px !important; padding-right: .75rem !important; }
         .bims-header-spacer { height: 72px !important; min-height: 72px !important; }
-        .stTabs { padding-top: 43px !important; }
-        .stTabs [data-baseweb="tab-list"] { top: 72px !important; padding-left: .75rem !important; padding-right: .75rem !important; }
+        .stTabs, div[data-testid="stTabs"] { padding-top: 43px !important; }
+        .stTabs [data-baseweb="tab-list"],
+        div[data-testid="stTabs"] [data-baseweb="tab-list"] { top: 72px !important; padding-left: .75rem !important; padding-right: .75rem !important; }
     }
 
 </style>
