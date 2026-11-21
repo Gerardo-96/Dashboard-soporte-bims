@@ -25,7 +25,7 @@ def obtener_feriados_guardias(supabase) -> set:
         pass
     return set()
 
-@st.dialog("📅 Calendario de Guardias Sabatinas (09:00 - 12:00)", width="large")
+@st.dialog("Calendario de guardias sabatinas (09:00 - 12:00)", width="large")
 def modal_calendario_guardias(supabase):
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
     feriados_set = obtener_feriados_guardias(supabase)
@@ -46,7 +46,7 @@ def modal_calendario_guardias(supabase):
     # Solo permitir intercambiar sábados hábiles (no feriados)
     guardias_habiles = [g for g in guardias if g["fecha"] not in feriados_set]
 
-    with st.expander("🔄 Intercambiar guardia entre compañeros", expanded=False):
+    with st.expander("Intercambiar guardia entre compañeros", expanded=False):
         if len(guardias_habiles) < 2:
             st.info("No hay suficientes turnos hábiles disponibles para intercambiar.")
         else:
@@ -74,7 +74,7 @@ def modal_calendario_guardias(supabase):
                             "intercambiar_guardia_sabado",
                             {"fecha_a": fecha_a, "fecha_b": fecha_b}
                         ).execute()
-                        st.success("✅ ¡Intercambio registrado correctamente!")
+                        st.success("Intercambio registrado correctamente.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al intercambiar guardias: {e}")
@@ -86,9 +86,9 @@ def modal_calendario_guardias(supabase):
     for g in guardias:
         es_feriado = g["fecha"] in feriados_set
         if es_feriado:
-            estado_txt = "🎉 Feriado (Sin guardia)"
+            estado_txt = "Feriado (sin guardia)"
         elif not proximo_asignado:
-            estado_txt = "🟢 Próximo"
+            estado_txt = "Próximo"
             proximo_asignado = True
         else:
             estado_txt = "Programado"
@@ -143,7 +143,7 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
     tarjeta_html = (
         f'<div class="metric-card guardia-header-card" style="border-left: 4px solid {borde_color}; padding: 12px 95px 12px 16px; margin-bottom: 0px;">'
         f'<div class="metric-card-title" style="font-size: 0.66rem; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">'
-        f'<span style="white-space: nowrap;">🛡️ GUARDIA {formatear_fecha_corta(actual["fecha"]).upper()} (09-12 HS)</span>'
+        f'<span style="white-space: nowrap;">GUARDIA {formatear_fecha_corta(actual["fecha"]).upper()} (09-12 HS)</span>'
         f'{badge_turno}'
         f'</div>'
         f'<div style="font-size: 1.18rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">{agente_actual}</div>'
@@ -159,5 +159,5 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
 
     st.markdown(tarjeta_html, unsafe_allow_html=True)
 
-    if st.button("📅 Ver", key="btn_abrir_guardias"):
+    if st.button("Ver calendario", key="btn_abrir_guardias"):
         modal_calendario_guardias(supabase)
