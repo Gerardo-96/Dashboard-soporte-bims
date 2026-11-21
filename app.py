@@ -2321,43 +2321,59 @@ st.iframe("""
                 button.id = 'bims-sidebar-toggle';
                 button.type = 'button';
                 button.setAttribute('aria-label', 'Abrir o cerrar panel lateral');
-                button.setAttribute('aria-expanded', 'false');
-                button.textContent = '☰';
                 doc.body.appendChild(button);
             }
 
-            // Delegación en el documento: el botón puede ser reemplazado
-            // por Streamlit durante el rerun posterior al inicio de sesión.
-            // Un listener directo al nodo quedaría perdido en ese escenario.
-            if (!doc.__bimsToggleClickHandlerInstalled) {
-                doc.__bimsToggleClickHandlerInstalled = true;
-                doc.addEventListener('click', function(event) {
-                    const toggle = event.target.closest('#bims-sidebar-toggle');
-                    if (!toggle) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setPanelClosed(root.classList.contains('bims-sidebar-open'));
-                });
+            // Mantener el botón sincronizado con el único estado real del panel.
+            function syncButton() {
+                const open = root.classList.contains('bims-sidebar-open');
+                button.textContent = open ? '‹' : '☰';
+                button.setAttribute('aria-expanded', String(open));
             }
 
-            if (!doc.__bimsOutsideClickHandlerInstalled) {
-                doc.__bimsOutsideClickHandlerInstalled = true;
-                doc.addEventListener('click', function(event) {
+            // Un solo listener delegado evita carreras entre el toggle y el
+            // cierre por clic exterior (antes estaban en fases distintas).
+            if (!doc.__bimsSidebarUnifiedClickHandler) {
+                doc.__bimsSidebarUnifiedClickHandler = function(event) {
+                    const target = event.target;
+                    const toggle = target && target.closest
+                        ? target.closest('#bims-sidebar-toggle')
+                        : null;
+
+                    if (toggle) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        root.classList.toggle('bims-sidebar-open');
+                        const currentButton = doc.getElementById('bims-sidebar-toggle');
+                        if (currentButton) {
+                            const open = root.classList.contains('bims-sidebar-open');
+                            currentButton.textContent = open ? '‹' : '☰';
+                            currentButton.setAttribute('aria-expanded', String(open));
+                        }
+                        return;
+                    }
+
                     if (!root.classList.contains('bims-sidebar-open')) return;
                     const panel = doc.querySelector('.st-key-bims_sidebar_panel');
-                    const toggle = doc.getElementById('bims-sidebar-toggle');
-                    if (!panel || panel.contains(event.target) || (toggle && toggle.contains(event.target))) return;
-                    setPanelClosed(true);
-                }, true);
+                    if (panel && !panel.contains(target)) {
+                        root.classList.remove('bims-sidebar-open');
+                        const currentButton = doc.getElementById('bims-sidebar-toggle');
+                        if (currentButton) {
+                            currentButton.textContent = '☰';
+                            currentButton.setAttribute('aria-expanded', 'false');
+                        }
+                    }
+                };
+                doc.addEventListener('click', doc.__bimsSidebarUnifiedClickHandler, false);
             }
 
-            /* Primera instalación: estado inicial cerrado. En reruns conserva la elección del usuario. */
+            // La primera carga de cada sesión autenticada comienza cerrada.
             if (!doc.__bimsSidebarInitialized) {
                 doc.__bimsSidebarInitialized = true;
-                setPanelClosed(true);
+                root.classList.remove('bims-sidebar-open');
             }
+            syncButton();
         }
-
         if (doc.body) installButton();
         else doc.addEventListener('DOMContentLoaded', installButton, { once: true });
     } catch (error) {
