@@ -309,7 +309,7 @@ st.markdown("""
         min-height: 42px !important;
         width: 100% !important;
     }
-    .st-key-bims_dashboard_header [data-baseweb="tab-list"] {
+    .st-key-bims_dashboard_header [role="tablist"] {
         position: relative !important;
         top: auto !important;
         left: auto !important;
@@ -336,7 +336,7 @@ st.markdown("""
         }
         .bims-header-spacer { height: 112px !important; min-height: 112px !important; }
         #bims-fixed-tabs-placeholder { height: 42px !important; min-height: 42px !important; }
-        .st-key-bims_dashboard_header [data-baseweb="tab-list"] {
+        .st-key-bims_dashboard_header [role="tablist"] {
             padding-left: 0 !important;
             padding-right: 0 !important;
         }
@@ -2906,7 +2906,7 @@ st.iframe("""
     try {
         const doc = window.parent.document;
         const headerSelector = '.st-key-bims_dashboard_header';
-        const tabSelector = '.stTabs [data-baseweb="tab-list"]';
+        const tabSelector = '.stTabs [role="tablist"]';
         const placeholderId = 'bims-fixed-tabs-placeholder';
 
         function integrarNavegacion() {
