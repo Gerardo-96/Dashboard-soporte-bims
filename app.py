@@ -2898,7 +2898,7 @@ with st.container(key="bims_dashboard_header"):
     </div>
     """
 
-    col_header_info, col_header_bot = st.columns([20, 5.2], vertical_alignment="center")
+    col_header_info, col_header_bot = st.columns([20, 3.2], vertical_alignment="center")
     with col_header_info:
         st.html(titulo_header_html)
     with col_header_bot:
