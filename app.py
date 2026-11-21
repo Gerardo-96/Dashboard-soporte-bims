@@ -1992,14 +1992,22 @@ st.html("""
     const doc = window.parent.document;
     const body = doc.body;
     const button = doc.getElementById('bims-sidebar-toggle');
-    if (!body || !button || button.dataset.bimsBound === '1') return;
-    body.classList.add('bims-sidebar-open');
+    if (!body || !button) return;
+    let open = true;
+    try { open = window.parent.localStorage.getItem('bims_sidebar_open') !== 'false'; } catch (e) {}
+    body.classList.toggle('bims-sidebar-open', open);
+    button.textContent = open ? '‹' : '☰';
+    button.setAttribute('aria-label', open ? 'Ocultar panel' : 'Mostrar panel');
+    button.title = open ? 'Ocultar panel' : 'Mostrar panel';
+    if (button.dataset.bimsBound === '1') return;
     button.dataset.bimsBound = '1';
     button.addEventListener('click', function() {
-        const open = body.classList.toggle('bims-sidebar-open');
+        open = !body.classList.contains('bims-sidebar-open');
+        body.classList.toggle('bims-sidebar-open', open);
         button.textContent = open ? '‹' : '☰';
         button.setAttribute('aria-label', open ? 'Ocultar panel' : 'Mostrar panel');
         button.title = open ? 'Ocultar panel' : 'Mostrar panel';
+        try { window.parent.localStorage.setItem('bims_sidebar_open', String(open)); } catch (e) {}
     });
 })();
 </script>
