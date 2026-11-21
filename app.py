@@ -19,7 +19,7 @@ import extra_streamlit_components as stx
 # ==========================================
 st.set_page_config(
     page_title="Dashboard Soporte BIMS",
-    page_icon="📈",
+    page_icon="B",
     layout="wide"
 )
 
@@ -520,7 +520,7 @@ if not st.session_state["user_authenticated"]:
     with col_centro:
         with st.form("form_login_global", clear_on_submit=False):
             st.markdown("""
-            <div class="login-logo-circle">📈</div>
+            <div class="login-logo-circle">B</div>
             <div class="login-title-txt">Dashboard Soporte BIMS</div>
             <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
             """, unsafe_allow_html=True)
@@ -2207,7 +2207,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
 # ==========================================
 # DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
 # ==========================================
-@st.dialog("📊 Exportar Reporte a Excel")
+@st.dialog("Exportar Reporte a Excel")
 def modal_exportar_excel():
     st.caption("Selecciona el rango de fechas que deseas incluir en el archivo Excel:")
     
@@ -2260,7 +2260,7 @@ def modal_exportar_excel():
             use_container_width=True
         )
     else:
-        st.warning("⚠️ No existen registros cargados en la base de datos para las fechas seleccionadas.")
+        st.warning("No existen registros cargados en la base de datos para las fechas seleccionadas.")
 
 # SECCIÓN DE BOTONES EN LA BARRA LATERAL
 st.sidebar.markdown("---")
@@ -2525,7 +2525,7 @@ def renderizar_alertas_en_vivo():
 
     if error_msg:
         with st.expander("Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
-            st.error(f"❌ Error al consultar Supabase: {error_msg}")
+            st.error(f"Error al consultar Supabase: {error_msg}")
         return
 
     if datos_todos:
@@ -2582,7 +2582,7 @@ def renderizar_alertas_en_vivo():
                 palabra_chat = "chat" if cant == 1 else "chats"
 
                 # Título que se mostrará integrado en el banner
-                titulo_banner = f"🚨 ALERTA CRÍTICA: Hay {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Haz clic para desplegar y gestionar"
+                titulo_banner = f"ALERTA CRÍTICA: Hay {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Haz clic para desplegar y gestionar"
 
                 with st.expander(titulo_banner, expanded=False):
                     # Marcador invisible que activa las reglas CSS del banner sobre este expander
@@ -2775,13 +2775,13 @@ with tab_operativo:
         c_rango, pos_rango, k_rango, diff_rango = 0.0, 0, 0, 0.0
         df_filtered_csat = pd.DataFrame()
 
-    def render_metric_card(title, value, diff, comp_texto, sub_text, icono="⭐"):
+    def render_metric_card(title, value, diff, comp_texto, sub_text):
         diff_color = "#34d399" if diff >= 0 else "#f43f5e"
         diff_bg = "rgba(52, 211, 153, 0.12)" if diff >= 0 else "rgba(244, 63, 94, 0.12)"
         diff_symbol = "▲" if diff >= 0 else "▼"
         return f"""
         <div class="metric-card" style="border-left: 4px solid #38bdf8;">
-            <div class="metric-card-title"><span>{icono}</span> {title}</div>
+            <div class="metric-card-title">{title}</div>
             <div class="metric-card-value">{value}</div>
             <div style="display: inline-block; background: {diff_bg}; color: {diff_color}; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; margin-top: 4px;">
                 {diff_symbol} {abs(diff)}% {comp_texto}
@@ -2791,11 +2791,11 @@ with tab_operativo:
         """
 
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas", icono="🎯"), unsafe_allow_html=True)
-    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas", icono="📅"), unsafe_allow_html=True)
-    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas", icono="📊"), unsafe_allow_html=True)
-    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas", icono="📈"), unsafe_allow_html=True)
-    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas", icono="🔍"), unsafe_allow_html=True)
+    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas"), unsafe_allow_html=True)
+    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas"), unsafe_allow_html=True)
+    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas"), unsafe_allow_html=True)
+    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas"), unsafe_allow_html=True)
+    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas"), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -3051,7 +3051,7 @@ with tab_operativo:
                                     st.error(f"Error al actualizar chat {chat_id}: {ex}")
     
                         if guardados > 0:
-                            st.success(f"✅ Se actualizaron {guardados} registros.")
+                            st.success(f"Se actualizaron {guardados} registros.")
                             invalidar_cache_datos_conversaciones()
                             time_lib.sleep(0.5)
                             st.rerun()
@@ -3167,11 +3167,11 @@ with tab_operativo:
         color_gest_val = "#34d399" if es_cumplido_gest else "#f43f5e"
         border_gest_card = "#10b981" if es_cumplido_gest else "#ef4444"
 
-        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7", icono="⚡"):
+        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
             return f"""
             <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
-                    <div class="metric-card-title"><span>{icono}</span> {title}</div>
+                    <div class="metric-card-title">{title}</div>
                     <div class="metric-card-value" style="color: {val_color};">{value}</div>
                 </div>
                 <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{sub_text}</div>
@@ -3179,12 +3179,12 @@ with tab_operativo:
             """
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min", icono="⚡"), unsafe_allow_html=True)
-        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min", icono="⏱️"), unsafe_allow_html=True)
-        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card, icono="🎯"), unsafe_allow_html=True)
-        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card, icono="🏆"), unsafe_allow_html=True)
-        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}", icono="📥"), unsafe_allow_html=True)
-        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}", icono="✅"), unsafe_allow_html=True)
+        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
+        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
+        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card), unsafe_allow_html=True)
+        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card), unsafe_allow_html=True)
+        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
+        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -3274,11 +3274,11 @@ with tab_operativo:
         calc_min_fuera = (now_dt_fuera - df_criticos_fuera["created_at_dt"]).dt.total_seconds() / 60.0
         df_criticos_fuera["min_espera_calc"] = calc_min_fuera.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
 
-        with st.expander(f"⚠️ Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_criticos_fuera)}]", expanded=False):
+        with st.expander(f"Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_criticos_fuera)}]", expanded=False):
             if not df_criticos_fuera.empty:
                 # Clasificacion clara para cada registro
                 df_criticos_fuera["estado_sla"] = df_criticos_fuera.apply(
-                    lambda r: f"Atendido tarde ({round(r['1ra_resp_num'], 1)} min)" if pd.notna(r['1ra_resp_num']) else f"🚨 Pendiente ({r['min_espera_calc']} min)",
+                    lambda r: f"Atendido tarde ({round(r['1ra_resp_num'], 1)} min)" if pd.notna(r['1ra_resp_num']) else f"Pendiente ({r['min_espera_calc']} min)",
                     axis=1
                 )
 
@@ -3309,7 +3309,7 @@ with tab_operativo:
                     use_container_width=True
                 )
             else:
-                st.success("🟢 ¡Excelente! Todos los chats evaluados en este período cumplen con el SLA de primera respuesta.")
+                st.success("¡Excelente! Todos los chats evaluados en este período cumplen con el SLA de primera respuesta.")
     
         st.markdown("---")
 
@@ -3646,9 +3646,9 @@ def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hor
 
                 st.plotly_chart(fig_antiguedad, use_container_width=True)
             else:
-                st.info("🟢 No existen chats abiertos asignados a agentes humanos actualmente.")
+                st.info("No existen chats abiertos asignados a agentes humanos actualmente.")
         else:
-            st.info("🟢 No existen chats abiertos pendientes en el sistema.")
+            st.info("No existen chats abiertos pendientes en el sistema.")
 
         st.markdown("---")
 
@@ -3719,16 +3719,16 @@ def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hor
 
                 st.plotly_chart(fig_horas, use_container_width=True)
             else:
-                st.info("🟢 No existen chats abiertos asignados a agentes humanos actualmente.")
+                st.info("No existen chats abiertos asignados a agentes humanos actualmente.")
         else:
-            st.info("🟢 No existen chats abiertos pendientes en el sistema.")
+            st.info("No existen chats abiertos pendientes en el sistema.")
 
         st.markdown("---")
 
         # ==========================================
         # 4. ANÁLISIS DE EVALUACIONES NEGATIVAS (<=3 ★)
         # ==========================================
-        st.markdown("### 📊 Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
+        st.markdown("### Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
         
         df_res["rating_num"] = pd.to_numeric(df_res.get("rating"), errors="coerce")
         df_negativos_res = df_res[df_res["rating_num"] <= 3].copy()
@@ -3838,7 +3838,7 @@ def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hor
             else:
                 st.info("No hay tickets/tareas vinculadas a las calificaciones negativas del período.")
         else:
-            st.info("🟢 No se registraron evaluaciones negativas (1, 2 o 3 ★) para el período seleccionado.")
+            st.info("No se registraron evaluaciones negativas (1, 2 o 3 ★) para el período seleccionado.")
 
         st.markdown("---")
 
@@ -4129,7 +4129,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             hide_index=True, use_container_width=True
         )
     else:
-        st.success("🟢 No hay casos abiertos pendientes en Nivel 2.")
+        st.success("No hay casos abiertos pendientes en Nivel 2.")
 
 # ==========================================
 # FUNCIÓN AISLADA DEL WBR CON ST.FRAGMENT (BLINDADA CONTRA NameError)
@@ -4507,7 +4507,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
             </div>
             <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
-                🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
+                <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -5150,7 +5150,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         """
         st.markdown(html_tabla_l3, unsafe_allow_html=True)
     else:
-        st.info("🟢 No hay casos escalados a L3 con calificación negativa esta semana.")
+        st.info("No hay casos escalados a L3 con calificación negativa esta semana.")
 
     st.markdown("---")
 
@@ -5553,7 +5553,7 @@ def renderizar_panel_admin():
     with st.container():
         st.markdown("""
         <div class="admin-card">
-            <h4 style="margin-top:0; color:#38bdf8;">🤖 Estado y Control de Evolución API (WhatsApp Bot)</h4>
+            <h4 style="margin-top:0; color:#38bdf8;">Estado y Control de Evolución API (WhatsApp Bot)</h4>
             <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                 Monitoreo del servicio de notificaciones y reinicio forzado en Render.
             </p>
@@ -5615,21 +5615,21 @@ def renderizar_panel_admin():
         with col_status2:
             st.markdown("<br>", unsafe_allow_html=True)
             if bot_pausado:
-                if st.button("▶️ Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
+                if st.button("Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
                     supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
-                    st.success("✅ Bot reanudado. Volverá a emitir alertas.")
+                    st.success("Bot reanudado. Volverá a emitir alertas.")
                     time_lib.sleep(0.5)
                     st.rerun()
             else:
-                if st.button("⏸️ Pausar Bot (Emergencia)", use_container_width=True, key="btn_pausar_bot_admin"):
+                if st.button("Pausar Bot (Emergencia)", use_container_width=True, key="btn_pausar_bot_admin"):
                     supabase.table("config_notificaciones").update({"bot_activo": False}).eq("id", 1).execute()
-                    st.warning("⏸️ Bot pausado. No se enviarán mensajes ni alertas.")
+                    st.warning("Bot pausado. No se enviarán mensajes ni alertas.")
                     time_lib.sleep(0.5)
                     st.rerun()
 
         with col_status3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
+            if st.button("Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
                 with st.spinner("Enviando orden de reinicio a Render..."):
                     try:
                         headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
@@ -5637,11 +5637,11 @@ def renderizar_panel_admin():
                         res_json = res_req.json()
 
                         if res_json.get("status") == "success":
-                            st.success("✅ Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
+                            st.success("Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
                         else:
-                            st.error(f"❌ Error: {res_json.get('message')}")
+                            st.error(f"Error: {res_json.get('message')}")
                     except Exception as ex_r:
-                        st.error(f"❌ Error al comunicar con la API: {ex_r}")
+                        st.error(f"Error al comunicar con la API: {ex_r}")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -5681,7 +5681,7 @@ def renderizar_panel_admin():
             """, unsafe_allow_html=True)
 
         with c_meta2:
-            if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
+            if st.button("Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
                 obtener_total_registros_db.clear()
                 st.rerun()
 
@@ -5694,12 +5694,12 @@ def renderizar_panel_admin():
             time_lib.sleep(2)
             st.rerun()
         elif sync_info["status"] == "completed":
-            st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
+            st.success(f"¡Sincronización finalizada con éxito! {sync_info['log']}")
             if st.button("Limpiar Mensaje de Confirmación"):
                 GLOBAL_SYNC_STATE["status"] = "idle"
                 st.rerun()
         elif sync_info["status"] == "error":
-            st.error(f"❌ Error en la sincronización: {sync_info['error']}")
+            st.error(f"Error en la sincronización: {sync_info['error']}")
             if st.button("Reintentar / Limpiar Error"):
                 GLOBAL_SYNC_STATE["status"] = "idle"
                 st.rerun()
@@ -5803,7 +5803,7 @@ def renderizar_panel_admin():
         </div>
         """, unsafe_allow_html=True)
 
-        with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
+        with st.expander("Crear Nuevo Usuario Autorizado", expanded=False):
             with st.form("form_nuevo_usuario"):
                 col_u1, col_u2, col_u3 = st.columns(3)
                 n_nombre = col_u1.text_input("Nombre / Agente:")
@@ -5962,19 +5962,19 @@ def renderizar_panel_admin():
             hora_val = time(18, 0)
 
         with st.form("form_config_notificaciones"):
-            st.markdown("##### 📧 Reporte Diario por Correo")
+            st.markdown("##### Reporte Diario por Correo")
             col_e1, col_e2 = st.columns(2)
             v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
             v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
 
             st.markdown("---")
-            st.markdown("##### 📲 Alerta Individual de Chat Sin Responder")
+            st.markdown("##### Alerta Individual de Chat Sin Responder")
             col_w1, col_w2 = st.columns(2)
             v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
             v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
 
             st.markdown("---")
-            st.markdown("##### 👥 Alerta Grupal por Antigüedad de Chats")
+            st.markdown("##### Alerta Grupal por Antigüedad de Chats")
             col_g1, col_g2 = st.columns(2)
             v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
             v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
@@ -5993,7 +5993,7 @@ def renderizar_panel_admin():
                         "jid_grupo_whatsapp": v_jid_grupo.strip(),
                         "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
                     }).execute()
-                    st.success("✅ Configuración de notificaciones guardada en Supabase.")
+                    st.success("Configuración de notificaciones guardada en Supabase.")
                     st.rerun()
                 except Exception as ex_g:
                     st.error(f"Error al guardar configuración: {ex_g}")
@@ -6040,7 +6040,7 @@ def renderizar_panel_admin():
                                         .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
                                         .eq("id", u_id)\
                                         .execute()
-                            st.success("✅ Teléfonos de agentes actualizados.")
+                            st.success("Teléfonos de agentes actualizados.")
                             st.rerun()
             else:
                 st.info("No hay usuarios registrados aún.")
@@ -6052,7 +6052,7 @@ def renderizar_panel_admin():
     with st.container():
         st.markdown("""
         <div class="admin-card">
-            <h4 style="margin-top:0; color:#38bdf8;">📅 Calendario de Feriados Oficiales & Móviles</h4>
+            <h4 style="margin-top:0; color:#38bdf8;">Calendario de Feriados Oficiales & Móviles</h4>
             <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                 Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
             </p>
@@ -6064,7 +6064,7 @@ def renderizar_panel_admin():
         col_add1, col_add2 = st.columns([2, 1])
         fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
 
-        if col_add2.button("➕ Agregar Feriado", use_container_width=True):
+        if col_add2.button("Agregar Feriado", use_container_width=True):
             str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
             if str_f not in feriados_actuales:
                 feriados_actuales.append(str_f)
@@ -6079,7 +6079,7 @@ def renderizar_panel_admin():
 
         col_del1, col_del2 = st.columns([2, 1])
         feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
-        if col_del2.button("🗑️ Eliminar Feriado Seleccionado", use_container_width=True):
+        if col_del2.button("Eliminar Feriado Seleccionado", use_container_width=True):
             feriados_actuales.remove(feriado_a_borrar)
             if guardar_feriados_db(feriados_actuales):
                 st.success(f"Feriado {feriado_a_borrar} eliminado.")
