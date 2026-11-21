@@ -108,7 +108,7 @@ def modal_calendario_guardias(supabase):
 
 
 def render_widget_guardia(supabase, usuario_actual_id=None):
-    """Tarjeta .metric-card fija en cabecera con botón integrado a la derecha."""
+    """Tarjeta de guardia con botón superpuesto sin márgenes negativos ni altura adicional."""
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
     feriados_set = obtener_feriados_guardias(supabase)
 
@@ -140,24 +140,63 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         if siguiente else "09:00 - 12:00 hs"
     )
 
-    tarjeta_html = (
-        f'<div class="metric-card guardia-header-card" style="border-left: 4px solid {borde_color}; padding: 12px 95px 12px 16px; margin-bottom: 0px;">'
-        f'<div class="metric-card-title" style="font-size: 0.66rem; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">'
-        f'<span style="white-space: nowrap;">GUARDIA {formatear_fecha_corta(actual["fecha"]).upper()} (09-12 HS)</span>'
-        f'{badge_turno}'
-        f'</div>'
-        f'<div style="font-size: 1.18rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">{agente_actual}</div>'
-        f'<div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px;">{texto_siguiente}</div>'
-        f'</div>'
-        f'<style>'
-        f'.metric-card.guardia-header-card, .metric-card.guardia-header-card:hover {{ transform: none !important; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35) !important; }}'
-        f'div.st-key-btn_abrir_guardias {{ margin-top: -54px !important; margin-bottom: 22px !important; padding-right: 16px !important; width: 100% !important; text-align: right !important; position: relative !important; z-index: 10 !important; }}'
-        f'div.st-key-btn_abrir_guardias > div[data-testid="stButton"] {{ display: flex !important; justify-content: flex-end !important; width: 100% !important; }}'
-        f'div.st-key-btn_abrir_guardias button {{ margin-left: auto !important; margin-right: 0 !important; width: auto !important; min-width: 0 !important; padding: 4px 12px !important; font-size: 0.74rem !important; height: 30px !important; min-height: 30px !important; line-height: 1 !important; margin-top: 0 !important; }}'
-        f'</style>'
-    )
+    # El contenedor sirve de referencia para superponer el botón.
+    # Así el botón no necesita márgenes negativos ni agrega altura al encabezado.
+    with st.container(key="guardia_header_widget"):
+        st.markdown(
+            f"""
+            <div class="metric-card guardia-header-card"
+                 style="border-left:4px solid {borde_color}; padding:12px 95px 12px 16px; margin:0;">
+                <div class="metric-card-title"
+                     style="font-size:.66rem; display:flex; align-items:center; gap:6px; flex-wrap:nowrap;">
+                    <span style="white-space:nowrap;">GUARDIA {formatear_fecha_corta(actual["fecha"]).upper()} (09-12 HS)</span>
+                    {badge_turno}
+                </div>
+                <div style="font-size:1.18rem; font-weight:800; color:#f8fafc; margin-top:3px; line-height:1.2;">
+                    {agente_actual}
+                </div>
+                <div style="font-size:.72rem; color:#94a3b8; margin-top:4px;">
+                    {texto_siguiente}
+                </div>
+            </div>
+            <style>
+                .st-key-guardia_header_widget {{
+                    position:relative !important;
+                    overflow:visible !important;
+                }}
+                .metric-card.guardia-header-card,
+                .metric-card.guardia-header-card:hover {{
+                    transform:none !important;
+                    box-shadow:0 4px 12px -2px rgba(0,0,0,.35) !important;
+                }}
+                .st-key-guardia_header_widget div.st-key-btn_abrir_guardias {{
+                    position:absolute !important;
+                    top:10px !important;
+                    right:12px !important;
+                    width:auto !important;
+                    margin:0 !important;
+                    padding:0 !important;
+                    z-index:10 !important;
+                }}
+                .st-key-guardia_header_widget div.st-key-btn_abrir_guardias > div[data-testid="stButton"] {{
+                    display:flex !important;
+                    justify-content:flex-end !important;
+                }}
+                .st-key-guardia_header_widget div.st-key-btn_abrir_guardias button {{
+                    width:auto !important;
+                    min-width:0 !important;
+                    height:30px !important;
+                    min-height:30px !important;
+                    margin:0 !important;
+                    padding:4px 12px !important;
+                    font-size:.74rem !important;
+                    line-height:1 !important;
+                    border-radius:8px !important;
+                }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
 
-    st.markdown(tarjeta_html, unsafe_allow_html=True)
-
-    if st.button("Ver calendario", key="btn_abrir_guardias"):
-        modal_calendario_guardias(supabase)
+        if st.button("Ver calendario", key="btn_abrir_guardias"):
+            modal_calendario_guardias(supabase)
