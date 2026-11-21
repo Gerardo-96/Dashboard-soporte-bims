@@ -2248,7 +2248,7 @@ st.markdown("""
         background: transparent !important;
         color: #fbbf24 !important;
         font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif !important;
-        font-size: 1.32rem !important;
+        font-size: 1.65rem !important;
         font-weight: 500 !important;
         line-height: 1 !important;
         text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
