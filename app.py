@@ -2902,7 +2902,7 @@ with st.container(key="bims_dashboard_header"):
     with col_header_info:
         st.html(titulo_header_html)
     with col_header_bot:
-        col_guardia_alerta, col_estado_bot = st.columns([0.75, 4], vertical_alignment="center")
+        col_guardia_alerta, col_estado_bot = st.columns([0.35, 4], gap="small", vertical_alignment="center")
         with col_guardia_alerta:
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
