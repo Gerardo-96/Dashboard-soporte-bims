@@ -2330,17 +2330,20 @@ st.iframe("""
                 button.setAttribute('aria-expanded', String(open));
             }
 
-            // El clic se escucha directamente en el botón del documento padre.
-            // No depende de delegación ni de la propagación desde el iframe.
-            if (!button.__bimsClickBound) {
-                button.__bimsClickBound = true;
-                button.addEventListener('click', function(event) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    root.classList.toggle('bims-sidebar-open');
-                    syncButton();
-                }, false);
+            // Capturar el clic en fase target-capture para neutralizar handlers
+            // delegados antiguos que quedaron registrados en document durante
+            // versiones anteriores y que podrían invertir el estado por segunda vez.
+            if (button.__bimsClickHandler) {
+                button.removeEventListener('click', button.__bimsClickHandler, true);
             }
+            button.__bimsClickHandler = function(event) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                root.classList.toggle('bims-sidebar-open');
+                syncButton();
+            };
+            button.__bimsClickBound = true;
+            button.addEventListener('click', button.__bimsClickHandler, true);
 
             // Cerrar al hacer clic fuera del panel, sin interferir con el botón.
             if (!doc.__bimsSidebarOutsideClickBound) {
