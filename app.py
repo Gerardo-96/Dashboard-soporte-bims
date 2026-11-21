@@ -2239,20 +2239,26 @@ st.markdown("""
     }
     #bims-sidebar-toggle:hover { background: #223650; }
     .st-key-btn_abrir_guardias_header button {
-        min-width: 30px !important;
-        width: 30px !important;
-        height: 34px !important;
+        min-width: 40px !important;
+        width: 40px !important;
+        height: 40px !important;
         padding: 0 !important;
         border: 0 !important;
         border-radius: 8px !important;
         background: transparent !important;
         color: #fbbf24 !important;
         font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif !important;
-        font-size: 1.65rem !important;
+        font-size: 2rem !important;
         font-weight: 500 !important;
         line-height: 1 !important;
         text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
         box-shadow: none !important;
+    }
+    .st-key-btn_abrir_guardias_header button p,
+    .st-key-btn_abrir_guardias_header button span {
+        font-size: 2rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
     }
     .st-key-btn_abrir_guardias_header button:hover {
         background: rgba(251,191,36,.10) !important;
