@@ -2775,13 +2775,13 @@ with tab_operativo:
         c_rango, pos_rango, k_rango, diff_rango = 0.0, 0, 0, 0.0
         df_filtered_csat = pd.DataFrame()
 
-    def render_metric_card(title, value, diff, comp_texto, sub_text, icono="⭐"):
+    def render_metric_card(title, value, diff, comp_texto, sub_text):
         diff_color = "#34d399" if diff >= 0 else "#f43f5e"
         diff_bg = "rgba(52, 211, 153, 0.12)" if diff >= 0 else "rgba(244, 63, 94, 0.12)"
         diff_symbol = "▲" if diff >= 0 else "▼"
         return f"""
         <div class="metric-card" style="border-left: 4px solid #38bdf8;">
-            <div class="metric-card-title"><span>{icono}</span> {title}</div>
+            <div class="metric-card-title">{title}</div>
             <div class="metric-card-value">{value}</div>
             <div style="display: inline-block; background: {diff_bg}; color: {diff_color}; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; margin-top: 4px;">
                 {diff_symbol} {abs(diff)}% {comp_texto}
@@ -2791,11 +2791,11 @@ with tab_operativo:
         """
 
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas", icono="🎯"), unsafe_allow_html=True)
-    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas", icono="📅"), unsafe_allow_html=True)
-    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas", icono="📊"), unsafe_allow_html=True)
-    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas", icono="📈"), unsafe_allow_html=True)
-    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas", icono="🔍"), unsafe_allow_html=True)
+    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas"), unsafe_allow_html=True)
+    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas"), unsafe_allow_html=True)
+    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas"), unsafe_allow_html=True)
+    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas"), unsafe_allow_html=True)
+    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas"), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -3167,11 +3167,11 @@ with tab_operativo:
         color_gest_val = "#34d399" if es_cumplido_gest else "#f43f5e"
         border_gest_card = "#10b981" if es_cumplido_gest else "#ef4444"
 
-        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7", icono="⚡"):
+        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
             return f"""
             <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
-                    <div class="metric-card-title"><span>{icono}</span> {title}</div>
+                    <div class="metric-card-title">{title}</div>
                     <div class="metric-card-value" style="color: {val_color};">{value}</div>
                 </div>
                 <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{sub_text}</div>
@@ -3179,12 +3179,12 @@ with tab_operativo:
             """
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min", icono="⚡"), unsafe_allow_html=True)
-        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min", icono="⏱️"), unsafe_allow_html=True)
-        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card, icono="🎯"), unsafe_allow_html=True)
-        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card, icono="🏆"), unsafe_allow_html=True)
-        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}", icono="📥"), unsafe_allow_html=True)
-        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}", icono="✅"), unsafe_allow_html=True)
+        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
+        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
+        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card), unsafe_allow_html=True)
+        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card), unsafe_allow_html=True)
+        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
+        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -3274,11 +3274,11 @@ with tab_operativo:
         calc_min_fuera = (now_dt_fuera - df_criticos_fuera["created_at_dt"]).dt.total_seconds() / 60.0
         df_criticos_fuera["min_espera_calc"] = calc_min_fuera.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
 
-        with st.expander(f"⚠️ Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_criticos_fuera)}]", expanded=False):
+        with st.expander(f"Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_criticos_fuera)}]", expanded=False):
             if not df_criticos_fuera.empty:
                 # Clasificacion clara para cada registro
                 df_criticos_fuera["estado_sla"] = df_criticos_fuera.apply(
-                    lambda r: f"Atendido tarde ({round(r['1ra_resp_num'], 1)} min)" if pd.notna(r['1ra_resp_num']) else f"🚨 Pendiente ({r['min_espera_calc']} min)",
+                    lambda r: f"Atendido tarde ({round(r['1ra_resp_num'], 1)} min)" if pd.notna(r['1ra_resp_num']) else f"Pendiente ({r['min_espera_calc']} min)",
                     axis=1
                 )
 
@@ -3309,7 +3309,7 @@ with tab_operativo:
                     use_container_width=True
                 )
             else:
-                st.success("🟢 ¡Excelente! Todos los chats evaluados en este período cumplen con el SLA de primera respuesta.")
+                st.success("¡Excelente! Todos los chats evaluados en este período cumplen con el SLA de primera respuesta.")
     
         st.markdown("---")
 
@@ -3646,9 +3646,9 @@ def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hor
 
                 st.plotly_chart(fig_antiguedad, use_container_width=True)
             else:
-                st.info("🟢 No existen chats abiertos asignados a agentes humanos actualmente.")
+                st.info("No existen chats abiertos asignados a agentes humanos actualmente.")
         else:
-            st.info("🟢 No existen chats abiertos pendientes en el sistema.")
+            st.info("No existen chats abiertos pendientes en el sistema.")
 
         st.markdown("---")
 
@@ -3719,16 +3719,16 @@ def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hor
 
                 st.plotly_chart(fig_horas, use_container_width=True)
             else:
-                st.info("🟢 No existen chats abiertos asignados a agentes humanos actualmente.")
+                st.info("No existen chats abiertos asignados a agentes humanos actualmente.")
         else:
-            st.info("🟢 No existen chats abiertos pendientes en el sistema.")
+            st.info("No existen chats abiertos pendientes en el sistema.")
 
         st.markdown("---")
 
         # ==========================================
         # 4. ANÁLISIS DE EVALUACIONES NEGATIVAS (<=3 ★)
         # ==========================================
-        st.markdown("### 📊 Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
+        st.markdown("### Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
         
         df_res["rating_num"] = pd.to_numeric(df_res.get("rating"), errors="coerce")
         df_negativos_res = df_res[df_res["rating_num"] <= 3].copy()
@@ -3838,7 +3838,7 @@ def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hor
             else:
                 st.info("No hay tickets/tareas vinculadas a las calificaciones negativas del período.")
         else:
-            st.info("🟢 No se registraron evaluaciones negativas (1, 2 o 3 ★) para el período seleccionado.")
+            st.info("No se registraron evaluaciones negativas (1, 2 o 3 ★) para el período seleccionado.")
 
         st.markdown("---")
 
