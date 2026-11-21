@@ -6391,21 +6391,51 @@ def renderizar_panel_admin():
             st.markdown("#### Parámetros generales del dashboard")
             st.caption("Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.")
 
-            col_cfg1, col_cfg2 = st.columns(2, gap="large")
+            st.markdown("**Actualización automática**")
+            cfg_auto = st.checkbox(
+                "Activar actualización automática",
+                value=st.session_state["auto_refresh"]
+            )
 
+            st.markdown("**Objetivos y frecuencia**")
+            col_cfg1, col_cfg2, col_cfg3 = st.columns(3, gap="large", vertical_alignment="top")
             with col_cfg1:
-                st.markdown("**Actualización automática**")
-                cfg_auto = st.checkbox("Activar actualización automática", value=st.session_state["auto_refresh"])
-                cfg_interval = st.number_input("Intervalo de actualización (segundos)", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
-
+                cfg_interval = st.number_input(
+                    "Intervalo de actualización (segundos)",
+                    min_value=3,
+                    max_value=60,
+                    value=st.session_state["refresh_interval"]
+                )
             with col_cfg2:
-                st.markdown("**Objetivos de SLA**")
-                cfg_sla_1ra = st.number_input("Primera respuesta (minutos)", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
-                cfg_sla_gest = st.number_input("Tiempo de gestión (minutos)", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
+                cfg_sla_1ra = st.number_input(
+                    "Primera respuesta (minutos)",
+                    min_value=0.5,
+                    max_value=30.0,
+                    value=float(st.session_state["sla_1ra_th"]),
+                    step=0.5
+                )
+            with col_cfg3:
+                cfg_sla_gest = st.number_input(
+                    "Tiempo de gestión (minutos)",
+                    min_value=5.0,
+                    max_value=480.0,
+                    value=float(st.session_state["sla_gest_th"]),
+                    step=5.0
+                )
 
+            st.divider()
             st.markdown("**Alerta de chat nuevo**")
-            cfg_alerta_nuevo = st.number_input("Alertar tras (minutos sin responder)", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
-            if st.button("Guardar Configuración de Parámetros", use_container_width=True):
+            col_alerta, col_guardar = st.columns([2, 1], gap="large", vertical_alignment="bottom")
+            with col_alerta:
+                cfg_alerta_nuevo = st.number_input(
+                    "Alertar tras (minutos sin responder)",
+                    min_value=0.5,
+                    max_value=60.0,
+                    value=float(st.session_state["alerta_nuevo_th"]),
+                    step=0.5
+                )
+            with col_guardar:
+                if st.button("Guardar configuración", type="primary", use_container_width=True):
                 st.session_state["auto_refresh"] = cfg_auto
                 st.session_state["refresh_interval"] = cfg_interval
                 st.session_state["sla_1ra_th"] = cfg_sla_1ra
