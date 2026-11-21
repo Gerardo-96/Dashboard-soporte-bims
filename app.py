@@ -2247,7 +2247,11 @@ st.markdown("""
         border-radius: 8px !important;
         background: transparent !important;
         color: #fbbf24 !important;
-        font-size: 1.18rem !important;
+        font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif !important;
+        font-size: 1.32rem !important;
+        font-weight: 500 !important;
+        line-height: 1 !important;
+        text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
         box-shadow: none !important;
     }
     .st-key-btn_abrir_guardias_header button:hover {
