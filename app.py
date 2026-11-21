@@ -2525,7 +2525,7 @@ def renderizar_alertas_en_vivo():
 
     if error_msg:
         with st.expander("Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
-            st.error(f"❌ Error al consultar Supabase: {error_msg}")
+            st.error(f"Error al consultar Supabase: {error_msg}")
         return
 
     if datos_todos:
@@ -2582,7 +2582,7 @@ def renderizar_alertas_en_vivo():
                 palabra_chat = "chat" if cant == 1 else "chats"
 
                 # Título que se mostrará integrado en el banner
-                titulo_banner = f"🚨 ALERTA CRÍTICA: Hay {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Haz clic para desplegar y gestionar"
+                titulo_banner = f"ALERTA CRÍTICA: Hay {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Haz clic para desplegar y gestionar"
 
                 with st.expander(titulo_banner, expanded=False):
                     # Marcador invisible que activa las reglas CSS del banner sobre este expander
@@ -3051,7 +3051,7 @@ with tab_operativo:
                                     st.error(f"Error al actualizar chat {chat_id}: {ex}")
     
                         if guardados > 0:
-                            st.success(f"✅ Se actualizaron {guardados} registros.")
+                            st.success(f"Se actualizaron {guardados} registros.")
                             invalidar_cache_datos_conversaciones()
                             time_lib.sleep(0.5)
                             st.rerun()
@@ -4129,7 +4129,7 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
             hide_index=True, use_container_width=True
         )
     else:
-        st.success("🟢 No hay casos abiertos pendientes en Nivel 2.")
+        st.success("No hay casos abiertos pendientes en Nivel 2.")
 
 # ==========================================
 # FUNCIÓN AISLADA DEL WBR CON ST.FRAGMENT (BLINDADA CONTRA NameError)
@@ -4507,7 +4507,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
             </div>
             <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
-                🤖 <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
+                <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -5150,7 +5150,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         """
         st.markdown(html_tabla_l3, unsafe_allow_html=True)
     else:
-        st.info("🟢 No hay casos escalados a L3 con calificación negativa esta semana.")
+        st.info("No hay casos escalados a L3 con calificación negativa esta semana.")
 
     st.markdown("---")
 
@@ -6040,7 +6040,7 @@ def renderizar_panel_admin():
                                         .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
                                         .eq("id", u_id)\
                                         .execute()
-                            st.success("✅ Teléfonos de agentes actualizados.")
+                            st.success("Teléfonos de agentes actualizados.")
                             st.rerun()
             else:
                 st.info("No hay usuarios registrados aún.")
