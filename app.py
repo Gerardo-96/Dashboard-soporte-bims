@@ -19,7 +19,7 @@ import extra_streamlit_components as stx
 # ==========================================
 st.set_page_config(
     page_title="Dashboard Soporte BIMS",
-    page_icon="📈",
+    page_icon="B",
     layout="wide"
 )
 
@@ -520,7 +520,7 @@ if not st.session_state["user_authenticated"]:
     with col_centro:
         with st.form("form_login_global", clear_on_submit=False):
             st.markdown("""
-            <div class="login-logo-circle">📈</div>
+            <div class="login-logo-circle">B</div>
             <div class="login-title-txt">Dashboard Soporte BIMS</div>
             <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
             """, unsafe_allow_html=True)
@@ -2207,7 +2207,7 @@ def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_
 # ==========================================
 # DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
 # ==========================================
-@st.dialog("📊 Exportar Reporte a Excel")
+@st.dialog("Exportar Reporte a Excel")
 def modal_exportar_excel():
     st.caption("Selecciona el rango de fechas que deseas incluir en el archivo Excel:")
     
@@ -2260,7 +2260,7 @@ def modal_exportar_excel():
             use_container_width=True
         )
     else:
-        st.warning("⚠️ No existen registros cargados en la base de datos para las fechas seleccionadas.")
+        st.warning("No existen registros cargados en la base de datos para las fechas seleccionadas.")
 
 # SECCIÓN DE BOTONES EN LA BARRA LATERAL
 st.sidebar.markdown("---")
@@ -5553,7 +5553,7 @@ def renderizar_panel_admin():
     with st.container():
         st.markdown("""
         <div class="admin-card">
-            <h4 style="margin-top:0; color:#38bdf8;">🤖 Estado y Control de Evolución API (WhatsApp Bot)</h4>
+            <h4 style="margin-top:0; color:#38bdf8;">Estado y Control de Evolución API (WhatsApp Bot)</h4>
             <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                 Monitoreo del servicio de notificaciones y reinicio forzado en Render.
             </p>
@@ -5615,21 +5615,21 @@ def renderizar_panel_admin():
         with col_status2:
             st.markdown("<br>", unsafe_allow_html=True)
             if bot_pausado:
-                if st.button("▶️ Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
+                if st.button("Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
                     supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
-                    st.success("✅ Bot reanudado. Volverá a emitir alertas.")
+                    st.success("Bot reanudado. Volverá a emitir alertas.")
                     time_lib.sleep(0.5)
                     st.rerun()
             else:
-                if st.button("⏸️ Pausar Bot (Emergencia)", use_container_width=True, key="btn_pausar_bot_admin"):
+                if st.button("Pausar Bot (Emergencia)", use_container_width=True, key="btn_pausar_bot_admin"):
                     supabase.table("config_notificaciones").update({"bot_activo": False}).eq("id", 1).execute()
-                    st.warning("⏸️ Bot pausado. No se enviarán mensajes ni alertas.")
+                    st.warning("Bot pausado. No se enviarán mensajes ni alertas.")
                     time_lib.sleep(0.5)
                     st.rerun()
 
         with col_status3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🔄 Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
+            if st.button("Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
                 with st.spinner("Enviando orden de reinicio a Render..."):
                     try:
                         headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
@@ -5637,11 +5637,11 @@ def renderizar_panel_admin():
                         res_json = res_req.json()
 
                         if res_json.get("status") == "success":
-                            st.success("✅ Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
+                            st.success("Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
                         else:
-                            st.error(f"❌ Error: {res_json.get('message')}")
+                            st.error(f"Error: {res_json.get('message')}")
                     except Exception as ex_r:
-                        st.error(f"❌ Error al comunicar con la API: {ex_r}")
+                        st.error(f"Error al comunicar con la API: {ex_r}")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -5681,7 +5681,7 @@ def renderizar_panel_admin():
             """, unsafe_allow_html=True)
 
         with c_meta2:
-            if st.button("🔄 Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
+            if st.button("Actualizar Contador en Vivo", use_container_width=True, key="btn_refresh_counter"):
                 obtener_total_registros_db.clear()
                 st.rerun()
 
@@ -5694,12 +5694,12 @@ def renderizar_panel_admin():
             time_lib.sleep(2)
             st.rerun()
         elif sync_info["status"] == "completed":
-            st.success(f"✅ ¡Sincronización finalizada con éxito! {sync_info['log']}")
+            st.success(f"¡Sincronización finalizada con éxito! {sync_info['log']}")
             if st.button("Limpiar Mensaje de Confirmación"):
                 GLOBAL_SYNC_STATE["status"] = "idle"
                 st.rerun()
         elif sync_info["status"] == "error":
-            st.error(f"❌ Error en la sincronización: {sync_info['error']}")
+            st.error(f"Error en la sincronización: {sync_info['error']}")
             if st.button("Reintentar / Limpiar Error"):
                 GLOBAL_SYNC_STATE["status"] = "idle"
                 st.rerun()
@@ -5803,7 +5803,7 @@ def renderizar_panel_admin():
         </div>
         """, unsafe_allow_html=True)
 
-        with st.expander("➕ Crear Nuevo Usuario Autorizado", expanded=False):
+        with st.expander("Crear Nuevo Usuario Autorizado", expanded=False):
             with st.form("form_nuevo_usuario"):
                 col_u1, col_u2, col_u3 = st.columns(3)
                 n_nombre = col_u1.text_input("Nombre / Agente:")
@@ -5962,19 +5962,19 @@ def renderizar_panel_admin():
             hora_val = time(18, 0)
 
         with st.form("form_config_notificaciones"):
-            st.markdown("##### 📧 Reporte Diario por Correo")
+            st.markdown("##### Reporte Diario por Correo")
             col_e1, col_e2 = st.columns(2)
             v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
             v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
 
             st.markdown("---")
-            st.markdown("##### 📲 Alerta Individual de Chat Sin Responder")
+            st.markdown("##### Alerta Individual de Chat Sin Responder")
             col_w1, col_w2 = st.columns(2)
             v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
             v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
 
             st.markdown("---")
-            st.markdown("##### 👥 Alerta Grupal por Antigüedad de Chats")
+            st.markdown("##### Alerta Grupal por Antigüedad de Chats")
             col_g1, col_g2 = st.columns(2)
             v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
             v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
@@ -5993,7 +5993,7 @@ def renderizar_panel_admin():
                         "jid_grupo_whatsapp": v_jid_grupo.strip(),
                         "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
                     }).execute()
-                    st.success("✅ Configuración de notificaciones guardada en Supabase.")
+                    st.success("Configuración de notificaciones guardada en Supabase.")
                     st.rerun()
                 except Exception as ex_g:
                     st.error(f"Error al guardar configuración: {ex_g}")
@@ -6052,7 +6052,7 @@ def renderizar_panel_admin():
     with st.container():
         st.markdown("""
         <div class="admin-card">
-            <h4 style="margin-top:0; color:#38bdf8;">📅 Calendario de Feriados Oficiales & Móviles</h4>
+            <h4 style="margin-top:0; color:#38bdf8;">Calendario de Feriados Oficiales & Móviles</h4>
             <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
                 Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
             </p>
@@ -6064,7 +6064,7 @@ def renderizar_panel_admin():
         col_add1, col_add2 = st.columns([2, 1])
         fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
 
-        if col_add2.button("➕ Agregar Feriado", use_container_width=True):
+        if col_add2.button("Agregar Feriado", use_container_width=True):
             str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
             if str_f not in feriados_actuales:
                 feriados_actuales.append(str_f)
@@ -6079,7 +6079,7 @@ def renderizar_panel_admin():
 
         col_del1, col_del2 = st.columns([2, 1])
         feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
-        if col_del2.button("🗑️ Eliminar Feriado Seleccionado", use_container_width=True):
+        if col_del2.button("Eliminar Feriado Seleccionado", use_container_width=True):
             feriados_actuales.remove(feriado_a_borrar)
             if guardar_feriados_db(feriados_actuales):
                 st.success(f"Feriado {feriado_a_borrar} eliminado.")
