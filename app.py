@@ -1375,6 +1375,157 @@ st.markdown("""
         fill: #fca5a5 !important;
     }
 
+
+    
+    /* =========================================================
+       BIMS EXECUTIVE — sistema visual global (primera etapa)
+       Cambios exclusivamente de presentación.
+       ========================================================= */
+    :root {
+        --bims-bg: #0b1120;
+        --bims-surface: #151f30;
+        --bims-surface-raised: #1b293d;
+        --bims-border: #2b3a50;
+        --bims-border-soft: rgba(148, 163, 184, 0.14);
+        --bims-accent: #38bdf8;
+        --bims-text: #f1f5f9;
+        --bims-muted: #94a3b8;
+        --bims-success: #34d399;
+        --bims-warning: #fbbf24;
+        --bims-danger: #ef4444;
+        --bims-radius: 12px;
+        --bims-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+    }
+
+    .stApp {
+        background: var(--bims-bg) !important;
+        color: var(--bims-text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+                     BlinkMacSystemFont, "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    .block-container {
+        padding-top: 1.35rem !important;
+        padding-bottom: 2rem !important;
+    }
+
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        color: var(--bims-text);
+        letter-spacing: -0.025em;
+        line-height: 1.25;
+        font-weight: 700;
+    }
+    .stMarkdown h1 { font-size: clamp(1.7rem, 2.2vw, 2.25rem); }
+    .stMarkdown h2 { font-size: clamp(1.3rem, 1.7vw, 1.65rem); }
+    .stMarkdown h3 { font-size: 1.08rem; }
+
+    /* Superficies: menos brillo y más contraste uniforme. */
+    .metric-card,
+    .admin-card,
+    .db-info-box {
+        background: var(--bims-surface) !important;
+        border: 1px solid var(--bims-border) !important;
+        border-radius: var(--bims-radius) !important;
+        box-shadow: var(--bims-shadow);
+    }
+
+    .metric-card {
+        padding: 18px 20px;
+        transition: border-color 160ms ease, background-color 160ms ease;
+    }
+    .metric-card:hover {
+        transform: none;
+        background: var(--bims-surface-raised) !important;
+        border-color: rgba(56, 189, 248, 0.42) !important;
+        box-shadow: var(--bims-shadow);
+    }
+    .metric-card-title {
+        color: var(--bims-muted);
+        font-weight: 650;
+        letter-spacing: 0.065em;
+    }
+    .metric-card-value {
+        color: var(--bims-text);
+        font-weight: 750;
+        letter-spacing: -0.035em;
+    }
+    .metric-card-sub { color: var(--bims-accent); }
+
+    .admin-card { padding: 20px; }
+    .db-info-box {
+        color: var(--bims-muted);
+        line-height: 1.55;
+    }
+
+    /* Navegación más limpia, manteniendo las pestañas y sus permisos. */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.35rem;
+        border-bottom: 1px solid var(--bims-border) !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #b7c4d6 !important;
+        font-weight: 550 !important;
+        padding: 0.65rem 0.85rem !important;
+        border-radius: 8px 8px 0 0;
+        transition: color 140ms ease, background-color 140ms ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--bims-text) !important;
+        background: rgba(56, 189, 248, 0.07);
+    }
+    .stTabs [aria-selected="true"] {
+        color: var(--bims-accent) !important;
+        font-weight: 700 !important;
+    }
+
+    /* Controles y botones con estados discretos y consistentes. */
+    .stButton > button,
+    .stDownloadButton > button {
+        border-radius: 9px !important;
+        font-weight: 650 !important;
+        transition: background-color 140ms ease, border-color 140ms ease,
+                    box-shadow 140ms ease;
+    }
+    .stButton > button:focus-visible,
+    .stDownloadButton > button:focus-visible,
+    .stTabs button:focus-visible {
+        outline: 2px solid var(--bims-accent) !important;
+        outline-offset: 2px !important;
+        box-shadow: none !important;
+    }
+
+    /* Tablas con bordes suaves y encabezados diferenciados. */
+    [data-testid="stDataFrame"],
+    [data-testid="stTable"] {
+        border: 1px solid var(--bims-border) !important;
+        border-radius: 10px !important;
+        overflow: hidden;
+    }
+
+    /* Alertas: conservar prioridad sin animación luminosa permanente. */
+    .alert-card-critical {
+        animation: none !important;
+        box-shadow: 0 4px 14px rgba(239, 68, 68, 0.10);
+        background: linear-gradient(100deg, rgba(120, 53, 15, 0.42), rgba(30, 27, 75, 0.72)) !important;
+    }
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details {
+        animation: none !important;
+        box-shadow: 0 4px 14px rgba(239, 68, 68, 0.10) !important;
+    }
+
+    @media (max-width: 900px) {
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            padding: 0.55rem 0.65rem !important;
+            font-size: 0.88rem !important;
+        }
+    }
+
     /* Fondo oscuro limpio para el contenido interno cuando se despliega */
     div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > div[data-testid="stExpanderDetails"] {
         background-color: #0b1120 !important;
