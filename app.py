@@ -3353,7 +3353,7 @@ with tab_operativo:
             fig_csat.update_layout(
                 xaxis=dict(
                     title=None,
-                    range=[-0.6, total_semanas - 0.4],
+                    range=[-0.25, total_semanas - 0.75],
                     showgrid=False,
                     zeroline=False,
                     tickfont=dict(color="#94a3b8", size=11)
@@ -3371,7 +3371,7 @@ with tab_operativo:
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1"),
-                margin=dict(t=25, b=35, l=45, r=35),
+                margin=dict(t=25, b=35, l=12, r=12),
                 height=380,
                 showlegend=False
             )
