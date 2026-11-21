@@ -2821,127 +2821,125 @@ with tab_operativo:
     # EVOLUCIÓN HISTÓRICA DE CSAT (SEMANAL DESDE Q ANTERIOR)
     q_act_evo = (now_date.month - 1) // 3 + 1
     q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
-    titulo_expander_csat = f"Ver Gráfico de Evolución del CSAT (Desde Q{q_ant_evo})"
+    st.markdown("### Evolución semanal del CSAT")
+    if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
+        anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
+        mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
+        fecha_inicio_q_ant_evo = date(anio_inicio_q, mes_inicio_q, 1)
 
-    with st.expander(titulo_expander_csat, expanded=False):
-        if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
-            anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
-            mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
-            fecha_inicio_q_ant_evo = date(anio_inicio_q, mes_inicio_q, 1)
+        df_csat_evo = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_inicio_q_ant_evo].copy()
 
-            df_csat_evo = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_inicio_q_ant_evo].copy()
+        if not df_csat_evo.empty:
+            # Agrupación por semana ISO (Lunes a Domingo)
+            df_csat_evo["Inicio_Semana"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(lambda r: r.start_time)
+            df_csat_evo["Semana_Etiqueta"] = df_csat_evo["fecha_calificacion_dt"].dt.isocalendar().week.apply(lambda w: f"S{w}")
+            # Rango legible de fechas de Lunes a Domingo para el tooltip
+            df_csat_evo["Rango_Fechas"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(
+                lambda r: f"{r.start_time.strftime('%d/%m')} al {r.end_time.strftime('%d/%m')}"
+            )
 
-            if not df_csat_evo.empty:
-                # Agrupación por semana ISO (Lunes a Domingo)
-                df_csat_evo["Inicio_Semana"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(lambda r: r.start_time)
-                df_csat_evo["Semana_Etiqueta"] = df_csat_evo["fecha_calificacion_dt"].dt.isocalendar().week.apply(lambda w: f"S{w}")
-                # Rango legible de fechas de Lunes a Domingo para el tooltip
-                df_csat_evo["Rango_Fechas"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(
-                    lambda r: f"{r.start_time.strftime('%d/%m')} al {r.end_time.strftime('%d/%m')}"
+            res_csat_semanal = []
+            for _, grp in df_csat_evo.groupby(["Inicio_Semana", "Semana_Etiqueta"]):
+                tot = len(grp)
+                pos = len(grp[grp["rating_num"] >= 4])
+                val_csat = round((pos / tot) * 100, 1) if tot > 0 else 0.0
+                res_csat_semanal.append({
+                    "Inicio_Semana": grp["Inicio_Semana"].iloc[0],
+                    "Semana": grp["Semana_Etiqueta"].iloc[0],
+                    "Rango_Fechas": grp["Rango_Fechas"].iloc[0],
+                    "CSAT %": val_csat,
+                    "Encuestas": tot
+                })
+
+            df_evo_csat = pd.DataFrame(res_csat_semanal).sort_values("Inicio_Semana")
+
+            fig_csat = go.Figure()
+
+            # Colores dinámicos en los nodos según cumplimiento de meta (90%)
+            colores_nodos = [
+                "#10b981" if v >= 90.0 else "#f59e0b"
+                for v in df_evo_csat["CSAT %"]
+            ]
+
+            fig_csat.add_trace(go.Scatter(
+                x=df_evo_csat["Semana"],
+                y=df_evo_csat["CSAT %"],
+                mode="lines+markers+text",
+                name="CSAT (%)",
+                text=[f"<b>{v:.1f}%</b>" for v in df_evo_csat["CSAT %"]],
+                textposition="top center",
+                textfont=dict(color="#f8fafc", size=11),
+                marker=dict(
+                    size=8,
+                    color=colores_nodos,
+                    line=dict(color="#0f172a", width=2)
+                ),
+                hovertemplate=(
+                    "<b>%{x}</b> (%{customdata[0]})<br>"
+                    "CSAT: <b>%{y:.1f}%</b><br>"
+                    "Total encuestas: %{customdata[1]}<extra></extra>"
+                ),
+                customdata=np.stack((df_evo_csat["Rango_Fechas"], df_evo_csat["Encuestas"]), axis=-1),
+                line=dict(color="#38bdf8", width=3, shape="spline", smoothing=0.8),
+                fill="tozeroy",
+                fillgradient=dict(
+                    type="vertical",
+                    colorscale=[
+                        [0.0, "rgba(56, 189, 248, 0.0)"],
+                        [1.0, "rgba(56, 189, 248, 0.22)"]
+                    ]
                 )
+            ))
 
-                res_csat_semanal = []
-                for _, grp in df_csat_evo.groupby(["Inicio_Semana", "Semana_Etiqueta"]):
-                    tot = len(grp)
-                    pos = len(grp[grp["rating_num"] >= 4])
-                    val_csat = round((pos / tot) * 100, 1) if tot > 0 else 0.0
-                    res_csat_semanal.append({
-                        "Inicio_Semana": grp["Inicio_Semana"].iloc[0],
-                        "Semana": grp["Semana_Etiqueta"].iloc[0],
-                        "Rango_Fechas": grp["Rango_Fechas"].iloc[0],
-                        "CSAT %": val_csat,
-                        "Encuestas": tot
-                    })
+            # Línea de meta objetivo (90%)
+            fig_csat.add_hline(
+                y=90,
+                line=dict(color="#34d399", width=1.5, dash="dot"),
+                annotation_text="<b>Meta 90%</b>",
+                annotation_position="top left",
+                annotation_font=dict(color="#34d399", size=11),
+                annotation_bgcolor="rgba(11, 17, 32, 0.85)"
+            )
 
-                df_evo_csat = pd.DataFrame(res_csat_semanal).sort_values("Inicio_Semana")
+            # Aire lateral en eje X para que S27 y S47 nunca se corten
+            total_semanas = len(df_evo_csat)
+            min_y = max(60, float(df_evo_csat["CSAT %"].min()) - 6)
 
-                fig_csat = go.Figure()
-
-                # Colores dinámicos en los nodos según cumplimiento de meta (90%)
-                colores_nodos = [
-                    "#10b981" if v >= 90.0 else "#f59e0b"
-                    for v in df_evo_csat["CSAT %"]
-                ]
-
-                fig_csat.add_trace(go.Scatter(
-                    x=df_evo_csat["Semana"],
-                    y=df_evo_csat["CSAT %"],
-                    mode="lines+markers+text",
-                    name="CSAT (%)",
-                    text=[f"<b>{v:.1f}%</b>" for v in df_evo_csat["CSAT %"]],
-                    textposition="top center",
-                    textfont=dict(color="#f8fafc", size=11),
-                    marker=dict(
-                        size=8,
-                        color=colores_nodos,
-                        line=dict(color="#0f172a", width=2)
-                    ),
-                    hovertemplate=(
-                        "<b>%{x}</b> (%{customdata[0]})<br>"
-                        "CSAT: <b>%{y:.1f}%</b><br>"
-                        "Total encuestas: %{customdata[1]}<extra></extra>"
-                    ),
-                    customdata=np.stack((df_evo_csat["Rango_Fechas"], df_evo_csat["Encuestas"]), axis=-1),
-                    line=dict(color="#38bdf8", width=3, shape="spline", smoothing=0.8),
-                    fill="tozeroy",
-                    fillgradient=dict(
-                        type="vertical",
-                        colorscale=[
-                            [0.0, "rgba(56, 189, 248, 0.0)"],
-                            [1.0, "rgba(56, 189, 248, 0.22)"]
-                        ]
-                    )
-                ))
-
-                # Línea de meta objetivo (90%)
-                fig_csat.add_hline(
-                    y=90,
-                    line=dict(color="#34d399", width=1.5, dash="dot"),
-                    annotation_text="<b>Meta 90%</b>",
-                    annotation_position="top left",
-                    annotation_font=dict(color="#34d399", size=11),
-                    annotation_bgcolor="rgba(11, 17, 32, 0.85)"
-                )
-
-                # Aire lateral en eje X para que S27 y S47 nunca se corten
-                total_semanas = len(df_evo_csat)
-                min_y = max(60, float(df_evo_csat["CSAT %"].min()) - 6)
-
-                fig_csat.update_layout(
-                    title=dict(
-                        text=f"<b>Evolución Semanal de Satisfacción al Cliente (Desde Q{q_ant_evo})</b>",
-                        font=dict(size=15, color="#f8fafc"),
-                        x=0.01
-                    ),
-                    xaxis=dict(
-                        title=None,
-                        range=[-0.6, total_semanas - 0.4],
-                        showgrid=False,
-                        zeroline=False,
-                        tickfont=dict(color="#94a3b8", size=11)
-                    ),
-                    yaxis=dict(
-                        title=None,
-                        range=[min_y, 104],
-                        gridcolor="rgba(51, 65, 85, 0.35)",
-                        griddash="dot",
-                        zeroline=False,
-                        showline=False,
-                        ticksuffix="%",
-                        tickfont=dict(color="#64748b", size=10)
-                    ),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1"),
-                    margin=dict(t=55, b=35, l=45, r=35),
-                    height=380,
-                    showlegend=False
-                )
-                st.plotly_chart(fig_csat, use_container_width=True)
-            else:
-                st.info(f"No hay encuestas registradas desde Q{q_ant_evo} para generar el gráfico.")
+            fig_csat.update_layout(
+                title=dict(
+                    text=f"<b>Evolución Semanal de Satisfacción al Cliente (Desde Q{q_ant_evo})</b>",
+                    font=dict(size=15, color="#f8fafc"),
+                    x=0.01
+                ),
+                xaxis=dict(
+                    title=None,
+                    range=[-0.6, total_semanas - 0.4],
+                    showgrid=False,
+                    zeroline=False,
+                    tickfont=dict(color="#94a3b8", size=11)
+                ),
+                yaxis=dict(
+                    title=None,
+                    range=[min_y, 104],
+                    gridcolor="rgba(51, 65, 85, 0.35)",
+                    griddash="dot",
+                    zeroline=False,
+                    showline=False,
+                    ticksuffix="%",
+                    tickfont=dict(color="#64748b", size=10)
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1"),
+                margin=dict(t=55, b=35, l=45, r=35),
+                height=380,
+                showlegend=False
+            )
+            st.plotly_chart(fig_csat, use_container_width=True)
         else:
-            st.info("Sin registros en la base de datos.")
+            st.info(f"No hay encuestas registradas desde Q{q_ant_evo} para generar el gráfico.")
+    else:
+        st.info("Sin registros en la base de datos.")
 
     # DEFINIR CORREO AUTORIZADO A EDITAR (Tu usuario o Sesión Admin)
     USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital" 
@@ -2956,6 +2954,7 @@ with tab_operativo:
         df_csat_det = df_all.dropna(subset=["rating"]).copy()
         df_csat_det["rating_num"] = pd.to_numeric(df_csat_det["rating"], errors="coerce")
         df_csat_det = df_csat_det.dropna(subset=["rating_num"])
+        df_csat_det = df_csat_det[df_csat_det["rating_num"].isin([1, 2])].copy()
         df_csat_det = df_csat_det[
             (df_csat_det["fecha_calificacion_solo"] >= f_desde_v) &
             (df_csat_det["fecha_calificacion_solo"] <= f_hasta_v)
@@ -2964,118 +2963,120 @@ with tab_operativo:
             hora_calif_s = df_csat_det["fecha_calificacion_dt"].dt.time
             df_csat_det = df_csat_det[(hora_calif_s >= hora_inicio) & (hora_calif_s <= hora_fin)]
 
+        st.markdown("### Evaluaciones negativas (1–2 estrellas)")
         if not df_csat_det.empty:
-            with st.expander(f"Ver Detalle de Calificaciones CSAT ({len(df_csat_det)} Encuestas)", expanded=False):
-                df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
-            
-                OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
+            df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+        
+            OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
 
-                df_csat_det["motivo_normalizado"] = df_csat_det.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar")
-                df_csat_det["ticket_relacionado"] = df_csat_det.get("ticket_relacionado", pd.Series(dtype=str)).fillna("")
-                # Asignar 'Nivel 1' por defecto si viene nulo, vacío o como 'Sin Nivel'
-                df_csat_det["nivel"] = (
-                    df_csat_det.get("nivel", pd.Series(dtype=str))
-                    .fillna("Nivel 1")
-                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+            df_csat_det["motivo_normalizado"] = df_csat_det.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar")
+            df_csat_det["ticket_relacionado"] = df_csat_det.get("ticket_relacionado", pd.Series(dtype=str)).fillna("")
+            # Asignar 'Nivel 1' por defecto si viene nulo, vacío o como 'Sin Nivel'
+            df_csat_det["nivel"] = (
+                df_csat_det.get("nivel", pd.Series(dtype=str))
+                .fillna("Nivel 1")
+                .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+            )
+
+            cols_csat_deseadas = [
+                "id_str", 
+                "intercom_url", 
+                "fecha_calificacion_fmt", 
+                "agente_evaluado",
+                "nivel",
+                "rating_num", 
+                "Calificacion", 
+                "feedback", 
+                "motivo_normalizado", 
+                "ticket_relacionado", 
+                "nombre_contacto", 
+                "tenant", 
+                "company"
+            ]
+
+            # ORDEN ASCENDENTE POR CALIFICACIÓN
+            df_editor = df_csat_det.reindex(columns=cols_csat_deseadas)\
+                .sort_values(by=["rating_num", "fecha_calificacion_fmt"], ascending=[True, False])\
+                .reset_index(drop=True)\
+                .copy()
+
+            config_columnas = {
+                "id_str": None,
+                "rating_num": None,
+                "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
+                "fecha_calificacion_fmt": st.column_config.TextColumn("Fecha/Hora Calificación", disabled=True),
+                "agente_evaluado": st.column_config.TextColumn("Agente Evaluado", disabled=True),
+                "nivel": st.column_config.TextColumn("Nivel", disabled=True),
+                "Calificacion": st.column_config.TextColumn("Puntaje", disabled=True),
+                "feedback": st.column_config.TextColumn("Comentario / Feedback", disabled=True),
+                "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
+                "tenant": st.column_config.TextColumn("Tenant", disabled=True),
+                "company": st.column_config.TextColumn("Company", disabled=True),
+            }
+
+            if es_super_usuario:
+                config_columnas["motivo_normalizado"] = st.column_config.SelectboxColumn(
+                    "Motivo Normalizado",
+                    options=OPCIONES_MOTIVOS,
+                    required=True
+                )
+                config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado")
+            else:
+                config_columnas["motivo_normalizado"] = st.column_config.TextColumn("Motivo Normalizado", disabled=True)
+                config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado", disabled=True)
+
+            # ENVOLVEMOS LA TABLA EN UN FORMULARIO PARA EVITAR SOBREESCRITURAS DE ESTADO
+            with st.form("form_tabla_csat_edicion", clear_on_submit=False):
+                edited_df = st.data_editor(
+                    df_editor,
+                    column_config=config_columnas,
+                    hide_index=True,
+                    use_container_width=True,
+                    key="editor_csat_tabla"
                 )
 
-                cols_csat_deseadas = [
-                    "id_str", 
-                    "intercom_url", 
-                    "fecha_calificacion_fmt", 
-                    "agente_evaluado",
-                    "nivel",
-                    "rating_num", 
-                    "Calificacion", 
-                    "feedback", 
-                    "motivo_normalizado", 
-                    "ticket_relacionado", 
-                    "nombre_contacto", 
-                    "tenant", 
-                    "company"
-                ]
-
-                # ORDEN ASCENDENTE POR CALIFICACIÓN
-                df_editor = df_csat_det.reindex(columns=cols_csat_deseadas)\
-                    .sort_values(by=["rating_num", "fecha_calificacion_fmt"], ascending=[True, False])\
-                    .reset_index(drop=True)\
-                    .copy()
-
-                config_columnas = {
-                    "id_str": None,
-                    "rating_num": None,
-                    "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
-                    "fecha_calificacion_fmt": st.column_config.TextColumn("Fecha/Hora Calificación", disabled=True),
-                    "agente_evaluado": st.column_config.TextColumn("Agente Evaluado", disabled=True),
-                    "nivel": st.column_config.TextColumn("Nivel", disabled=True),
-                    "Calificacion": st.column_config.TextColumn("Puntaje", disabled=True),
-                    "feedback": st.column_config.TextColumn("Comentario / Feedback", disabled=True),
-                    "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
-                    "tenant": st.column_config.TextColumn("Tenant", disabled=True),
-                    "company": st.column_config.TextColumn("Company", disabled=True),
-                }
-
                 if es_super_usuario:
-                    config_columnas["motivo_normalizado"] = st.column_config.SelectboxColumn(
-                        "Motivo Normalizado",
-                        options=OPCIONES_MOTIVOS,
-                        required=True
-                    )
-                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado")
+                    btn_guardar_cambios = st.form_submit_button("Guardar Cambios", use_container_width=True)
                 else:
-                    config_columnas["motivo_normalizado"] = st.column_config.TextColumn("Motivo Normalizado", disabled=True)
-                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado", disabled=True)
-    
-                # ENVOLVEMOS LA TABLA EN UN FORMULARIO PARA EVITAR SOBREESCRITURAS DE ESTADO
-                with st.form("form_tabla_csat_edicion", clear_on_submit=False):
-                    edited_df = st.data_editor(
-                        df_editor,
-                        column_config=config_columnas,
-                        hide_index=True,
-                        use_container_width=True,
-                        key="editor_csat_tabla"
-                    )
+                    btn_guardar_cambios = False
 
-                    if es_super_usuario:
-                        btn_guardar_cambios = st.form_submit_button("Guardar Cambios", use_container_width=True)
-                    else:
-                        btn_guardar_cambios = False
+            # PROCESAMIENTO SEGURO AL HACER CLIC EN GUARDAR
+            if btn_guardar_cambios and es_super_usuario:
+                cambios = st.session_state.get("editor_csat_tabla", {}).get("edited_rows", {})
+            
+                if cambios:
+                    errores = 0
+                    guardados = 0
+                    for fila_idx, datos_editados in cambios.items():
+                        chat_id = df_editor.iloc[int(fila_idx)]["id_str"]
+                        id_chat_val = int(chat_id) if str(chat_id).isdigit() else chat_id
+                        
+                        payload_update = {}
+                        if "motivo_normalizado" in datos_editados:
+                            payload_update["motivo_normalizado"] = datos_editados["motivo_normalizado"]
+                        if "ticket_relacionado" in datos_editados:
+                            payload_update["ticket_relacionado"] = str(datos_editados["ticket_relacionado"]).strip()
 
-                # PROCESAMIENTO SEGURO AL HACER CLIC EN GUARDAR
-                if btn_guardar_cambios and es_super_usuario:
-                    cambios = st.session_state.get("editor_csat_tabla", {}).get("edited_rows", {})
-                
-                    if cambios:
-                        errores = 0
-                        guardados = 0
-                        for fila_idx, datos_editados in cambios.items():
-                            chat_id = df_editor.iloc[int(fila_idx)]["id_str"]
-                            id_chat_val = int(chat_id) if str(chat_id).isdigit() else chat_id
-                            
-                            payload_update = {}
-                            if "motivo_normalizado" in datos_editados:
-                                payload_update["motivo_normalizado"] = datos_editados["motivo_normalizado"]
-                            if "ticket_relacionado" in datos_editados:
-                                payload_update["ticket_relacionado"] = str(datos_editados["ticket_relacionado"]).strip()
+                        if payload_update:
+                            try:
+                                supabase.table("conversaciones")\
+                                    .update(payload_update)\
+                                    .eq("id", id_chat_val)\
+                                    .execute()
+                                guardados += 1
+                            except Exception as ex:
+                                errores += 1
+                                st.error(f"Error al actualizar chat {chat_id}: {ex}")
 
-                            if payload_update:
-                                try:
-                                    supabase.table("conversaciones")\
-                                        .update(payload_update)\
-                                        .eq("id", id_chat_val)\
-                                        .execute()
-                                    guardados += 1
-                                except Exception as ex:
-                                    errores += 1
-                                    st.error(f"Error al actualizar chat {chat_id}: {ex}")
-    
-                        if guardados > 0:
-                            st.success(f"Se actualizaron {guardados} registros.")
-                            invalidar_cache_datos_conversaciones()
-                            time_lib.sleep(0.5)
-                            st.rerun()
-                    else:
-                        st.info("No se detectaron cambios pendientes para guardar.")
+                    if guardados > 0:
+                        st.success(f"Se actualizaron {guardados} registros.")
+                        invalidar_cache_datos_conversaciones()
+                        time_lib.sleep(0.5)
+                        st.rerun()
+                else:
+                    st.info("No se detectaron cambios pendientes para guardar.")
+        else:
+            st.info("No hay evaluaciones negativas de 1 o 2 estrellas en el período seleccionado.")
         st.markdown("---")
 
     # ==========================================
