@@ -303,11 +303,14 @@ st.markdown("""
         height: 0 !important;
     }
 
-    /* La lista de pestañas se integra en la cabecera fija mediante el script inferior. */
+    /* Las pestañas ya están en la cabecera; no reservar espacio en su ubicación original. */
     #bims-fixed-tabs-placeholder {
-        height: 42px !important;
-        min-height: 42px !important;
-        width: 100% !important;
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     .st-key-bims_dashboard_header [role="tablist"] {
         position: relative !important;
@@ -335,7 +338,7 @@ st.markdown("""
             min-height: 112px !important;
         }
         .bims-header-spacer { height: 112px !important; min-height: 112px !important; }
-        #bims-fixed-tabs-placeholder { height: 42px !important; min-height: 42px !important; }
+        #bims-fixed-tabs-placeholder { display: none !important; height: 0 !important; min-height: 0 !important; }
         .st-key-bims_dashboard_header [role="tablist"] {
             padding-left: 0 !important;
             padding-right: 0 !important;
