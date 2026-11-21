@@ -147,6 +147,12 @@ st.markdown("""
         padding: 0 !important;
     }
 
+    /* Reduce el espacio que Streamlit reserva entre el título y el gráfico de evolución CSAT. */
+    div[data-testid="stElementContainer"]:has(.bims-csat-evo-title) {
+        margin-block-end: -16px !important;
+        padding-block-end: 0 !important;
+    }
+
     /* Oculta la barra flotante de Plotly (Modebar) en todos los gráficos */
     .modebar,
     .modebar-container {
@@ -3356,7 +3362,7 @@ with tab_operativo:
     # EVOLUCIÓN HISTÓRICA DE CSAT (SEMANAL DESDE Q ANTERIOR)
     q_act_evo = (now_date.month - 1) // 3 + 1
     q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
-    st.markdown('<h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;">Evolución semanal del CSAT — desde el trimestre anterior</h3>', unsafe_allow_html=True)
+    st.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;">Evolución semanal del CSAT — desde el trimestre anterior</h3></div>', unsafe_allow_html=True)
     if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
         anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
         mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
