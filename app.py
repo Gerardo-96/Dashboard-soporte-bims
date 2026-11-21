@@ -2917,6 +2917,7 @@ with tab_operativo:
                     title=None,
                     range=[min_y, 104],
                     showgrid=False,
+                    showticklabels=False,
                     zeroline=False,
                     showline=False,
                     ticksuffix="%",
@@ -3256,7 +3257,16 @@ with tab_operativo:
         df_res_agentes = pd.DataFrame(res_agentes)
         if not df_res_agentes.empty:
             df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
-            st.dataframe(df_res_agentes, hide_index=True, use_container_width=True)
+            columnas_numericas = df_res_agentes.select_dtypes(include="number").columns
+            estilos_encabezados = [
+                {
+                    "selector": f"th.col_heading.level0.col{df_res_agentes.columns.get_loc(col)}",
+                    "props": [("text-align", "right")]
+                }
+                for col in columnas_numericas
+            ]
+            df_res_agentes_styled = df_res_agentes.style.set_table_styles(estilos_encabezados)
+            st.dataframe(df_res_agentes_styled, hide_index=True, use_container_width=True)
         else:
             st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
     else:
