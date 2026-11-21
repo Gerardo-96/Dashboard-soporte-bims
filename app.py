@@ -2818,10 +2818,21 @@ st.iframe("""
             const main = doc.querySelector('[data-testid="stMainBlockContainer"], [data-testid="stAppViewBlockContainer"]');
             if (main) {
                 lines.push('--- primeros bloques dentro del contenedor ---');
-                Array.from(main.children).slice(0, 7).forEach(function (el, i) {
+                Array.from(main.children).slice(0, 5).forEach(function (el, i) {
                     lines.push((i + 1) + '. ' + describe(el));
+                    Array.from(el.children).slice(0, 8).forEach(function (child, j) {
+                        lines.push('   ' + (i + 1) + '.' + (j + 1) + ' ' + describe(child));
+                    });
                 });
             }
+            lines.push('--- iframes y sus contenedores ---');
+            Array.from(doc.querySelectorAll('iframe')).slice(0, 8).forEach(function (frame, i) {
+                lines.push('iframe ' + (i + 1) + ': ' + describe(frame));
+                let parent = frame.parentElement;
+                for (let level = 1; parent && level <= 4; level++, parent = parent.parentElement) {
+                    lines.push('   padre ' + level + ': ' + describe(parent));
+                }
+            });
             const close = doc.createElement('button');
             close.textContent = 'Cerrar diagnóstico ×';
             close.style.cssText = 'margin-top:9px;padding:5px 9px;border:1px solid #64748b;border-radius:6px;background:#1e293b;color:#fff;cursor:pointer;font:inherit';
