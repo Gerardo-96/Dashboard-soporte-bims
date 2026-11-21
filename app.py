@@ -6178,7 +6178,53 @@ def renderizar_panel_admin():
                 estado_bot = "CRITICAL"
                 wa_state = "offline"
 
-            col_status1, col_status2, col_status3 = st.columns([1.8, 1.1, 1.1], vertical_alignment="center")
+            st.markdown("""
+            <style>
+                .st-key-btn_pausar_bot_admin button,
+                .st-key-btn_reanudar_bot_admin button,
+                .st-key-btn_reiniciar_bot_admin button {
+                    width: auto !important;
+                    min-width: 126px !important;
+                    height: 38px !important;
+                    padding: 0.35rem 0.8rem !important;
+                    border-radius: 9px !important;
+                    font-size: 0.82rem !important;
+                    font-weight: 600 !important;
+                    box-shadow: none !important;
+                    white-space: nowrap !important;
+                    transition: all 0.18s ease !important;
+                }
+                .st-key-btn_pausar_bot_admin button {
+                    color: #fbbf24 !important;
+                    border: 1px solid rgba(251, 191, 36, 0.38) !important;
+                    background: rgba(251, 191, 36, 0.08) !important;
+                }
+                .st-key-btn_pausar_bot_admin button:hover {
+                    background: rgba(251, 191, 36, 0.16) !important;
+                    border-color: #fbbf24 !important;
+                }
+                .st-key-btn_reanudar_bot_admin button {
+                    color: #34d399 !important;
+                    border: 1px solid rgba(52, 211, 153, 0.38) !important;
+                    background: rgba(52, 211, 153, 0.08) !important;
+                }
+                .st-key-btn_reanudar_bot_admin button:hover {
+                    background: rgba(52, 211, 153, 0.16) !important;
+                    border-color: #34d399 !important;
+                }
+                .st-key-btn_reiniciar_bot_admin button {
+                    color: #7dd3fc !important;
+                    border: 1px solid rgba(56, 189, 248, 0.38) !important;
+                    background: rgba(56, 189, 248, 0.08) !important;
+                }
+                .st-key-btn_reiniciar_bot_admin button:hover {
+                    background: rgba(56, 189, 248, 0.16) !important;
+                    border-color: #38bdf8 !important;
+                }
+            </style>
+            """, unsafe_allow_html=True)
+
+            col_status1, col_status2, col_status3 = st.columns([2.4, 1, 1], vertical_alignment="center")
 
             with col_status1:
                 if bot_pausado:
@@ -6208,20 +6254,20 @@ def renderizar_panel_admin():
 
             with col_status2:
                 if bot_pausado:
-                    if st.button("Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
+                    if st.button("▶ Reanudar", type="secondary", key="btn_reanudar_bot_admin", help="Reactivar el envío de alertas y mensajes"):
                         supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
                         st.success("Bot reanudado. Volverá a emitir alertas.")
                         time_lib.sleep(0.5)
                         st.rerun()
                 else:
-                    if st.button("Pausar Bot (Emergencia)", use_container_width=True, key="btn_pausar_bot_admin"):
+                    if st.button("Ⅱ Pausar", type="secondary", key="btn_pausar_bot_admin", help="Detener temporalmente los envíos del bot"):
                         supabase.table("config_notificaciones").update({"bot_activo": False}).eq("id", 1).execute()
                         st.warning("Bot pausado. No se enviarán mensajes ni alertas.")
                         time_lib.sleep(0.5)
                         st.rerun()
 
             with col_status3:
-                if st.button("Reiniciar Instancia Bot", use_container_width=True, key="btn_reiniciar_bot_admin"):
+                if st.button("↻ Reiniciar", type="secondary", key="btn_reiniciar_bot_admin", help="Enviar una orden de reinicio a Render"):
                     with st.spinner("Enviando orden de reinicio a Render..."):
                         try:
                             headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
