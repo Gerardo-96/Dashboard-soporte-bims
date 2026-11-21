@@ -70,6 +70,14 @@ st.markdown("""
         padding-block-start: 0 !important;
     }
 
+    /* Los cuatro bloques iniciales de inyección y el wrapper del sidebar
+       no tienen altura visible. Streamlit igualmente reserva 16px de gap
+       después de cada uno; se neutraliza solo esa separación inicial. */
+    div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"]:nth-child(-n+4),
+    div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] > div[data-testid="stLayoutWrapper"]:has(.st-key-bims_sidebar_panel) {
+        margin-block-end: -16px !important;
+    }
+
     /* Encabezado operativo fijo: el desplazamiento visual queda para pestañas y contenido. */
     .st-key-bims_dashboard_header {
         position: sticky !important;
