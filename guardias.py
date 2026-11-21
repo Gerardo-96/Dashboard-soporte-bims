@@ -108,56 +108,42 @@ def modal_calendario_guardias(supabase):
 
 
 def render_widget_guardia(supabase, usuario_actual_id=None):
-    """Tarjeta compacta de guardia ubicada debajo de la navegación principal."""
+    """Muestra una alerta discreta solo al usuario asignado a la próxima guardia hábil."""
+    if not usuario_actual_id:
+        return
+
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
     feriados_set = obtener_feriados_guardias(supabase)
 
-    res = (
-        supabase.table("guardias_sabado")
-        .select("id, fecha, usuarios_autorizados(id, nombre)")
-        .gte("fecha", hoy_py)
-        .order("fecha", desc=False)
-        .limit(6)
-        .execute()
-    )
-    proximas = [g for g in (res.data or []) if g["fecha"] not in feriados_set][:2]
-    if not proximas:
+    try:
+        res = (
+            supabase.table("guardias_sabado")
+            .select("fecha, usuarios_autorizados(id, nombre)")
+            .gte("fecha", hoy_py)
+            .order("fecha", desc=False)
+            .limit(30)
+            .execute()
+        )
+    except Exception:
         return
 
-    actual = proximas[0]
-    siguiente = proximas[1] if len(proximas) > 1 else None
-    agente_actual = actual["usuarios_autorizados"]["nombre"]
-    es_mi_turno = usuario_actual_id and (actual["usuarios_autorizados"]["id"] == usuario_actual_id)
-
-    borde_color = "#fbbf24" if es_mi_turno else "#38bdf8"
-    badge_turno = (
-        '<span style="background:rgba(251,191,36,0.15); color:#fbbf24; padding:1px 7px; '
-        'border-radius:10px; font-size:0.63rem; white-space:nowrap; flex-shrink:0;">¡Te toca!</span>'
-        if es_mi_turno else ""
+    # Identifica el primer sábado hábil; no alerta por turnos posteriores.
+    primera_proxima = next(
+        (
+            g for g in (res.data or [])
+            if g.get("fecha") not in feriados_set and g.get("usuarios_autorizados")
+        ),
+        None
     )
-    texto_siguiente = (
-        f"Próx. ({formatear_fecha_corta(siguiente['fecha'])}): <b>{siguiente['usuarios_autorizados']['nombre']}</b>"
-        if siguiente else "09:00 - 12:00 hs"
-    )
+    if not primera_proxima:
+        return
+    if primera_proxima["usuarios_autorizados"].get("id") != usuario_actual_id:
+        return
 
-    tarjeta_html = (
-        f'<div class="metric-card guardia-header-card" style="border-left: 4px solid {borde_color}; padding: 10px 16px; margin: 0;">'
-        f'<div class="metric-card-title" style="font-size: 0.66rem; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">'
-        f'<span style="white-space: nowrap;">GUARDIA {formatear_fecha_corta(actual["fecha"]).upper()} (09-12 HS)</span>'
-        f'{badge_turno}'
-        f'</div>'
-        f'<div style="font-size: 1.08rem; font-weight: 800; color: #f8fafc; margin-top: 3px; line-height: 1.2;">{agente_actual}</div>'
-        f'<div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px;">{texto_siguiente}</div>'
-        f'</div>'
-        f'<style>'
-        f'.metric-card.guardia-header-card, .metric-card.guardia-header-card:hover {{ transform: none !important; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.25) !important; }}'
-        f'div.st-key-btn_abrir_guardias button {{ width: 100% !important; min-height: 38px !important; font-size: 0.78rem !important; }}'
-        f'</style>'
-    )
-
-    col_guardia, col_accion = st.columns([5, 1.15], vertical_alignment="center", gap="small")
-    with col_guardia:
-        st.markdown(tarjeta_html, unsafe_allow_html=True)
-    with col_accion:
-        if st.button("Ver calendario", key="btn_abrir_guardias", use_container_width=True):
+    fecha = formatear_fecha_larga(primera_proxima["fecha"])
+    with st.popover("⚠️", help="Tienes asignada la próxima guardia", use_container_width=False):
+        st.markdown("**Tienes una guardia asignada**")
+        st.write(fecha)
+        st.caption("Horario: 09:00 a 12:00 hs")
+        if st.button("Ver calendario", key="btn_abrir_guardias_popover", use_container_width=True):
             modal_calendario_guardias(supabase)
