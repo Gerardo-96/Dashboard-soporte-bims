@@ -6228,29 +6228,30 @@ def renderizar_panel_admin():
 
             with col_status1:
                 if bot_pausado:
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #fbbf24;">
-                        <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                        <div class="metric-card-value" style="color: #fbbf24;">{icono_estado_svg("pausado", 24)} Pausado Manualmente</div>
-                        <div class="metric-card-sub">Alertas y envíos detenidos por administrador</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    color_estado = "#fbbf24"
+                    icono_estado = icono_estado_svg("pausado", 22)
+                    texto_estado = "Pausado manualmente"
+                    detalle_estado = "Alertas y envíos detenidos por administrador"
                 elif estado_bot == "OK":
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #10b981;">
-                        <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                        <div class="metric-card-value" style="color: #34d399;">{icono_estado_svg("disponible", 24)} Operativo ({wa_state})</div>
-                        <div class="metric-card-sub">Sesión activa y conectada</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    color_estado = "#34d399"
+                    icono_estado = icono_estado_svg("disponible", 22)
+                    texto_estado = f"Operativo ({wa_state})"
+                    detalle_estado = "Sesión activa y conectada"
                 else:
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left: 4px solid #ef4444;">
-                        <div class="metric-card-title">Estado del Bot WhatsApp</div>
-                        <div class="metric-card-value" style="color: #f87171;">{icono_estado_svg("desconectado", 24)} Desconectado ({wa_state})</div>
-                        <div class="metric-card-sub">El Auto-Healing intentará reconectar automáticamente</div>
+                    color_estado = "#f87171"
+                    icono_estado = icono_estado_svg("desconectado", 22)
+                    texto_estado = f"Desconectado ({wa_state})"
+                    detalle_estado = "El Auto-Healing intentará reconectar automáticamente"
+
+                st.markdown(f"""
+                <div style="padding: 8px 4px 8px 2px; display: flex; flex-direction: column; gap: 4px;">
+                    <div style="font-size: 0.76rem; color: #94a3b8; font-weight: 600; letter-spacing: 0.03em;">ESTADO DEL BOT WHATSAPP</div>
+                    <div style="display: flex; align-items: center; gap: 9px; color: {color_estado}; font-size: 1.08rem; font-weight: 700;">
+                        {icono_estado} <span>{texto_estado}</span>
                     </div>
-                    """, unsafe_allow_html=True)
+                    <div style="font-size: 0.78rem; color: #94a3b8;">{detalle_estado}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
             with col_status2:
                 if bot_pausado:
