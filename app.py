@@ -1938,8 +1938,6 @@ else:
 # PANEL LATERAL PROPIO BIMS
 # Sustituye el sidebar nativo por una columna integrada al dashboard.
 # ==========================================
-if "bims_sidebar_open" not in st.session_state:
-    st.session_state["bims_sidebar_open"] = True
 if "bims_filter_hour_enabled" not in st.session_state:
     st.session_state["bims_filter_hour_enabled"] = False
 if "act_sonido" not in st.session_state:
@@ -1949,23 +1947,68 @@ if "bims_hora_inicio" not in st.session_state:
 if "bims_hora_fin" not in st.session_state:
     st.session_state["bims_hora_fin"] = time(18, 0)
 
-_sidebar_abierto = st.session_state["bims_sidebar_open"]
-col_panel_bims, col_contenido_bims = st.columns(
-    [1.0, 4.0] if _sidebar_abierto else [0.18, 4.82],
-    gap="small"
-)
+# El panel se superpone al dashboard: el contenido nunca cambia de ancho.
+st.html("""
+<style>
+    .st-key-bims_sidebar_panel {
+        position: fixed !important; top: 0 !important; left: 0 !important; bottom: 0 !important;
+        width: 320px !important; max-width: min(88vw, 360px) !important; height: 100vh !important;
+        overflow-y: auto !important; overflow-x: hidden !important; box-sizing: border-box !important;
+        padding: 22px 18px 30px !important; margin: 0 !important; background: #0b1120 !important;
+        border-right: 1px solid #26364b !important; box-shadow: 18px 0 48px rgba(0,0,0,.34) !important;
+        z-index: 1000000 !important; transform: translate3d(0,0,0);
+        transition: transform .34s cubic-bezier(.22,.8,.25,1) !important; will-change: transform;
+    }
+    body:not(.bims-sidebar-open) .st-key-bims_sidebar_panel {
+        transform: translate3d(-105%,0,0) !important; box-shadow: none !important; pointer-events: none !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.st-key-bims_sidebar_panel) { gap: 0 !important; }
+    div[data-testid="stHorizontalBlock"]:has(.st-key-bims_sidebar_panel) > div[data-testid="column"]:first-child {
+        flex: 0 0 0px !important; width: 0 !important; min-width: 0 !important; padding: 0 !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.st-key-bims_sidebar_panel) > div[data-testid="column"]:last-child {
+        flex: 1 1 100% !important; width: 100% !important; min-width: 0 !important;
+    }
+    #bims-sidebar-toggle {
+        position: fixed; top: 14px; left: 270px; z-index: 1000001; width: 38px; height: 38px;
+        border: 1px solid #3b506b; border-radius: 10px; background: #17263a; color: #e2e8f0;
+        font-size: 19px; line-height: 1; cursor: pointer; box-shadow: 0 5px 18px rgba(0,0,0,.28);
+        transition: left .34s cubic-bezier(.22,.8,.25,1), background .2s ease, transform .2s ease;
+    }
+    #bims-sidebar-toggle:hover { background: #223954; transform: translateY(-1px); }
+    body:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
+    @media (max-width: 600px) {
+        .st-key-bims_sidebar_panel { width: 88vw !important; }
+        #bims-sidebar-toggle { left: calc(88vw - 52px); }
+        body:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .st-key-bims_sidebar_panel, #bims-sidebar-toggle { transition-duration: .01ms !important; }
+    }
+</style>
+<button id="bims-sidebar-toggle" type="button" aria-label="Ocultar panel" title="Ocultar panel">‹</button>
+<script>
+(function() {
+    const doc = window.parent.document;
+    const body = doc.body;
+    const button = doc.getElementById('bims-sidebar-toggle');
+    if (!body || !button || button.dataset.bimsBound === '1') return;
+    body.classList.add('bims-sidebar-open');
+    button.dataset.bimsBound = '1';
+    button.addEventListener('click', function() {
+        const open = body.classList.toggle('bims-sidebar-open');
+        button.textContent = open ? '‹' : '☰';
+        button.setAttribute('aria-label', open ? 'Ocultar panel' : 'Mostrar panel');
+        button.title = open ? 'Ocultar panel' : 'Mostrar panel';
+    });
+})();
+</script>
+""", unsafe_allow_javascript=True)
+
+col_panel_bims, col_contenido_bims = st.columns([0.001, 1], gap="small")
 
 with col_panel_bims:
-    if st.button(
-        "Ocultar ‹" if _sidebar_abierto else "☰",
-        key="btn_toggle_panel_bims",
-        use_container_width=True,
-        help="Mostrar u ocultar el panel de control"
-    ):
-        st.session_state["bims_sidebar_open"] = not _sidebar_abierto
-        st.rerun()
-
-    if _sidebar_abierto:
+    with st.container(key="bims_sidebar_panel"):
         st.markdown("### BIMS")
         st.caption("PANEL DE CONTROL")
         st.divider()
@@ -1977,7 +2020,7 @@ with col_panel_bims:
             # Obtiene el timestamp global del servidor (compartido por todos los clientes)
             ultima_sync_dt = obtener_timestamp_sync()
             sync_hace_str = obtener_tiempo_transcurrido(ultima_sync_dt)
-            
+        
             st.markdown(f"""
             <div class="db-info-box">
                 • <b>Última actividad:</b> {tiempo_hace_str}<br>
@@ -2001,7 +2044,7 @@ with col_panel_bims:
             @st.fragment
             def renderizar_selector_presencia_sidebar():
                 st.markdown("### Mi Estado:")
-                
+            
                 clave_sesion_away = f"estado_away_{email_usuario_sesion}"
                 clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
 
@@ -2123,13 +2166,13 @@ with col_panel_bims:
                     """, width=1, height=1)
 
             renderizar_selector_presencia_sidebar()
-            
+        
             # Separador compacto sin márgenes excesivos
             st.markdown(
                 '<hr style="margin: 8px 0 12px 0; border: none; border-top: 1px solid #334155;">',
                 unsafe_allow_html=True
             )
-                
+            
         st.markdown('<h3 style="margin-top: 0; padding-top: 0; font-size: 1.15rem;">Filtros de Consulta</h3>', unsafe_allow_html=True)
 
         usar_filtro_hora = st.checkbox("Restringir Franja Horaria", key="bims_filter_hour_enabled")
@@ -2153,7 +2196,7 @@ with col_panel_bims:
                 fin_mes = date(hoy.year, 12, 31)
             else:
                 fin_mes = date(hoy.year, hoy.month + 1, 1) - timedelta(days=1)
-                
+            
             st.session_state["input_f_desde"] = inicio_mes
             st.session_state["input_f_hasta"] = fin_mes
 
@@ -2165,7 +2208,7 @@ with col_panel_bims:
         with st.form("form_filtros"):
             st.caption("Rango de Fechas")
             f_col1, f_col2 = st.columns(2)
-            
+        
             val_desde = st.session_state.get("input_f_desde", hoy_local)
             val_hasta = st.session_state.get("input_f_hasta", hoy_local)
 
@@ -2205,7 +2248,7 @@ with col_panel_bims:
             df_reporte["Company"] = df_exp.get("company", "Sin datos")
             df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
             df_reporte["Por Agente"] = df_exp.get("por_agente", "")
-         
+     
             # 1. Evaluamos primero los SLA de 1ra Respuesta
             sla_norm_series = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
             sla_ext_series = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
@@ -2220,7 +2263,7 @@ with col_panel_bims:
                 df_reporte["Primera respuesta (min)"] = np.where(es_valido_1ra, prim_resp_raw, np.nan)
             else:
                 df_reporte["Primera respuesta (min)"] = None
-            
+        
             if "rating" in df_exp and not df_exp.empty:
                 df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
             else:
@@ -2237,7 +2280,7 @@ with col_panel_bims:
             df_reporte["Cliente"] = df_exp.get("cliente", "")
             df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
             df_reporte["Nivel"] = df_exp.get("nivel", "")
-            
+        
             # Evaluar SLA de Gestión primero
             sla_gest_series = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
             df_reporte["SLA Tiempo Gestion"] = sla_gest_series
@@ -2246,7 +2289,7 @@ with col_panel_bims:
             if not df_exp.empty:
                 minutos_raw = df_exp.get("tiempo_resolucion_minutos", pd.Series(dtype=float))
                 es_valido_gestion = sla_gest_series.isin(["cumple", "no cumple"])
-                
+            
                 df_reporte["Tiempo resolucion (min)"] = np.where(es_valido_gestion, minutos_raw, np.nan)
                 df_reporte["Tiempo resolucion (horas)"] = np.where(es_valido_gestion, (minutos_raw / 60.0).round(2), np.nan)
             else:
@@ -2265,7 +2308,7 @@ with col_panel_bims:
                 ])
                 df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
                 df_reporte.to_excel(writer, index=False, sheet_name="Detalle", startrow=6)
-                
+            
                 ws = writer.sheets["Detalle"]
                 for i, col in enumerate(df_reporte.columns, 1):
                     ws.column_dimensions[get_column_letter(i)].width = 24
@@ -2279,12 +2322,12 @@ with col_panel_bims:
         @st.dialog("Exportar Reporte a Excel")
         def modal_exportar_excel():
             st.caption("Selecciona el rango de fechas que deseas incluir en el archivo Excel:")
-            
+        
             col_d1, col_d2 = st.columns(2)
             hoy = obtener_fecha_local_hoy()
             f_exp_inicio = col_d1.date_input("Fecha Desde:", value=hoy, key="modal_exp_desde")
             f_exp_fin = col_d2.date_input("Fecha Hasta:", value=hoy, key="modal_exp_hasta")
-            
+        
             usar_hora_exp = st.checkbox("Restringir Franja Horaria en Excel", value=False)
             if usar_hora_exp:
                 col_h1, col_h2 = st.columns(2)
@@ -2294,13 +2337,13 @@ with col_panel_bims:
                 h_exp_ini, h_exp_fin = time(8, 0), time(18, 0)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            
+        
             if not df_all.empty and "fecha_solo" in df_all.columns:
                 df_exp_filt = df_all[
                     (df_all["fecha_solo"] >= pd.to_datetime(f_exp_inicio).date()) & 
                     (df_all["fecha_solo"] <= pd.to_datetime(f_exp_fin).date())
                 ].copy()
-                
+            
                 if usar_hora_exp and not df_exp_filt.empty:
                     df_exp_filt = df_exp_filt[
                         (df_exp_filt["hora_solo"] >= h_exp_ini) & 
@@ -2311,7 +2354,7 @@ with col_panel_bims:
 
             if not df_exp_filt.empty:
                 st.success(f" Se encontraron **{len(df_exp_filt)} registros** para el rango seleccionado.")
-                
+            
                 excel_bytes = generar_excel_reporte(
                     df_exp_filt, 
                     f_exp_inicio, 
@@ -2320,7 +2363,7 @@ with col_panel_bims:
                     h_exp_ini, 
                     h_exp_fin
                 )
-                
+            
                 st.download_button(
                     label=" Descargar Archivo Excel",
                     data=excel_bytes,
@@ -2404,24 +2447,13 @@ with col_panel_bims:
             # El listener muestra el overlay de inmediato. Esta limpieza adicional
             # evita que una sesión antigua de localStorage vuelva a autenticarse.
             st.query_params.clear()
-            
+        
             st.session_state["user_authenticated"] = False
             st.session_state["user_email"] = ""
             if "admin_authenticated" in st.session_state:
                 st.session_state["admin_authenticated"] = False
-                
+            
             st.rerun()
-
-    else:
-        # Los valores permanecen disponibles para todos los cálculos del dashboard.
-        fecha_desde = st.session_state.get("input_f_desde", hoy_local)
-        fecha_hasta = st.session_state.get("input_f_hasta", hoy_local)
-        usar_filtro_hora = bool(st.session_state.get("bims_filter_hour_enabled", False))
-        hora_inicio = st.session_state.get("bims_hora_inicio", time(8, 0))
-        hora_fin = st.session_state.get("bims_hora_fin", time(18, 0))
-        act_sonido = bool(st.session_state.get("act_sonido", True))
-        st.session_state["f_desde_key"] = fecha_desde
-        st.session_state["f_hasta_key"] = fecha_hasta
 
 with col_contenido_bims:
     # ==========================================
