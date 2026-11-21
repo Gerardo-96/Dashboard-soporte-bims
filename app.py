@@ -89,7 +89,7 @@ st.markdown("""
         z-index: 1100 !important;
         background: #0b1120 !important;
         /* Reserva espacio para el botón flotante y la navegación inferior. */
-        padding: 5px max(1rem, calc((100vw - 1600px) / 2)) 0 76px !important;
+        padding: 5px max(1rem, calc((100vw - 1600px) / 2)) 0 88px !important;
         margin: 0 !important;
         min-height: 104px !important;
         border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
@@ -2898,39 +2898,47 @@ tabs_creadas = st.tabs(titulos_tabs)
 
 # Integra la navegación real de Streamlit dentro de la cabecera fija.
 # Se conserva el nodo original para mantener los eventos y el estado de las pestañas.
-st.html("""
+# Ejecuta el traslado desde un iframe same-origin, igual que el control lateral BIMS.
+# El observador permanece activo para recuperar la navegación si Streamlit reconstruye el DOM.
+st.iframe("""
 <script>
 (function () {
-    const doc = window.parent.document;
-    const selector = 'div[data-testid="stTabs"] [data-baseweb="tab-list"]';
-    const headerSelector = '.st-key-bims_dashboard_header';
-    const placeholderId = 'bims-fixed-tabs-placeholder';
+    try {
+        const doc = window.parent.document;
+        const headerSelector = '.st-key-bims_dashboard_header';
+        const tabSelector = '.stTabs [data-baseweb="tab-list"]';
+        const placeholderId = 'bims-fixed-tabs-placeholder';
 
-    function integrarNavegacion() {
-        const header = doc.querySelector(headerSelector);
-        const headerInner = header && header.querySelector('[data-testid="stVerticalBlock"]');
-        const tabList = doc.querySelector(selector);
-        if (!headerInner || !tabList) return;
+        function integrarNavegacion() {
+            const header = doc.querySelector(headerSelector);
+            const headerInner = header && header.querySelector('[data-testid="stVerticalBlock"]');
+            const tabList = doc.querySelector(tabSelector);
+            if (!headerInner || !tabList) return;
 
-        let placeholder = doc.getElementById(placeholderId);
-        if (!placeholder) {
-            placeholder = doc.createElement('div');
-            placeholder.id = placeholderId;
-            tabList.parentNode.insertBefore(placeholder, tabList);
+            let placeholder = doc.getElementById(placeholderId);
+            if (!placeholder) {
+                placeholder = doc.createElement('div');
+                placeholder.id = placeholderId;
+                const tabsWrapper = tabList.closest('.stTabs');
+                if (tabsWrapper && tabsWrapper.parentNode) {
+                    tabsWrapper.parentNode.insertBefore(placeholder, tabsWrapper);
+                }
+            }
+
+            if (tabList.parentNode !== headerInner) {
+                headerInner.appendChild(tabList);
+            }
         }
 
-        if (tabList.parentNode !== headerInner) {
-            headerInner.appendChild(tabList);
-        }
+        integrarNavegacion();
+        const observer = new MutationObserver(integrarNavegacion);
+        observer.observe(doc.body, { childList: true, subtree: true });
+    } catch (error) {
+        console.error('BIMS: no se pudo integrar la navegación fija', error);
     }
-
-    integrarNavegacion();
-    const observer = new MutationObserver(integrarNavegacion);
-    observer.observe(doc.body, { childList: true, subtree: true });
-    setTimeout(() => observer.disconnect(), 15000);
 })();
 </script>
-""", unsafe_allow_javascript=True)
+""", width=1, height=1)
 
 
 # Mapear las pestañas a variables de forma segura
