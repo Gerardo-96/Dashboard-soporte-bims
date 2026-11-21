@@ -265,21 +265,44 @@ st.markdown("""
     }
 
 
-    /* Oculta las barras de desplazamiento, pero conserva el scroll con rueda/trackpad. */
-    section[data-testid="stMain"],
-    section[data-testid="stMain"] *,
+    /* El scroll permanece operativo, pero ninguna zona muestra la barra visual. */
+    html, body,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stAppViewBlockContainer"],
     .st-key-bims_sidebar_panel,
-    .st-key-bims_sidebar_panel * {
+    html *, body * {
         scrollbar-width: none !important;
         -ms-overflow-style: none !important;
     }
-    section[data-testid="stMain"]::-webkit-scrollbar,
-    section[data-testid="stMain"] *::-webkit-scrollbar,
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar,
+    [data-testid="stAppViewContainer"]::-webkit-scrollbar,
+    [data-testid="stMain"]::-webkit-scrollbar,
+    [data-testid="stMainBlockContainer"]::-webkit-scrollbar,
+    [data-testid="stAppViewBlockContainer"]::-webkit-scrollbar,
     .st-key-bims_sidebar_panel::-webkit-scrollbar,
-    .st-key-bims_sidebar_panel *::-webkit-scrollbar {
+    html *::-webkit-scrollbar,
+    body *::-webkit-scrollbar {
         display: none !important;
         width: 0 !important;
         height: 0 !important;
+    }
+
+    /* Encabezado y navegación permanecen visibles durante el desplazamiento. */
+    .st-key-bims_dashboard_header {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 950 !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        position: sticky !important;
+        top: 56px !important;
+        z-index: 940 !important;
+        background: #0b1120 !important;
+        padding-top: 2px !important;
+        box-shadow: 0 5px 12px rgba(0,0,0,.16) !important;
     }
 
 </style>
@@ -1722,10 +1745,11 @@ st.markdown("""
 
     /* Navegación más limpia, manteniendo las pestañas y sus permisos. */
     div[data-testid="stElementContainer"]:has(.stTabs) {
-        margin-top: -14px !important;
+        margin-top: -8px !important;
     }
     .stTabs {
         margin-top: 0 !important;
+        position: relative !important;
     }
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.35rem;
@@ -2798,17 +2822,7 @@ with st.container(key="bims_dashboard_header"):
     </div>
     """
 
-    col_header_izq, col_header_der = st.columns([2.2, 1], vertical_alignment="center")
-
-    with col_header_izq:
-        st.html(badge_html)
-
-    with col_header_der:
-        usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
-        render_widget_guardia(
-            supabase=supabase,
-            usuario_actual_id=usuario_id_actual
-        )
+    st.html(badge_html)
 
 
 # 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
@@ -2836,6 +2850,13 @@ titulos_tabs.append("FAQ")
 
 # 3. Crear las pestañas
 tabs_creadas = st.tabs(titulos_tabs)
+
+# La tarjeta de guardia queda debajo de la navegación, fuera del encabezado fijo.
+usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
+render_widget_guardia(
+    supabase=supabase,
+    usuario_actual_id=usuario_id_actual
+)
 
 # Mapear las pestañas a variables de forma segura
 idx = 0
