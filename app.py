@@ -61,6 +61,21 @@ st.markdown("""
         padding-block-start: 0 !important;
     }
 
+    /* Encabezado operativo fijo: el desplazamiento visual queda para pestañas y contenido. */
+    .st-key-bims_dashboard_header {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 900 !important;
+        background: linear-gradient(180deg, #0b1120 0%, #0b1120 88%, rgba(11,17,32,.97) 100%) !important;
+        padding: 4px 0 9px !important;
+        margin: 0 0 2px 0 !important;
+        border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, .12) !important;
+    }
+    .st-key-bims_dashboard_header [data-testid="stVerticalBlock"] {
+        gap: .35rem !important;
+    }
+
     /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
     section[data-testid="stSidebar"],
     [data-testid="stSidebarCollapsedControl"] {
@@ -2582,133 +2597,134 @@ with st.container(key="bims_sidebar_panel"):
         st.rerun()
 
 with st.container():
+    with st.container(key="bims_dashboard_header"):
+        # ==========================================
+        # INDICADOR DE ESTADO EN VIVO (CABECERA)
+        # ==========================================
+        # ==========================================
+        @st.cache_data(ttl=120, show_spinner=False)
+        def obtener_estado_bot_salud():
+            try:
+                url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
+                url_salud = f"{url_base}/health-status"
+                res = requests.get(url_salud, timeout=1.5)
+                if res.status_code == 200:
+                    data = res.json()
+                    online = data.get("status_general") == "OK"
+                    state = data.get("whatsapp_state", "desconectado")
+                    return online, state
+            except Exception:
+                pass
+            return False, "offline"
 
-    # ==========================================
-    # INDICADOR DE ESTADO EN VIVO (CABECERA)
-    # ==========================================
-    @st.cache_data(ttl=120, show_spinner=False)
-    def obtener_estado_bot_salud():
-        try:
-            url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
-            url_salud = f"{url_base}/health-status"
-            res = requests.get(url_salud, timeout=1.5)
-            if res.status_code == 200:
-                data = res.json()
-                online = data.get("status_general") == "OK"
-                state = data.get("whatsapp_state", "desconectado")
-                return online, state
-        except Exception:
-            pass
-        return False, "offline"
+        bot_online, bot_state = obtener_estado_bot_salud()
 
-    bot_online, bot_state = obtener_estado_bot_salud()
-
-    # Estilos CSS de pulso sutil tipo "radar"
-    st.html("""
-    <style>
-    @keyframes bimsPing {
-        75%, 100% {
-            transform: scale(2.2);
-            opacity: 0;
+        # Estilos CSS de pulso sutil tipo "radar"
+        st.html("""
+        <style>
+        @keyframes bimsPing {
+            75%, 100% {
+                transform: scale(2.2);
+                opacity: 0;
+            }
         }
-    }
-    .bims-pulse-container {
-        position: relative;
-        display: inline-flex;
-        width: 9px;
-        height: 9px;
-        margin-right: 3px;
-    }
-    .bims-pulse-ring {
-        position: absolute;
-        inset: 0;
-        border-radius: 50%;
-        animation: bimsPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
-    }
-    .bims-pulse-dot {
-        position: relative;
-        display: inline-flex;
-        border-radius: 50%;
-        width: 9px;
-        height: 9px;
-    }
-    </style>
-    """)
+        .bims-pulse-container {
+            position: relative;
+            display: inline-flex;
+            width: 9px;
+            height: 9px;
+            margin-right: 3px;
+        }
+        .bims-pulse-ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            animation: bimsPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        .bims-pulse-dot {
+            position: relative;
+            display: inline-flex;
+            border-radius: 50%;
+            width: 9px;
+            height: 9px;
+        }
+        </style>
+        """)
 
-    periodo_header = (
-        f"{fecha_desde.strftime('%d %b %Y')} — {fecha_hasta.strftime('%d %b %Y')}"
-        if fecha_desde != fecha_hasta
-        else fecha_desde.strftime("%d %b %Y")
-    )
-
-    if bot_online:
-        estado_bot_html = """
-            <span style="
-                background: rgba(6, 95, 70, 0.25);
-                color: #34d399;
-                border: 1px solid rgba(5, 150, 105, 0.55);
-                padding: 4px 10px;
-                border-radius: 20px;
-                font-size: 0.76rem;
-                font-weight: 600;
-                display: inline-flex;
-                align-items: center;
-                gap: 7px;
-                white-space: nowrap;">
-                <span class="bims-pulse-container">
-                    <span class="bims-pulse-ring" style="background-color: #34d399;"></span>
-                    <span class="bims-pulse-dot" style="background-color: #10b981;"></span>
-                </span>
-                Bot Operativo
-            </span>
-        """
-    else:
-        estado_bot_html = """
-            <span style="
-                background: rgba(127, 29, 29, 0.25);
-                color: #f87171;
-                border: 1px solid rgba(220, 38, 38, 0.55);
-                padding: 4px 10px;
-                border-radius: 20px;
-                font-size: 0.76rem;
-                font-weight: 600;
-                display: inline-flex;
-                align-items: center;
-                gap: 7px;
-                white-space: nowrap;">
-                <span class="bims-pulse-container">
-                    <span class="bims-pulse-ring" style="background-color: #f87171;"></span>
-                    <span class="bims-pulse-dot" style="background-color: #ef4444;"></span>
-                </span>
-                Bot Desconectado
-            </span>
-        """
-
-    badge_html = f"""
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; margin:0; min-height:58px;">
-        <div style="min-width:0;">
-            <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
-                Dashboard Soporte BIMS
-            </h1>
-            <div style="font-size:0.72rem; color:#94a3b8; margin-top:5px; letter-spacing:0.04em;">
-                PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
-            </div>
-        </div>
-        {estado_bot_html}
-    </div>
-    """
-
-    col_header_izq, col_header_der = st.columns([2.2, 1], vertical_alignment="center")
-
-    with col_header_izq:
-        st.html(badge_html)
-
-    with col_header_der:
-        usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
-        render_widget_guardia(
-            supabase=supabase,
-            usuario_actual_id=usuario_id_actual
+        periodo_header = (
+            f"{fecha_desde.strftime('%d %b %Y')} — {fecha_hasta.strftime('%d %b %Y')}"
+            if fecha_desde != fecha_hasta
+            else fecha_desde.strftime("%d %b %Y")
         )
+
+        if bot_online:
+            estado_bot_html = """
+                <span style="
+                    background: rgba(6, 95, 70, 0.25);
+                    color: #34d399;
+                    border: 1px solid rgba(5, 150, 105, 0.55);
+                    padding: 4px 10px;
+                    border-radius: 20px;
+                    font-size: 0.76rem;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 7px;
+                    white-space: nowrap;">
+                    <span class="bims-pulse-container">
+                        <span class="bims-pulse-ring" style="background-color: #34d399;"></span>
+                        <span class="bims-pulse-dot" style="background-color: #10b981;"></span>
+                    </span>
+                    Bot Operativo
+                </span>
+            """
+        else:
+            estado_bot_html = """
+                <span style="
+                    background: rgba(127, 29, 29, 0.25);
+                    color: #f87171;
+                    border: 1px solid rgba(220, 38, 38, 0.55);
+                    padding: 4px 10px;
+                    border-radius: 20px;
+                    font-size: 0.76rem;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 7px;
+                    white-space: nowrap;">
+                    <span class="bims-pulse-container">
+                        <span class="bims-pulse-ring" style="background-color: #f87171;"></span>
+                        <span class="bims-pulse-dot" style="background-color: #ef4444;"></span>
+                    </span>
+                    Bot Desconectado
+                </span>
+            """
+
+        badge_html = f"""
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; margin:0; min-height:50px;">
+            <div style="min-width:0;">
+                <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
+                    Dashboard Soporte BIMS
+                </h1>
+                <div style="font-size:0.72rem; color:#94a3b8; margin-top:5px; letter-spacing:0.04em;">
+                    PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
+                </div>
+            </div>
+            {estado_bot_html}
+        </div>
+        """
+
+        col_header_izq, col_header_der = st.columns([2.2, 1], vertical_alignment="center")
+
+        with col_header_izq:
+            st.html(badge_html)
+
+        with col_header_der:
+            usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
+            render_widget_guardia(
+                supabase=supabase,
+                usuario_actual_id=usuario_id_actual
+            )
 
     # 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
     usuario_actual = st.session_state.get("usuario_conectado") or st.session_state.get("user_email", "")
