@@ -6152,15 +6152,9 @@ def renderizar_panel_admin():
         # ==========================================
         # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
         # ==========================================
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Estado y Control de Evolución API (WhatsApp Bot)</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Monitoreo del servicio de notificaciones y reinicio forzado en Render.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Estado y Control de Evolución API (WhatsApp Bot)")
+            st.caption("Monitoreo del servicio de notificaciones y reinicio forzado en Render.")
 
             # Consulta de salud y estado de pausa del bot
             estado_bot = "CRITICAL"
@@ -6213,7 +6207,7 @@ def renderizar_panel_admin():
                     """, unsafe_allow_html=True)
 
             with col_status2:
-                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("")
                 if bot_pausado:
                     if st.button("Reanudar Bot", use_container_width=True, key="btn_reanudar_bot_admin"):
                         supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
@@ -6243,27 +6237,14 @@ def renderizar_panel_admin():
                         except Exception as ex_r:
                             st.error(f"Error al comunicar con la API: {ex_r}")
 
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Criterios de Cálculo de Tiempos y SLA</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; line-height:1.6; margin-bottom:0;">
-                    <b>• Promedio en Pantalla (Dashboard):</b> Se calcula haciendo la media (<code>mean</code>) de los minutos de primera respuesta y gestión de chats válidos (<code>por_agente == 'no excluido'</code>) creados dentro de la jornada operativa (<code>horario_evaluado != 'fuera de horario'</code>).<br>
-                    <b>• Evaluación de SLA en Excel:</b> Aplica la regla estricta de <b>Lunes a Viernes de 08:00 a 17:00 hs</b>. En la gestión, se descartan automáticamente los chats que contengan la etiqueta <i>"sin respuesta"</i> marcándolos como <i>"excluido por filtro"</i>.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Criterios de Cálculo de Tiempos y SLA")
+            st.caption("• Promedio en Pantalla (Dashboard): Se calcula haciendo la media (mean) de los minutos de primera respuesta y gestión de chats válidos (por_agente == 'no excluido') creados dentro de la jornada operativa (horario_evaluado != 'fuera de horario'). • Evaluación de SLA en Excel: Aplica la regla estricta de Lunes a Viernes de 08:00 a 17:00 hs. En la gestión, se descartan automáticamente los chats que contengan la etiqueta \"sin respuesta\" marcándolos como \"excluido por filtro\".")
 
     with admin_tabs[1]:
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Sincronización de conversaciones</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    El proceso se ejecuta en un <b>hilo paralelo libre de desconexión</b>.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Sincronización de conversaciones")
+            st.caption("El proceso se ejecuta en un hilo paralelo libre de desconexión.")
 
             total_registros_db = obtener_total_registros_db()
 
@@ -6357,29 +6338,24 @@ def renderizar_panel_admin():
                     st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
 
     with admin_tabs[2]:
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Parámetros generales del dashboard</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.</p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Parámetros generales del dashboard")
+            st.caption("Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.")
 
-            col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+            col_cfg1, col_cfg2 = st.columns(2, gap="large")
 
             with col_cfg1:
-                st.markdown("<b>Refresco Automatico</b>", unsafe_allow_html=True)
-                cfg_auto = st.checkbox("Activar Autorefresh por defecto", value=st.session_state["auto_refresh"])
-                cfg_interval = st.number_input("Intervalo predeterminado (segundos):", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
+                st.markdown("**Actualización automática**")
+                cfg_auto = st.checkbox("Activar actualización automática", value=st.session_state["auto_refresh"])
+                cfg_interval = st.number_input("Intervalo de actualización (segundos)", min_value=3, max_value=60, value=st.session_state["refresh_interval"])
 
             with col_cfg2:
-                st.markdown("<b>Umbrales de SLA (Minutos)</b>", unsafe_allow_html=True)
-                cfg_sla_1ra = st.number_input("SLA Primera Respuesta (min):", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
-                cfg_sla_gest = st.number_input("SLA Tiempo de Gestion (min):", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
+                st.markdown("**Objetivos de SLA**")
+                cfg_sla_1ra = st.number_input("Primera respuesta (minutos)", min_value=0.5, max_value=30.0, value=float(st.session_state["sla_1ra_th"]), step=0.5)
+                cfg_sla_gest = st.number_input("Tiempo de gestión (minutos)", min_value=5.0, max_value=480.0, value=float(st.session_state["sla_gest_th"]), step=5.0)
 
-            with col_cfg3:
-                st.markdown("<b>Alerta de Chat Nuevo</b>", unsafe_allow_html=True)
-                cfg_alerta_nuevo = st.number_input("Disparar Alerta tras (min sin responder):", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
+            st.markdown("**Alerta de chat nuevo**")
+            cfg_alerta_nuevo = st.number_input("Alertar tras (minutos sin responder)", min_value=0.5, max_value=60.0, value=float(st.session_state["alerta_nuevo_th"]), step=0.5)
 
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Guardar Configuración de Parámetros", use_container_width=True):
@@ -6392,20 +6368,16 @@ def renderizar_panel_admin():
                 st.rerun()
 
     with admin_tabs[3]:
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Usuarios autorizados</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.</p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Usuarios autorizados")
+            st.caption("Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.")
 
             with st.expander("Crear Nuevo Usuario Autorizado", expanded=False):
                 with st.form("form_nuevo_usuario"):
-                    col_u1, col_u2, col_u3 = st.columns(3)
-                    n_nombre = col_u1.text_input("Nombre / Agente:")
-                    n_email = col_u2.text_input("Correo Electronico:")
-                    n_pass = col_u3.text_input("Contraseña de Acceso:")
+                    col_u1, col_u2 = st.columns(2, gap="large")
+                    n_nombre = col_u1.text_input("Nombre del usuario")
+                    n_email = col_u2.text_input("Correo electrónico")
+                    n_pass = st.text_input("Contraseña de acceso", type="password")
                     btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
 
                     if btn_crear_u:
@@ -6461,15 +6433,9 @@ def renderizar_panel_admin():
 
         # ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Teléfonos de WhatsApp de los agentes</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Teléfonos de WhatsApp de los agentes")
+            st.caption("Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.")
 
             try:
                 res_usrs = supabase.table("usuarios_autorizados").select("id, nombre, email, telefono_whatsapp").order("nombre").execute()
@@ -6511,15 +6477,9 @@ def renderizar_panel_admin():
     with admin_tabs[4]:
         # GESTIÓN DINÁMICA DE MOTIVOS CSAT
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Motivos de clasificación CSAT</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Crea y desactiva los motivos que se muestran al categorizar chats negativos.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Motivos de clasificación CSAT")
+            st.caption("Crea y desactiva los motivos que se muestran al categorizar chats negativos.")
 
             # Formulario para agregar nuevo motivo
             with st.form("form_nuevo_motivo_csat"):
@@ -6586,15 +6546,9 @@ def renderizar_panel_admin():
 
         # GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Notificaciones y alertas</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Notificaciones y alertas")
+            st.caption("Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.")
 
             try:
                 res_cfg = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
@@ -6608,19 +6562,19 @@ def renderizar_panel_admin():
                 hora_val = time(18, 0)
 
             with st.form("form_config_notificaciones"):
-                st.markdown("##### Reporte Diario por Correo")
+                st.markdown("**Reporte diario por correo**")
                 col_e1, col_e2 = st.columns(2)
                 v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
                 v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
 
                 st.markdown("---")
-                st.markdown("##### Alerta Individual de Chat Sin Responder")
+                st.markdown("**Alerta individual de chat sin responder**")
                 col_w1, col_w2 = st.columns(2)
                 v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
                 v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
 
                 st.markdown("---")
-                st.markdown("##### Alerta Grupal por Antigüedad de Chats")
+                st.markdown("**Alerta grupal por antigüedad de chats**")
                 col_g1, col_g2 = st.columns(2)
                 v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
                 v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
@@ -6647,15 +6601,9 @@ def renderizar_panel_admin():
     with admin_tabs[5]:
         # GESTIÓN DINÁMICA DE FERIADOS
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.container():
-            st.markdown("""
-            <div class="admin-card">
-                <h4 style="margin-top:0; color:#38bdf8;">Calendario de Feriados Oficiales & Móviles</h4>
-                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:15px;">
-                    Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### Calendario de Feriados Oficiales & Móviles")
+            st.caption("Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.")
 
             feriados_actuales = obtener_feriados_activos()
 
