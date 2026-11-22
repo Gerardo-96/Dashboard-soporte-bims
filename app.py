@@ -279,46 +279,51 @@ st.markdown("""
         }
     }
 
-    /* KPI de 5 o más tarjetas: conservar escritorio y reorganizar solo tablet/móvil. */
+    /* Reorganiza las filas que contienen tarjetas KPI.
+       No se depende del número exacto de columnas: Streamlit puede variar
+       los wrappers internos entre versiones. Escritorio permanece intacto. */
     @media (max-width: 1100px) {
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             display: flex !important;
             flex-wrap: wrap !important;
             align-items: stretch !important;
             gap: 0.75rem !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) > div[data-testid="column"] {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div {
             flex: 0 0 calc((100% - 1.5rem) / 3) !important;
             width: calc((100% - 1.5rem) / 3) !important;
+            max-width: calc((100% - 1.5rem) / 3) !important;
             min-width: 0 !important;
         }
     }
 
     @media (max-width: 600px) {
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             gap: 0.65rem !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) > div[data-testid="column"] {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div {
             flex: 0 0 calc((100% - 0.65rem) / 2) !important;
             width: calc((100% - 0.65rem) / 2) !important;
+            max-width: calc((100% - 0.65rem) / 2) !important;
             min-width: 0 !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) .metric-card {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
             min-height: 112px !important;
+            height: auto !important;
             padding: 13px 12px !important;
             box-sizing: border-box !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) .metric-card-title {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-title {
             font-size: 0.64rem !important;
             line-height: 1.3 !important;
             overflow-wrap: anywhere;
         }
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) .metric-card-value {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-value {
             font-size: clamp(1.15rem, 5vw, 1.5rem) !important;
             line-height: 1.15 !important;
             overflow-wrap: anywhere;
         }
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(5)):has(.metric-card) .metric-card-sub {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-sub {
             font-size: 0.68rem !important;
             line-height: 1.3 !important;
             overflow-wrap: anywhere;
