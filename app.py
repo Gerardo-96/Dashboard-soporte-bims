@@ -147,10 +147,44 @@ st.markdown("""
         padding: 0 !important;
     }
 
-    /* Reduce el espacio que Streamlit reserva entre el título y el gráfico de evolución CSAT. */
+    /* Mantiene una separación mínima sin permitir que el gráfico invada el título CSAT. */
     div[data-testid="stElementContainer"]:has(.bims-csat-evo-title) {
-        margin-block-end: -16px !important;
+        margin-block-end: 0 !important;
         padding-block-end: 0 !important;
+    }
+
+    /* Alineación homogénea para tarjetas KPI que comparten una fila. */
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+        align-items: stretch !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+        display: flex !important;
+        align-items: stretch !important;
+        min-width: 0 !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) [data-testid="stVerticalBlock"] {
+        width: 100% !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+        height: 100% !important;
+        min-height: 128px !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+    }
+
+    /* KPI de WBR: superficie limpia, sin bordes ni sombras y con aire antes del gráfico. */
+    .bims-wbr-ext-kpi {
+        background: #151f30 !important;
+        border: 0 !important;
+        border-left: 0 !important;
+        border-radius: 10px !important;
+        box-shadow: none !important;
+        margin-bottom: 18px !important;
+        min-height: 105px !important;
+        box-sizing: border-box !important;
     }
 
     /* Oculta la barra flotante de Plotly (Modebar) en todos los gráficos */
@@ -6188,7 +6222,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
 
     with col_ext_pie:
         st.markdown(f"""
-        <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #38bdf8; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+        <div class="bims-wbr-ext-kpi" style="padding: 14px 20px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
             <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS CERRADOS EN HORARIO EXTENDIDO</div>
             <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext_cerrados}</div>
             <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{cerrados_hum_ext}</b> por humanos | <b>{cerrados_ia_ext}</b> por Mónica</div>
@@ -6234,7 +6268,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
 
     with col_ext_dias:
         st.markdown(f"""
-        <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; border-left: 4px solid #10b981; padding: 14px 20px; text-align: center; height: 105px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+        <div class="bims-wbr-ext-kpi" style="padding: 14px 20px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
             <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS INGRESADOS EN EXTENDIDO</div>
             <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
             <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b> chats</div>
