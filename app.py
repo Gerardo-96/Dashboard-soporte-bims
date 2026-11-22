@@ -330,6 +330,44 @@ st.markdown("""
         }
     }
 
+    /* Sistema visual unificado para gráficos Plotly.
+       Se conserva la altura definida por cada visualización según su contenido. */
+    div[data-testid="stElementContainer"]:has(> div[data-testid="stPlotlyChart"]) {
+        margin-block: 5px 13px !important;
+    }
+    div[data-testid="stPlotlyChart"] {
+        box-sizing: border-box !important;
+        background: var(--bims-surface, #151f30) !important;
+        border: 1px solid var(--bims-border, #2b3a50) !important;
+        border-radius: 12px !important;
+        padding: 5px 7px 2px !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="stPlotlyChart"] .js-plotly-plot,
+    div[data-testid="stPlotlyChart"] .plot-container {
+        border-radius: 8px !important;
+    }
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .gtitle {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.02em !important;
+    }
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .xtick text,
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .ytick text,
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .legend text {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+    }
+
+    @media (max-width: 600px) {
+        div[data-testid="stElementContainer"]:has(> div[data-testid="stPlotlyChart"]) {
+            margin-block: 3px 10px !important;
+        }
+        div[data-testid="stPlotlyChart"] {
+            padding: 3px 2px 1px !important;
+            border-radius: 10px !important;
+        }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) * {
             scroll-behavior: auto !important;
