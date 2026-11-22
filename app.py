@@ -341,11 +341,25 @@ st.markdown("""
         box-shadow: none !important;
     }
     .stTabs, div[data-testid="stTabs"] { padding-top: 0 !important; }
+    .bims-mobile-bot-dot {
+        display: none;
+    }
     @media (max-width: 600px) {
         .st-key-bims_dashboard_header {
             padding-left: 64px !important;
             padding-right: .75rem !important;
             min-height: 128px !important;
+        }
+        /* Indicador mínimo de estado junto al título, sin ocupar otra fila. */
+        .st-key-bims_dashboard_header .bims-mobile-bot-dot {
+            display: inline-block !important;
+            width: 7px !important;
+            height: 7px !important;
+            margin-left: 5px !important;
+            border-radius: 50% !important;
+            vertical-align: middle !important;
+            background: var(--bims-bot-dot-color) !important;
+            box-shadow: 0 0 7px var(--bims-bot-dot-color) !important;
         }
         /* El estado del bot se conserva en escritorio, pero se oculta en móvil
            para liberar espacio y compactar la cabecera. */
@@ -2998,7 +3012,7 @@ with st.container(key="bims_dashboard_header"):
     <div style="display:flex; align-items:center; min-width:0; min-height:50px;">
         <div style="min-width:0;">
             <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
-                Dashboard Soporte BIMS
+                Dashboard Soporte BIMS <span class="bims-mobile-bot-dot" style="--bims-bot-dot-color: {"#10b981" if bot_online else "#ef4444"};"></span>
             </h1>
             <div style="font-size:0.72rem; color:#94a3b8; margin-top:5px; letter-spacing:0.04em;">
                 PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
