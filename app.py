@@ -175,16 +175,38 @@ st.markdown("""
         justify-content: space-between !important;
     }
 
-    /* KPI de WBR: superficie limpia, sin bordes ni sombras y con aire antes del gráfico. */
+    /* KPI de horario extendido: mismo lenguaje visual que las demás metric-card. */
     .bims-wbr-ext-kpi {
-        background: #151f30 !important;
-        border: 0 !important;
-        border-left: 0 !important;
-        border-radius: 10px !important;
-        box-shadow: none !important;
-        margin-bottom: 18px !important;
-        min-height: 105px !important;
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.28) !important;
+        margin: 0 0 20px 0 !important;
+        min-height: 112px !important;
         box-sizing: border-box !important;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease !important;
+    }
+    .bims-wbr-ext-kpi:hover {
+        transform: translateY(-2px) !important;
+        border-color: rgba(56, 189, 248, 0.48) !important;
+        box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(56, 189, 248, 0.08) !important;
+    }
+
+    .bims-wbr-chart-summary {
+        min-height: 108px !important;
+        height: 108px !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 14px 18px !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+        box-shadow: 0 3px 10px -3px rgba(0, 0, 0, 0.25) !important;
+        text-align: center !important;
+        line-height: 1.5 !important;
     }
 
     /* Oculta la barra flotante de Plotly (Modebar) en todos los gráficos */
@@ -3980,7 +4002,6 @@ with tab_operativo:
             """
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown('<div class="bims-sla-kpi-anchor"></div>', unsafe_allow_html=True)
         k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
         k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
         k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card), unsafe_allow_html=True)
@@ -5458,7 +5479,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
 
         st.markdown(f"""
-        <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+        <div class="bims-wbr-chart-summary" style="font-size: 0.88rem;">
             <div><b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)</div>
             <div>SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b></div>
         </div>
@@ -5491,7 +5512,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
 
         st.markdown(f"""
-        <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+        <div class="bims-wbr-chart-summary" style="font-size: 0.88rem;">
             <div><b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)</div>
             <div>SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b> <span style="font-size: 0.74rem; color: #94a3b8;">(Sin horario extendido)</span></div>
         </div>
