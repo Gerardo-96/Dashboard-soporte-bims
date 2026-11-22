@@ -345,7 +345,12 @@ st.markdown("""
         .st-key-bims_dashboard_header {
             padding-left: 64px !important;
             padding-right: .75rem !important;
-            min-height: 146px !important;
+            min-height: 128px !important;
+        }
+        /* El estado del bot se conserva en escritorio, pero se oculta en móvil
+           para liberar espacio y compactar la cabecera. */
+        .st-key-bims_dashboard_header .bims-header-bot-status {
+            display: none !important;
         }
         /* En móvil, título y estado del bot pasan a filas separadas.
            Evita que el badge fuerce el ancho de la cabecera y se monte
@@ -377,8 +382,8 @@ st.markdown("""
             padding-right: 0 !important;
         }
         .bims-header-spacer {
-            height: 146px !important;
-            min-height: 146px !important;
+            height: 128px !important;
+            min-height: 128px !important;
         }
         #bims-fixed-tabs-placeholder {
             display: none !important;
@@ -3011,7 +3016,7 @@ with st.container(key="bims_dashboard_header"):
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
         with col_estado_bot:
-            st.html(f'<div style="display:flex; justify-content:flex-end; align-items:center; min-height:50px; box-sizing:border-box;">{estado_bot_html}</div>')
+            st.html(f'<div class="bims-header-bot-status" style="display:flex; justify-content:flex-end; align-items:center; min-height:50px; box-sizing:border-box;">{estado_bot_html}</div>')
 
 
 st.markdown('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
