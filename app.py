@@ -330,6 +330,21 @@ st.markdown("""
         }
     }
 
+    /* WBR: apilar los dos gráficos en móvil para aprovechar todo el ancho. */
+    @media (max-width: 600px) {
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0.8rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"] {
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 100% !important;
+        }
+    }
+
     /* Sistema visual unificado para gráficos Plotly.
        Se conserva la altura definida por cada visualización según su contenido. */
     div[data-testid="stElementContainer"]:has(> div[data-testid="stPlotlyChart"]) {
@@ -5085,6 +5100,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     col_dia_bar, col_pie_ag = st.columns([1.2, 1])
 
     with col_dia_bar:
+        st.markdown('<div class="bims-wbr-stack-anchor"></div>', unsafe_allow_html=True)
         st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
 
         dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
@@ -5158,6 +5174,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         """, unsafe_allow_html=True)
 
     with col_pie_ag:
+        st.markdown('<div class="bims-wbr-stack-anchor"></div>', unsafe_allow_html=True)
         st.markdown("##### Q. de chats cerrados por Agentes")
         
         agentes_excluir_pie = [
