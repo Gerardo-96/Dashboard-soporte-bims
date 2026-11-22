@@ -6436,13 +6436,13 @@ def renderizar_panel_admin():
                 )
             with col_guardar:
                 if st.button("Guardar configuración", type="primary", use_container_width=True):
-                st.session_state["auto_refresh"] = cfg_auto
-                st.session_state["refresh_interval"] = cfg_interval
-                st.session_state["sla_1ra_th"] = cfg_sla_1ra
-                st.session_state["sla_gest_th"] = cfg_sla_gest
-                st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
-                st.success("Configuración actualizada correctamente.")
-                st.rerun()
+                    st.session_state["auto_refresh"] = cfg_auto
+                    st.session_state["refresh_interval"] = cfg_interval
+                    st.session_state["sla_1ra_th"] = cfg_sla_1ra
+                    st.session_state["sla_gest_th"] = cfg_sla_gest
+                    st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
+                    st.success("Configuración actualizada correctamente.")
+                    st.rerun()
 
     with admin_tabs[3]:
         with st.container(border=True):
