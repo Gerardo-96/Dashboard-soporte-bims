@@ -330,18 +330,45 @@ st.markdown("""
         }
     }
 
-    /* WBR: apilar los dos gráficos en móvil para aprovechar todo el ancho. */
+    /* WBR: apilar los gráficos y liberar el ancho completo de cada columna en móvil. */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) {
+            display: flex !important;
             flex-direction: column !important;
             align-items: stretch !important;
+            width: 100% !important;
             gap: 0.8rem !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"] {
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) div[data-testid="column"]:has(.bims-wbr-stack-anchor) {
             flex: 0 0 100% !important;
             width: 100% !important;
             max-width: 100% !important;
-            min-width: 100% !important;
+            min-width: 0 !important;
+            align-self: stretch !important;
+            box-sizing: border-box !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stVerticalBlock"] {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+    }
+
+    /* SLA: separación vertical entre tarjetas al distribuirse en varias filas móviles. */
+    @media (max-width: 600px) {
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) {
+            row-gap: 0.9rem !important;
+            column-gap: 0.65rem !important;
+            align-items: stretch !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) > div[data-testid="column"] {
+            box-sizing: border-box !important;
+            margin-bottom: 0.35rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) .metric-card {
+            height: 100% !important;
+            box-sizing: border-box !important;
         }
     }
 
@@ -3912,6 +3939,7 @@ with tab_operativo:
             """
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1.markdown('<div class="bims-sla-kpi-anchor"></div>', unsafe_allow_html=True)
         k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
         k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
         k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card), unsafe_allow_html=True)
