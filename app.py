@@ -341,7 +341,7 @@ st.markdown("""
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"],
         div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) div[data-testid="column"]:has(.bims-wbr-stack-anchor) {
-            flex: 0 0 100% !important;
+            flex: 0 0 auto !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
@@ -355,20 +355,27 @@ st.markdown("""
         }
     }
 
-    /* SLA: separación vertical entre tarjetas al distribuirse en varias filas móviles. */
+    /* SLA: separación real entre filas de tarjetas en pantallas móviles. */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) {
-            row-gap: 0.9rem !important;
-            column-gap: 0.65rem !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
             align-items: stretch !important;
+            column-gap: 0.65rem !important;
+            row-gap: 1.15rem !important;
+            margin-bottom: 0.5rem !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) > div[data-testid="column"] {
-            box-sizing: border-box !important;
             margin-bottom: 0.35rem !important;
+            box-sizing: border-box !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) .metric-card {
-            height: 100% !important;
+            height: auto !important;
+            min-height: 112px !important;
             box-sizing: border-box !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) [data-testid="stElementContainer"] {
+            margin-bottom: 0.2rem !important;
         }
     }
 
