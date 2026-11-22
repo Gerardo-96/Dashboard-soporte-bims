@@ -345,13 +345,45 @@ st.markdown("""
         .st-key-bims_dashboard_header {
             padding-left: 64px !important;
             padding-right: .75rem !important;
-            min-height: 112px !important;
+            min-height: 146px !important;
         }
-        .bims-header-spacer { height: 112px !important; min-height: 112px !important; }
-        #bims-fixed-tabs-placeholder { display: none !important; height: 0 !important; min-height: 0 !important; }
+        /* En móvil, título y estado del bot pasan a filas separadas.
+           Evita que el badge fuerce el ancho de la cabecera y se monte
+           sobre la navegación o el contenido. */
+        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            row-gap: 0 !important;
+        }
+        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"] {
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"] [data-testid="stHorizontalBlock"] {
+            justify-content: flex-end !important;
+        }
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"] [data-testid="stHorizontalBlock"] [data-testid="column"] {
+            flex: 0 0 auto !important;
+            width: auto !important;
+        }
+        .st-key-bims_dashboard_header .bims-pulse-container {
+            width: 7px !important;
+            height: 7px !important;
+            margin-right: 1px !important;
+        }
         .st-key-bims_dashboard_header [role="tablist"] {
             padding-left: 0 !important;
             padding-right: 0 !important;
+        }
+        .bims-header-spacer {
+            height: 146px !important;
+            min-height: 146px !important;
+        }
+        #bims-fixed-tabs-placeholder {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
         }
     }
 
