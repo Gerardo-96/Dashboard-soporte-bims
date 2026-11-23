@@ -463,7 +463,7 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
 
         /* WBR: estilos móviles aislados. No heredan el layout de KPI del dashboard.
            Los bloques de gráficos y tablas se apilan; las filas de tarjetas usan 2 columnas. */
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel div[data-testid="stHorizontalBlock"] {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"] {
             display: flex !important;
             flex-wrap: wrap !important;
             align-items: stretch !important;
@@ -471,7 +471,7 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             width: 100% !important;
             margin: 0 0 0.45rem !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
             flex: 0 0 100% !important;
             width: 100% !important;
             max-width: 100% !important;
@@ -480,12 +480,12 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             margin: 0 !important;
             box-sizing: border-box !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
             flex: 0 0 calc((100% - 0.7rem) / 2) !important;
             width: calc((100% - 0.7rem) / 2) !important;
             max-width: calc((100% - 0.7rem) / 2) !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel .metric-card {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card {
             width: 100% !important;
             min-width: 0 !important;
             min-height: 108px !important;
@@ -494,22 +494,22 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             box-sizing: border-box !important;
             overflow-wrap: anywhere !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel .metric-card-title {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-title {
             font-size: 0.64rem !important;
             line-height: 1.3 !important;
             overflow-wrap: anywhere !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel .metric-card-value {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-value {
             font-size: clamp(1.15rem, 5vw, 1.55rem) !important;
             line-height: 1.15 !important;
             overflow-wrap: anywhere !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel .metric-card-sub {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-sub {
             font-size: 0.68rem !important;
             line-height: 1.3 !important;
             overflow-wrap: anywhere !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel .bims-wbr-chart-summary {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .bims-wbr-chart-summary {
             min-height: 0 !important;
             height: auto !important;
             padding: 12px 10px !important;
@@ -517,13 +517,13 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             line-height: 1.45 !important;
             overflow-wrap: anywhere !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel h4,
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel h5 {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) h4,
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) h5 {
             font-size: 0.98rem !important;
             line-height: 1.35 !important;
             overflow-wrap: anywhere !important;
         }
-        div[data-baseweb="tab-panel"].bims-wbr-tab-panel [data-testid="stDataFrame"] {
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) [data-testid="stDataFrame"] {
             max-width: 100% !important;
             overflow-x: auto !important;
         }
@@ -800,7 +800,7 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         .st-key-bims_dashboard_header {
             padding-left: 64px !important;
             padding-right: .75rem !important;
-            min-height: 128px !important;
+            min-height: 104px !important;
         }
         /* Indicador mínimo de estado junto al título, sin ocupar otra fila. */
         .st-key-bims_dashboard_header .bims-mobile-bot-dot {
@@ -848,8 +848,26 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             padding-right: 0 !important;
         }
         .bims-header-spacer {
-            height: 128px !important;
-            min-height: 128px !important;
+            height: 104px !important;
+            min-height: 104px !important;
+            line-height: 0 !important;
+        }
+        div[data-testid="stElementContainer"]:has(.bims-header-spacer) {
+            height: 104px !important;
+            min-height: 104px !important;
+            margin: 0 0 -16px 0 !important;
+            padding: 0 !important;
+            line-height: 0 !important;
+        }
+        /* El tabpanel comienza inmediatamente debajo de la cabecera fija. */
+        .stTabs [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        .stTabs [data-baseweb="tab-panel"] > div:first-child,
+        .stTabs [data-baseweb="tab-panel"] [data-testid="stVerticalBlock"]:first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
         }
         #bims-fixed-tabs-placeholder {
             display: none !important;
@@ -3589,12 +3607,6 @@ st.iframe("""
                     tabList = firstTabList;
                 }
             }
-            // Marcar exclusivamente el panel que contiene el WBR.
-            // Evita depender de selectores :has() amplios o de estilos compartidos.
-            const wbrAnchor = doc.querySelector('.bims-wbr-scope-anchor');
-            const wbrPanel = wbrAnchor && wbrAnchor.closest('[data-baseweb="tab-panel"]');
-            if (wbrPanel) wbrPanel.classList.add('bims-wbr-tab-panel');
-
             if (!headerInner || !tabList) return;
 
             let placeholder = doc.getElementById(placeholderId);
