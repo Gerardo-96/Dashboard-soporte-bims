@@ -353,7 +353,12 @@ st.markdown("""
         }
     }
 
+    .bims-csat-evo-title .bims-title-mobile { display: none; }
+
     @media (max-width: 600px) {
+        .bims-csat-evo-title .bims-title-desktop { display: none; }
+        .bims-csat-evo-title .bims-title-mobile { display: inline; }
+
         /* En móvil se oculta el acceso de guardias del encabezado:
            evita que su columna vacía o botón aumente la barra fija. */
         .st-key-btn_abrir_guardias_header_calendar,
@@ -3851,7 +3856,7 @@ with tab_operativo:
     # EVOLUCIÓN HISTÓRICA DE CSAT (SEMANAL DESDE Q ANTERIOR)
     q_act_evo = (now_date.month - 1) // 3 + 1
     q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
-    st.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;">Evolución semanal del CSAT — desde el trimestre anterior</h3></div>', unsafe_allow_html=True)
+    st.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;"><span class="bims-title-desktop">Evolución semanal del CSAT — desde el trimestre anterior</span><span class="bims-title-mobile">Evolución semanal del CSAT</span></h3></div>', unsafe_allow_html=True)
     if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
         anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
         mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
