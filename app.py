@@ -2539,7 +2539,11 @@ st.markdown("""
         box-shadow: none !important;
         transition: color .18s ease, background .18s ease, transform .18s ease !important;
     }
-    .st-key-btn_abrir_guardias_header_calendar button p,
+    .st-key-btn_abrir_guardias_header_calendar button p {
+        font-size: 0 !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+    }
     .st-key-btn_abrir_guardias_header_calendar button span,
     .st-key-btn_abrir_guardias_header_alert button p,
     .st-key-btn_abrir_guardias_header_alert button span,
