@@ -458,6 +458,22 @@ st.markdown("""
             height: 100% !important;
             box-sizing: border-box !important;
         }
+        /* Separación explícita entre las filas de las seis tarjetas SLA.
+           Se aplica solo a esta familia para no alterar otras métricas. */
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) {
+            row-gap: 1.6rem !important;
+            margin-bottom: 1rem !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] {
+            margin-bottom: 0.9rem !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        .bims-sla-kpi-card {
+            min-height: 136px !important;
+            height: 100% !important;
+        }
 
         /* CSAT: dos columnas equilibradas, con tarjetas de igual altura en móvil. */
         div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) {
@@ -481,13 +497,24 @@ st.markdown("""
             box-sizing: border-box !important;
             align-items: stretch !important;
         }
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) > div[data-testid="column"] [data-testid="stVerticalBlock"] {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 0 !important;
+            flex: 1 1 auto !important;
+        }
         div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) .bims-csat-kpi-card {
             display: flex !important;
+            flex: 1 1 auto !important;
             flex-direction: column !important;
             justify-content: space-between !important;
             width: 100% !important;
-            height: auto !important;
-            min-height: 178px !important;
+            height: 100% !important;
+            min-height: 200px !important;
             max-height: none !important;
             padding: 15px 13px !important;
             box-sizing: border-box !important;
@@ -4169,7 +4196,7 @@ with tab_operativo:
 
         def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
             return f"""
-            <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div class="metric-card bims-sla-kpi-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
                     <div class="metric-card-title">{title}</div>
                     <div class="metric-card-value" style="color: {val_color};">{value}</div>
