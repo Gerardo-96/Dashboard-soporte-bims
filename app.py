@@ -456,6 +456,12 @@ st.markdown("""
             box-sizing: border-box !important;
         }
 
+        /* El gráfico de evolución CSAT queda estático en móvil:
+           sin zoom, paneo ni interacción accidental al desplazar la página. */
+        .st-key-bims_csat_evolution_chart {
+            pointer-events: none !important;
+        }
+
         /* CSAT: dos columnas equilibradas, con tarjetas de igual altura en móvil. */
         div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) {
             display: flex !important;
@@ -3971,18 +3977,24 @@ with tab_operativo:
                     if (!chart || !window.parent.Plotly) return;
                     if (mobile.matches) {{
                         window.parent.Plotly.relayout(chart, {{
-                            'xaxis.range': [Math.max(-0.25, max(-0.25, total_semanas - 10.75)), total_semanas - 0.75],
+                            'xaxis.range': [Math.max(-0.25, total_semanas - 10.75), total_semanas - 0.75],
                             'xaxis.autorange': false
                         }});
                     }} else {{
                         window.parent.Plotly.relayout(chart, {{'xaxis.autorange': true}});
                     }}
                 }};
-                const observer = new MutationObserver(applyView);
+                const observer = new MutationObserver(function() {{
+                    const chart = doc.querySelector(chartSelector);
+                    if (chart) {{
+                        applyView();
+                        observer.disconnect();
+                    }}
+                }});
                 observer.observe(doc.body, {{childList: true, subtree: true}});
                 applyView();
+                if (doc.querySelector(chartSelector)) observer.disconnect();
                 mobile.addEventListener('change', applyView);
-                setTimeout(() => observer.disconnect(), 5000);
             }})();
             </script>
             """, height=1, width=1)
