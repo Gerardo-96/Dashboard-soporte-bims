@@ -472,7 +472,19 @@ st.markdown("""
         div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
         .bims-sla-kpi-card {
             min-height: 136px !important;
-            height: 100% !important;
+            height: auto !important;
+            margin-bottom: 1.35rem !important;
+        }
+        /* Margen aplicado directamente a cada tarjeta: garantiza separación
+           visible aunque Streamlit reconstruya los wrappers de las columnas. */
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        .bims-sla-kpi-card {
+            position: relative !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) {
+            row-gap: 1.4rem !important;
+            padding-bottom: 0.65rem !important;
         }
 
         /* CSAT: dos columnas equilibradas, con tarjetas de igual altura en móvil. */
@@ -3015,10 +3027,15 @@ with st.container(key="bims_sidebar_panel"):
 
     usar_filtro_hora = st.checkbox("Restringir Franja Horaria", key="bims_filter_hour_enabled")
 
+    def marcar_cierre_filtros():
+        # El cierre visual se ejecuta en el documento principal tras el rerun.
+        st.session_state["bims_cerrar_sidebar_filtros"] = True
+
     def set_fechas_hoy():
         hoy = obtener_fecha_local_hoy()
         st.session_state["input_f_desde"] = hoy
         st.session_state["input_f_hasta"] = hoy
+        marcar_cierre_filtros()
 
     def set_fechas_semana():
         hoy = obtener_fecha_local_hoy()
@@ -3026,6 +3043,7 @@ with st.container(key="bims_sidebar_panel"):
         fin_semana = inicio_semana + timedelta(days=6)
         st.session_state["input_f_desde"] = inicio_semana
         st.session_state["input_f_hasta"] = fin_semana
+        marcar_cierre_filtros()
 
     def set_fechas_mes():
         hoy = obtener_fecha_local_hoy()
@@ -3037,6 +3055,7 @@ with st.container(key="bims_sidebar_panel"):
 
         st.session_state["input_f_desde"] = inicio_mes
         st.session_state["input_f_hasta"] = fin_mes
+        marcar_cierre_filtros()
 
     col_b_hoy, col_b_sem, col_b_mes = st.columns(3)
     col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
@@ -3063,7 +3082,29 @@ with st.container(key="bims_sidebar_panel"):
 
         act_sonido = st.checkbox("Alertas Sonoras", key="act_sonido")
 
-        btn_aplicar = st.form_submit_button("Aplicar Filtros", use_container_width=True)
+        btn_aplicar = st.form_submit_button(
+            "Aplicar Filtros",
+            use_container_width=True,
+            on_click=marcar_cierre_filtros
+        )
+
+    # Cerrar el panel lateral automáticamente al elegir Hoy/Semana/Mes
+    # o al aplicar el rango manual, sin alterar los filtros seleccionados.
+    if st.session_state.pop("bims_cerrar_sidebar_filtros", False):
+        st.iframe("""
+        <script>
+        (function() {
+            const doc = window.parent.document;
+            const root = doc.documentElement;
+            root.classList.remove('bims-sidebar-open');
+            const button = doc.getElementById('bims-sidebar-toggle');
+            if (button) {
+                button.textContent = '☰';
+                button.setAttribute('aria-expanded', 'false');
+            }
+        })();
+        </script>
+        """, width=1, height=1)
 
     st.session_state["f_desde_key"] = fecha_desde
     st.session_state["f_hasta_key"] = fecha_hasta
