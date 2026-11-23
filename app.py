@@ -627,6 +627,20 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             text-align: center !important;
             white-space: nowrap !important;
         }
+        /* El tablist principal se trasladó al encabezado fijo.
+           Colapsar su wrapper original evita una franja vacía sobre el contenido. */
+        #bims-main-tabs-wrapper {
+            display: contents !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        #bims-main-tabs-wrapper [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+
         /* Quitar también los wrappers vacíos que BaseWeb deja para las flechas. */
         #bims-main-tablist > div:not([role="tab"]),
         .stTabs [data-baseweb="tab-list"] > div:not([role="tab"]) {
@@ -645,28 +659,43 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         }
     }
 
-    /* WBR: apilar los gráficos y liberar el ancho completo de cada columna en móvil. */
+    /* WBR: cada columna de gráficos ocupa todo el ancho disponible en móvil.
+       Se fuerzan también los wrappers internos que Streamlit/Plotly dimensionan por separado. */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) {
             display: flex !important;
             flex-direction: column !important;
+            flex-wrap: nowrap !important;
             align-items: stretch !important;
+            justify-content: flex-start !important;
             width: 100% !important;
+            max-width: 100% !important;
             gap: 0.8rem !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"],
         div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) div[data-testid="column"]:has(.bims-wbr-stack-anchor) {
-            flex: 0 0 auto !important;
+            display: flex !important;
+            flex: 0 0 100% !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
             align-self: stretch !important;
             box-sizing: border-box !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"] > div,
-        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stVerticalBlock"] {
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stVerticalBlock"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stElementContainer"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stPlotlyChart"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) .js-plotly-plot,
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) .plot-container {
             width: 100% !important;
             max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
         }
     }
 
@@ -3616,6 +3645,7 @@ st.iframe("""
                 placeholder.id = placeholderId;
                 const tabsWrapper = tabList.closest('.stTabs');
                 if (tabsWrapper && tabsWrapper.parentNode) {
+                    tabsWrapper.id = 'bims-main-tabs-wrapper';
                     tabsWrapper.parentNode.insertBefore(placeholder, tabsWrapper);
                 }
             }
