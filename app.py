@@ -354,14 +354,41 @@ st.markdown("""
     }
 
     @media (max-width: 600px) {
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
-            gap: 0.65rem !important;
+        /* En móvil se oculta el acceso de guardias del encabezado:
+           evita que su columna vacía o botón aumente la barra fija. */
+        .st-key-btn_abrir_guardias_header_calendar,
+        .st-key-btn_abrir_guardias_header_alert,
+        .st-key-btn_abrir_guardias_header {
+            display: none !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div {
-            flex: 0 0 calc((100% - 0.65rem) / 2) !important;
-            width: calc((100% - 0.65rem) / 2) !important;
-            max-width: calc((100% - 0.65rem) / 2) !important;
+        .st-key-bims_dashboard_header {
+            min-height: 104px !important;
+        }
+        /* Dos tarjetas por fila con ancho calculado incluyendo el gap.
+           Evita solapamientos por padding/bordes de los wrappers de Streamlit. */
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            gap: 0.75rem !important;
+            width: 100% !important;
+            margin: 0 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+            flex: 0 0 calc((100% - 0.75rem) / 2) !important;
+            width: calc((100% - 0.75rem) / 2) !important;
+            max-width: calc((100% - 0.75rem) / 2) !important;
             min-width: 0 !important;
+            box-sizing: border-box !important;
+            padding: 0 !important;
+            margin: 0 0 0.25rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
             min-height: 112px !important;
