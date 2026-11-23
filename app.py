@@ -2519,6 +2519,8 @@ st.markdown("""
         transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
     }
     #bims-sidebar-toggle:hover { background: #223650; }
+    .st-key-btn_abrir_guardias_header_calendar button,
+    .st-key-btn_abrir_guardias_header_alert button,
     .st-key-btn_abrir_guardias_header button {
         min-width: 44px !important;
         width: 44px !important;
@@ -2527,23 +2529,36 @@ st.markdown("""
         overflow: visible !important;
         padding: 0 !important;
         border: 0 !important;
-        border-radius: 8px !important;
+        border-radius: 9px !important;
         background: transparent !important;
-        color: #fbbf24 !important;
+        color: #94a3b8 !important;
         font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif !important;
-        font-size: 2rem !important;
+        font-size: 1.75rem !important;
         font-weight: 500 !important;
         line-height: 1 !important;
-        text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
         box-shadow: none !important;
+        transition: color .18s ease, background .18s ease, transform .18s ease !important;
     }
+    .st-key-btn_abrir_guardias_header_calendar button p,
+    .st-key-btn_abrir_guardias_header_calendar button span,
+    .st-key-btn_abrir_guardias_header_alert button p,
+    .st-key-btn_abrir_guardias_header_alert button span,
     .st-key-btn_abrir_guardias_header button p,
     .st-key-btn_abrir_guardias_header button span {
-        font-size: 2rem !important;
+        font-size: 1.75rem !important;
         line-height: 1 !important;
         margin: 0 !important;
     }
-    .st-key-btn_abrir_guardias_header button:hover {
+    .st-key-btn_abrir_guardias_header_calendar button:hover {
+        background: rgba(56,189,248,.10) !important;
+        color: #7dd3fc !important;
+        transform: translateY(-1px);
+    }
+    .st-key-btn_abrir_guardias_header_alert button {
+        color: #fbbf24 !important;
+        text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
+    }
+    .st-key-btn_abrir_guardias_header_alert button:hover {
         background: rgba(251,191,36,.10) !important;
         color: #fcd34d !important;
     }
