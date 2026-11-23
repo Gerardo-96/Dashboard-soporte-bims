@@ -458,33 +458,35 @@ st.markdown("""
             box-sizing: border-box !important;
         }
 
-        /* Control Operativo & SLA: selector específico de las seis tarjetas.
-           Tres columnas iguales y altura fija para que ninguna se vea más corta. */
-        div[data-testid="stHorizontalBlock"]:has(.bims-sla-card) {
+        /* CSAT: dos columnas equilibradas, con tarjetas de igual altura en móvil. */
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) {
             display: flex !important;
             flex-wrap: wrap !important;
             align-items: stretch !important;
             justify-content: flex-start !important;
-            column-gap: 0.55rem !important;
+            column-gap: 0.65rem !important;
             row-gap: 0.9rem !important;
             width: 100% !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.bims-sla-card) > div[data-testid="column"] {
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) > div[data-testid="column"] {
             display: flex !important;
-            flex: 0 0 calc((100% - 1.1rem) / 3) !important;
-            width: calc((100% - 1.1rem) / 3) !important;
-            max-width: calc((100% - 1.1rem) / 3) !important;
+            flex: 0 0 calc((100% - 0.65rem) / 2) !important;
+            width: calc((100% - 0.65rem) / 2) !important;
+            max-width: calc((100% - 0.65rem) / 2) !important;
             min-width: 0 !important;
             padding: 0 !important;
             margin: 0 !important;
             box-sizing: border-box !important;
             align-items: stretch !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.bims-sla-card) .bims-sla-card {
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) .bims-csat-kpi-card {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
             width: 100% !important;
-            height: 142px !important;
-            min-height: 142px !important;
-            max-height: 142px !important;
+            height: 150px !important;
+            min-height: 150px !important;
+            max-height: 150px !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
         }
@@ -511,11 +513,30 @@ st.markdown("""
         #bims-main-tablist,
         .stTabs [data-baseweb="tab-list"],
         div[data-testid="stTabs"] [data-baseweb="tab-list"] {
-            padding-left: 0 !important;
-            padding-right: 0 !important;
-            margin-left: 0 !important;
-            margin-right: 0 !important;
+            display: flex !important;
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
             gap: 0.25rem !important;
+            justify-content: flex-start !important;
+        }
+        /* Quitar también los wrappers vacíos que BaseWeb deja para las flechas. */
+        #bims-main-tablist > div:not([role="tab"]),
+        .stTabs [data-baseweb="tab-list"] > div:not([role="tab"]) {
+            display: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            flex: 0 0 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+        }
+        #bims-main-tablist [role="tab"],
+        .stTabs [data-baseweb="tab-list"] [role="tab"] {
+            flex: 0 0 auto !important;
         }
     }
 
@@ -3759,7 +3780,7 @@ with tab_operativo:
         diff_color = "#34d399" if diff >= 0 else "#f43f5e"
         diff_symbol = "▲" if diff >= 0 else "▼"
         return f"""
-        <div class="metric-card" style="border-left: 4px solid #38bdf8;">
+        <div class="metric-card bims-csat-kpi-card" style="border-left: 4px solid #38bdf8;">
             <div class="metric-card-title">{title}</div>
             <div class="metric-card-value">{value}</div>
             <div style="display: inline-block; background: transparent; color: {diff_color}; padding: 2px 0; border-radius: 0; font-size: 0.78rem; font-weight: 700; margin-top: 4px;">
@@ -4144,7 +4165,7 @@ with tab_operativo:
 
         def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
             return f"""
-            <div class="metric-card bims-sla-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
                     <div class="metric-card-title">{title}</div>
                     <div class="metric-card-value" style="color: {val_color};">{value}</div>
