@@ -1666,13 +1666,13 @@ def renderizar_panel_carga_asignador():
                     estado_presencia = v_estado
                     break
 
-            # El mismo indicador visual identifica la presencia en el gráfico y la tabla.
-            icono_presencia = "🟡" if "ausente" in str(estado_presencia).strip().lower() else "🟢"
-            etiqueta_grafico = f"{icono_presencia} {agente}"
+            # Indicador circular minimalista de presencia (verde disponible / ámbar ausente).
+            color_presencia = "#fbbf24" if "ausente" in str(estado_presencia).strip().lower() else "#10b981"
+            etiqueta_grafico = agente
 
             resumen.append({
                 "Estado": estado_presencia,
-                "Icono Presencia": icono_presencia,
+                "Color Presencia": color_presencia,
                 "Agente de Soporte": agente,
                 "Agente Grafico": etiqueta_grafico,
                 "Total Asignados Hoy": total_asignados,
@@ -1740,6 +1740,19 @@ def renderizar_panel_carga_asignador():
                         font=dict(color="#f8fafc", size=15)
                     )
 
+                # Punto de presencia alineado debajo del nombre de cada agente.
+                fig_carga.add_annotation(
+                    x=row["Agente Grafico"],
+                    y=-0.17,
+                    xref="x",
+                    yref="paper",
+                    text="●",
+                    showarrow=False,
+                    font=dict(color=row["Color Presencia"], size=14, family="Arial"),
+                    hovertext=str(row["Estado"]),
+                    captureevents=False
+                )
+
             max_carga_y = max(int(df_resumen["Total Asignados Hoy"].max()), 4)
 
             fig_carga.update_layout(
@@ -1748,7 +1761,7 @@ def renderizar_panel_carga_asignador():
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=12),
-                xaxis=dict(gridcolor="#334155", title=None),
+                xaxis=dict(gridcolor="#334155", title=None, automargin=True),
                 yaxis=dict(
                     gridcolor="#334155",
                     title="Cantidad de Chats",
@@ -1763,7 +1776,7 @@ def renderizar_panel_carga_asignador():
                     xanchor="right",
                     x=1
                 ),
-                margin=dict(t=60, b=30, l=40, r=40),
+                margin=dict(t=60, b=52, l=40, r=40),
                 height=380
             )
 
@@ -1773,12 +1786,24 @@ def renderizar_panel_carga_asignador():
 
             cols_tabla = ["Estado", "Agente de Soporte", "Total Asignados Hoy", "Cerrados Hoy", "Pendientes (Abiertos)"]
             df_tabla_presencia = df_resumen[cols_tabla].copy()
-            df_tabla_presencia["Estado"] = df_resumen["Icono Presencia"]
+            # El estado conserva su valor para aplicar el color correcto; se muestra como punto.
+            tabla_estilizada = (
+                df_tabla_presencia.style
+                .map(
+                    lambda valor: (
+                        "color: #fbbf24; font-size: 18px; font-weight: 700;"
+                        if "ausente" in str(valor).strip().lower()
+                        else "color: #10b981; font-size: 18px; font-weight: 700;"
+                    ),
+                    subset=["Estado"]
+                )
+                .format({"Estado": lambda valor: "●"})
+            )
 
             st.dataframe(
-                df_tabla_presencia,
+                tabla_estilizada,
                 column_config={
-                    "Estado": st.column_config.TextColumn("Presencia", help="Disponibilidad en Intercom"),
+                    "Estado": st.column_config.TextColumn("Presencia", help="Punto verde: disponible. Punto ámbar: ausente.", width="small"),
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
                     "Total Asignados Hoy": st.column_config.NumberColumn("Total Asignados Hoy", help="Total gestionados durante la jornada"),
                     "Cerrados Hoy": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día de hoy"),
