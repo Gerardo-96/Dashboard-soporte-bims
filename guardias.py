@@ -140,13 +140,20 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
         # Un fallo al consultar la asignación no debe quitar el acceso general al calendario.
         es_proxima_guardia = False
 
-    icono = "⚠︎" if es_proxima_guardia else "▦"
-    ayuda = (
-        "Tienes asignada la próxima guardia. Haz clic para consultar el calendario."
-        if es_proxima_guardia
-        else "Consultar calendario de guardias sabatinas."
-    )
-    clave = "btn_abrir_guardias_header_alert" if es_proxima_guardia else "btn_abrir_guardias_header_calendar"
-
-    if st.button(icono, help=ayuda, key=clave, type="tertiary"):
-        modal_calendario_guardias(supabase)
+    if es_proxima_guardia:
+        if st.button(
+            "⚠︎",
+            help="Tienes asignada la próxima guardia. Haz clic para consultar el calendario.",
+            key="btn_abrir_guardias_header_alert",
+            type="tertiary"
+        ):
+            modal_calendario_guardias(supabase)
+    else:
+        if st.button(
+            "Abrir calendario",
+            icon=":material/calendar_month:",
+            help="Consultar calendario de guardias sabatinas.",
+            key="btn_abrir_guardias_header_calendar",
+            type="tertiary"
+        ):
+            modal_calendario_guardias(supabase)
