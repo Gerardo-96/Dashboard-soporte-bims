@@ -108,14 +108,12 @@ def modal_calendario_guardias(supabase):
 
 
 def render_widget_guardia(supabase, usuario_actual_id=None):
-    """Muestra una alerta discreta solo al usuario asignado a la próxima guardia hábil."""
-    if not usuario_actual_id:
-        return
-
+    """Permite a todos consultar el calendario y destaca al usuario de la próxima guardia hábil."""
     hoy_py = datetime.now(TZ_PY).strftime("%Y-%m-%d")
-    feriados_set = obtener_feriados_guardias(supabase)
+    es_proxima_guardia = False
 
     try:
+        feriados_set = obtener_feriados_guardias(supabase)
         res = (
             supabase.table("guardias_sabado")
             .select("fecha, usuarios_autorizados(id, nombre)")
@@ -124,26 +122,31 @@ def render_widget_guardia(supabase, usuario_actual_id=None):
             .limit(30)
             .execute()
         )
+
+        # Identifica el primer sábado hábil; no alerta por turnos posteriores.
+        primera_proxima = next(
+            (
+                g for g in (res.data or [])
+                if g.get("fecha") not in feriados_set and g.get("usuarios_autorizados")
+            ),
+            None
+        )
+        es_proxima_guardia = bool(
+            usuario_actual_id
+            and primera_proxima
+            and primera_proxima["usuarios_autorizados"].get("id") == usuario_actual_id
+        )
     except Exception:
-        return
+        # Un fallo al consultar la asignación no debe quitar el acceso general al calendario.
+        es_proxima_guardia = False
 
-    # Identifica el primer sábado hábil; no alerta por turnos posteriores.
-    primera_proxima = next(
-        (
-            g for g in (res.data or [])
-            if g.get("fecha") not in feriados_set and g.get("usuarios_autorizados")
-        ),
-        None
+    icono = "⚠︎" if es_proxima_guardia else "▦"
+    ayuda = (
+        "Tienes asignada la próxima guardia. Haz clic para consultar el calendario."
+        if es_proxima_guardia
+        else "Consultar calendario de guardias sabatinas."
     )
-    if not primera_proxima:
-        return
-    if primera_proxima["usuarios_autorizados"].get("id") != usuario_actual_id:
-        return
+    clave = "btn_abrir_guardias_header_alert" if es_proxima_guardia else "btn_abrir_guardias_header_calendar"
 
-    if st.button(
-        "⚠︎",
-        help="Tienes asignada la próxima guardia. Haz clic para consultar fecha, horario y calendario.",
-        key="btn_abrir_guardias_header",
-        type="tertiary"
-    ):
+    if st.button(icono, help=ayuda, key=clave, type="tertiary"):
         modal_calendario_guardias(supabase)
