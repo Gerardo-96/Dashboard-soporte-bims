@@ -906,6 +906,113 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         }
     }
 
+    /* Correcciones estrictamente móviles: WBR y espacio residual de la
+       navegación trasladada al encabezado. Escritorio conserva su diseño. */
+    @media screen and (max-width: 767px) {
+        /* El WBR se marca desde su propio fragmento; no afecta otras pestañas. */
+        .bims-wbr-mobile-root {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+        }
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            gap: 0.75rem !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+        }
+        /* Gráficos y tablas: una columna completa por fila. */
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            display: flex !important;
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+        }
+        /* Las filas de indicadores mantienen dos columnas. */
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+            flex: 0 0 calc((100% - 0.75rem) / 2) !important;
+            width: calc((100% - 0.75rem) / 2) !important;
+            max-width: calc((100% - 0.75rem) / 2) !important;
+        }
+        .bims-wbr-mobile-root [data-testid="stElementContainer"],
+        .bims-wbr-mobile-root [data-testid="stVerticalBlock"],
+        .bims-wbr-mobile-root [data-testid="stPlotlyChart"],
+        .bims-wbr-mobile-root [data-testid="stDataFrame"],
+        .bims-wbr-mobile-root .js-plotly-plot,
+        .bims-wbr-mobile-root .plot-container,
+        .bims-wbr-mobile-root .plotly,
+        .bims-wbr-mobile-root iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+        }
+        .bims-wbr-mobile-root .metric-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            overflow-wrap: anywhere !important;
+        }
+
+        /* El tablist ya vive en la cabecera: colapsar la reserva original
+           y sus wrappers vacíos para que no quede una franja sobre el informe. */
+        #bims-main-tabs-wrapper {
+            display: contents !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        #bims-main-tabs-wrapper [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        #bims-fixed-tabs-placeholder,
+        div[data-testid="stElementContainer"]:has(> #bims-fixed-tabs-placeholder) {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+        }
+        #bims-main-tablist > div:not([role="tab"]),
+        #bims-main-tablist [data-testid="stTabScrollButton"],
+        #bims-main-tablist [data-baseweb="tab-scroll-button"] {
+            display: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+        }
+        .stTabs [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        .stTabs [data-baseweb="tab-panel"] > div:first-child,
+        .stTabs [data-baseweb="tab-panel"] [data-testid="stVerticalBlock"]:first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -3626,6 +3733,16 @@ st.iframe("""
         function integrarNavegacion() {
             const header = doc.querySelector(headerSelector);
             const headerInner = header && header.querySelector('[data-testid="stVerticalBlock"]');
+
+            // Marcar el bloque real del informe WBR. El ancla está dentro del
+            // fragmento Streamlit; usar su VerticalBlock evita depender de que
+            // el tab-panel sea ancestro directo en todas las versiones.
+            const wbrAnchor = doc.querySelector('.bims-wbr-scope-anchor');
+            if (wbrAnchor) {
+                const wbrRoot = wbrAnchor.closest('[data-testid="stVerticalBlock"]');
+                if (wbrRoot) wbrRoot.classList.add('bims-wbr-mobile-root');
+            }
+
             // Identificar una sola vez la navegación principal. Al moverla fuera
             // de .stTabs, el selector genérico podía encontrar después las pestañas
             // secundarias de Administración y trasladarlas también al encabezado.
