@@ -3977,7 +3977,7 @@ with tab_operativo:
                     if (!chart || !window.parent.Plotly) return;
                     if (mobile.matches) {{
                         window.parent.Plotly.relayout(chart, {{
-                            'xaxis.range': [Math.max(-0.25, total_semanas - 10.75), total_semanas - 0.75],
+                            'xaxis.range': [Math.max(-0.25, {total_semanas} - 10.75), {total_semanas} - 0.75],
                             'xaxis.autorange': false
                         }});
                     }} else {{
