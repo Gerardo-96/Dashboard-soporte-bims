@@ -3639,13 +3639,14 @@ st.iframe("""
             }
             if (!headerInner || !tabList) return;
 
+            const tabsWrapper = tabList.closest('.stTabs');
+            if (tabsWrapper) tabsWrapper.id = 'bims-main-tabs-wrapper';
+
             let placeholder = doc.getElementById(placeholderId);
             if (!placeholder) {
                 placeholder = doc.createElement('div');
                 placeholder.id = placeholderId;
-                const tabsWrapper = tabList.closest('.stTabs');
                 if (tabsWrapper && tabsWrapper.parentNode) {
-                    tabsWrapper.id = 'bims-main-tabs-wrapper';
                     tabsWrapper.parentNode.insertBefore(placeholder, tabsWrapper);
                 }
             }
