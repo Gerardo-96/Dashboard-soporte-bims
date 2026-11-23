@@ -412,8 +412,8 @@ st.markdown("""
             overflow-wrap: anywhere;
         }
 
-        /* Control Operativo y SLA: dos columnas exactas, con tarjetas
-           estiradas a la misma altura dentro de cada fila. */
+        /* Control Operativo y SLA: conservar tres columnas en móvil,
+           igualando ancho, separación y altura de las tarjetas por fila. */
         div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
         div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             display: flex !important;
@@ -421,16 +421,16 @@ st.markdown("""
             flex-wrap: wrap !important;
             align-items: stretch !important;
             justify-content: flex-start !important;
-            column-gap: 0.75rem !important;
+            column-gap: 0.55rem !important;
             row-gap: 0.9rem !important;
             width: 100% !important;
         }
         div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
         div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
             display: flex !important;
-            flex: 0 0 calc((100% - 0.75rem) / 2) !important;
-            width: calc((100% - 0.75rem) / 2) !important;
-            max-width: calc((100% - 0.75rem) / 2) !important;
+            flex: 0 0 calc((100% - 1.1rem) / 3) !important;
+            width: calc((100% - 1.1rem) / 3) !important;
+            max-width: calc((100% - 1.1rem) / 3) !important;
             min-width: 0 !important;
             align-items: stretch !important;
             box-sizing: border-box !important;
@@ -453,8 +453,33 @@ st.markdown("""
             flex: 1 1 auto !important;
             width: 100% !important;
             height: 100% !important;
-            min-height: 124px !important;
+            min-height: 136px !important;
+            height: 100% !important;
             box-sizing: border-box !important;
+        }
+
+        /* En móvil, quitar las flechas laterales de desplazamiento de pestañas.
+           El desplazamiento horizontal por gesto táctil sigue disponible. */
+        .stTabs [data-testid="stTabScrollButton"],
+        div[data-testid="stTabs"] [data-testid="stTabScrollButton"],
+        .stTabs [data-baseweb="tab-list"] > button[aria-label*="Scroll"],
+        div[data-testid="stTabs"] [data-baseweb="tab-list"] > button[aria-label*="Scroll"] {
+            display: none !important;
+            visibility: hidden !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+        }
+        .stTabs [data-baseweb="tab-list"],
+        div[data-testid="stTabs"] [data-baseweb="tab-list"] {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            gap: 0.25rem !important;
         }
     }
 
