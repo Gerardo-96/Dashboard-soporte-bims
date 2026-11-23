@@ -421,7 +421,7 @@ st.markdown("""
             align-items: stretch !important;
             justify-content: flex-start !important;
             column-gap: 0.55rem !important;
-            row-gap: 1.5rem !important;
+            row-gap: 0.65rem !important;
             width: 100% !important;
             margin-bottom: 1rem !important;
         }
@@ -434,7 +434,7 @@ st.markdown("""
             align-items: stretch !important;
             box-sizing: border-box !important;
             padding: 0 !important;
-            margin: 0 0 1.4rem !important;
+            margin: 0 0 0.35rem !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] > div,
         div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] [data-testid="stVerticalBlock"] {
@@ -452,13 +452,15 @@ st.markdown("""
             width: 100% !important;
             min-height: 136px !important;
             height: 100% !important;
-            margin: 0 0 1.4rem !important;
+            margin: 0 0 0.35rem !important;
             box-sizing: border-box !important;
         }
 
         /* El gráfico de evolución CSAT queda estático en móvil:
            sin zoom, paneo ni interacción accidental al desplazar la página. */
-        .st-key-bims_csat_evolution_chart {
+        .st-key-bims_csat_evolution_chart,
+        .st-key-bims_csat_evolution_chart .js-plotly-plot,
+        .st-key-bims_csat_evolution_chart .js-plotly-plot * {
             pointer-events: none !important;
         }
 
@@ -3975,12 +3977,17 @@ with tab_operativo:
                 const applyView = function() {{
                     const chart = doc.querySelector(chartSelector);
                     if (!chart || !window.parent.Plotly) return;
+                    const container = chart.closest('[data-testid="stElementContainer"]') || chart.parentElement;
                     if (mobile.matches) {{
+                        if (container) container.style.pointerEvents = 'none';
+                        chart.style.pointerEvents = 'none';
                         window.parent.Plotly.relayout(chart, {{
                             'xaxis.range': [Math.max(-0.25, {total_semanas} - 10.75), {total_semanas} - 0.75],
                             'xaxis.autorange': false
                         }});
                     }} else {{
+                        if (container) container.style.pointerEvents = '';
+                        chart.style.pointerEvents = '';
                         window.parent.Plotly.relayout(chart, {{'xaxis.autorange': true}});
                     }}
                 }};
