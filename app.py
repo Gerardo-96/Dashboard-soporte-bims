@@ -940,11 +940,15 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             margin: 0 !important;
             box-sizing: border-box !important;
         }
-        /* Las filas de indicadores mantienen dos columnas. */
-        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
-            flex: 0 0 calc((100% - 0.75rem) / 2) !important;
-            width: calc((100% - 0.75rem) / 2) !important;
-            max-width: calc((100% - 0.75rem) / 2) !important;
+        /* En WBR no se aplica la grilla de 3 columnas de CSAT/SLA.
+           Todo bloque de contenido (gráfico, tabla o tarjeta-resumen) ocupa
+           una fila completa; la grilla de KPI pertenece a su pestaña propia. */
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > [data-testid="column"] {
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 100% !important;
         }
         .bims-wbr-mobile-root [data-testid="stElementContainer"],
         .bims-wbr-mobile-root [data-testid="stVerticalBlock"],
