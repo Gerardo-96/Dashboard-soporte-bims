@@ -1,0 +1,46 @@
+name: Actualizar versión del dashboard
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - version.json
+
+permissions:
+  contents: write
+
+jobs:
+  generar-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Generar metadatos de publicación
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          FECHA_UTC="$(date -u +'%Y-%m-%d %H:%M:%S')"
+          SHORT_SHA="${SOURCE_SHA:0:7}"
+          VERSION="v1.${RUN_NUMBER}"
+          cat > version.json <<EOF
+          {
+            "version": "${VERSION}",
+            "commit": "${SHORT_SHA}",
+            "commit_url": "https://github.com/${REPOSITORY}/commit/${SOURCE_SHA}",
+            "fecha_utc": "${FECHA_UTC}",
+            "run_number": "${RUN_NUMBER}"
+          }
+          EOF
+
+      - name: Publicar metadatos
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git diff --cached --quiet || (git commit -m "Actualizar metadatos de versión" && git push)
