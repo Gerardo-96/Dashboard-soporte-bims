@@ -614,7 +614,7 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             min-width: 0 !important;
             padding: 0 !important;
             margin: 0 !important;
-            gap: 0.25rem !important;
+            gap: 0.75rem !important;
             justify-content: flex-start !important;
         }
         /* Quitar también los wrappers vacíos que BaseWeb deja para las flechas. */
