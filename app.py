@@ -1,4 +1,5 @@
 import os
+import json
 import io
 import requests
 import time as time_lib
@@ -6764,6 +6765,7 @@ def renderizar_panel_admin():
         "👥 Usuarios y agentes",
         "💬 CSAT y notificaciones",
         "📅 Calendario",
+        "🧩 Versionado",
     ])
 
     with admin_tabs[0]:
@@ -7322,6 +7324,38 @@ def renderizar_panel_admin():
                     st.success(f"Feriado {feriado_a_borrar} eliminado.")
                     st.rerun()
         pass
+
+    with admin_tabs[6]:
+        st.markdown("#### Versiones del dashboard")
+        st.caption("Identificación del código desplegado y seguimiento de actualizaciones publicadas desde GitHub.")
+
+        version_info = {
+            "version": "Pendiente de publicación",
+            "commit": "No disponible",
+            "fecha_utc": "No disponible",
+            "run_number": "—",
+        }
+        try:
+            ruta_version = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.json")
+            with open(ruta_version, "r", encoding="utf-8") as archivo_version:
+                datos_version = json.load(archivo_version)
+                if isinstance(datos_version, dict):
+                    version_info.update(datos_version)
+        except Exception:
+            pass
+
+        with st.container(border=True):
+            st.markdown("##### Versión activa")
+            c_ver, c_fecha = st.columns(2)
+            c_ver.metric("Versión", str(version_info.get("version", "No disponible")))
+            c_fecha.metric("N.º de publicación", str(version_info.get("run_number", "—")))
+            st.caption("Commit de código: " + str(version_info.get("commit", "No disponible")))
+            st.caption("Generada (UTC): " + str(version_info.get("fecha_utc", "No disponible")))
+            url_commit = version_info.get("commit_url")
+            if url_commit:
+                st.markdown("[Ver commit en GitHub](" + str(url_commit) + ")")
+
+        st.info("Esta información se genera automáticamente al publicar cambios en la rama main. Si no aparece una versión, el sistema de publicación todavía no ha generado los metadatos.")
 
 if tab_admin is not None:
     with tab_admin:
