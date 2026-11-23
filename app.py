@@ -411,6 +411,51 @@ st.markdown("""
             line-height: 1.3 !important;
             overflow-wrap: anywhere;
         }
+
+        /* Control Operativo y SLA: dos columnas exactas, con tarjetas
+           estiradas a la misma altura dentro de cada fila. */
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            column-gap: 0.75rem !important;
+            row-gap: 0.9rem !important;
+            width: 100% !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+            display: flex !important;
+            flex: 0 0 calc((100% - 0.75rem) / 2) !important;
+            width: calc((100% - 0.75rem) / 2) !important;
+            max-width: calc((100% - 0.75rem) / 2) !important;
+            min-width: 0 !important;
+            align-items: stretch !important;
+            box-sizing: border-box !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] [data-testid="stVerticalBlock"] {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            flex: 1 1 auto !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+            flex: 1 1 auto !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 124px !important;
+            box-sizing: border-box !important;
+        }
     }
 
     /* WBR: apilar los gráficos y liberar el ancho completo de cada columna en móvil. */
