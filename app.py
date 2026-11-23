@@ -228,6 +228,16 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
        Estilos acotados a la pestaña mediante su ancla visual.
        Sin cambios en métricas, cálculos ni comportamiento.
        ========================================================= */
+    /* Reduce el hueco superior de esta pestaña sin mover la cabecera fija
+       ni modificar el espaciado de las demás pestañas. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) {
+        padding-top: 0 !important;
+    }
+    div[data-testid="stElementContainer"]:has(.bims-operativo-sla-scope) {
+        margin-block-end: -18px !important;
+        padding-block-end: 0 !important;
+    }
+
     div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card {
         min-height: 128px;
         display: flex;
@@ -1656,10 +1666,13 @@ def renderizar_panel_carga_asignador():
                     estado_presencia = v_estado
                     break
 
-            etiqueta_grafico = agente
+            # El mismo indicador visual identifica la presencia en el gráfico y la tabla.
+            icono_presencia = "🟡" if "ausente" in str(estado_presencia).strip().lower() else "🟢"
+            etiqueta_grafico = f"{icono_presencia} {agente}"
 
             resumen.append({
                 "Estado": estado_presencia,
+                "Icono Presencia": icono_presencia,
                 "Agente de Soporte": agente,
                 "Agente Grafico": etiqueta_grafico,
                 "Total Asignados Hoy": total_asignados,
@@ -1759,9 +1772,11 @@ def renderizar_panel_carga_asignador():
             st.markdown("<br>", unsafe_allow_html=True)
 
             cols_tabla = ["Estado", "Agente de Soporte", "Total Asignados Hoy", "Cerrados Hoy", "Pendientes (Abiertos)"]
+            df_tabla_presencia = df_resumen[cols_tabla].copy()
+            df_tabla_presencia["Estado"] = df_resumen["Icono Presencia"]
 
             st.dataframe(
-                df_resumen[cols_tabla],
+                df_tabla_presencia,
                 column_config={
                     "Estado": st.column_config.TextColumn("Presencia", help="Disponibilidad en Intercom"),
                     "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
