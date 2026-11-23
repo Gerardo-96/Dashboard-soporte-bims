@@ -154,19 +154,19 @@ st.markdown("""
     }
 
     /* Alineación homogénea para tarjetas KPI que comparten una fila. */
-    div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         align-items: stretch !important;
     }
-    div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+    div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
         display: flex !important;
         align-items: stretch !important;
         min-width: 0 !important;
     }
-    div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
-    div[data-testid="stHorizontalBlock"]:has(.metric-card) [data-testid="stVerticalBlock"] {
+    div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
+    div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) [data-testid="stVerticalBlock"] {
         width: 100% !important;
     }
-    div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+    div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
         height: 100% !important;
         min-height: 128px !important;
         box-sizing: border-box !important;
@@ -339,13 +339,13 @@ st.markdown("""
        No se depende del número exacto de columnas: Streamlit puede variar
        los wrappers internos entre versiones. Escritorio permanece intacto. */
     @media (max-width: 1100px) {
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             display: flex !important;
             flex-wrap: wrap !important;
             align-items: stretch !important;
             gap: 0.75rem !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div {
             flex: 0 0 calc((100% - 1.5rem) / 3) !important;
             width: calc((100% - 1.5rem) / 3) !important;
             max-width: calc((100% - 1.5rem) / 3) !important;
@@ -371,7 +371,7 @@ st.markdown("""
         }
         /* Dos tarjetas por fila con ancho calculado incluyendo el gap.
            Evita solapamientos por padding/bordes de los wrappers de Streamlit. */
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             display: flex !important;
             flex-wrap: wrap !important;
             align-items: stretch !important;
@@ -379,7 +379,7 @@ st.markdown("""
             width: 100% !important;
             margin: 0 !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
             flex: 0 0 calc((100% - 0.75rem) / 2) !important;
             width: calc((100% - 0.75rem) / 2) !important;
             max-width: calc((100% - 0.75rem) / 2) !important;
@@ -388,30 +388,30 @@ st.markdown("""
             padding: 0 !important;
             margin: 0 0 0.25rem !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
             min-width: 0 !important;
             max-width: 100% !important;
             width: 100% !important;
             box-sizing: border-box !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
             min-height: 112px !important;
             height: auto !important;
             padding: 13px 12px !important;
             box-sizing: border-box !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-title {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-title {
             font-size: 0.64rem !important;
             line-height: 1.3 !important;
             overflow-wrap: anywhere;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-value {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-value {
             font-size: clamp(1.15rem, 5vw, 1.5rem) !important;
             line-height: 1.15 !important;
             overflow-wrap: anywhere;
         }
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-sub {
+        div[data-baseweb="tab-panel"]:not(:has(.bims-wbr-scope-anchor)) div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-sub {
             font-size: 0.68rem !important;
             line-height: 1.3 !important;
             overflow-wrap: anywhere;
@@ -459,6 +459,73 @@ st.markdown("""
             height: 100% !important;
             margin: 0 0 0.35rem !important;
             box-sizing: border-box !important;
+        }
+
+        /* WBR: estilos móviles aislados. No heredan el layout de KPI del dashboard.
+           Los bloques de gráficos y tablas se apilan; las filas de tarjetas usan 2 columnas. */
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            gap: 0.7rem !important;
+            width: 100% !important;
+            margin: 0 0 0.45rem !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+            flex: 0 0 calc((100% - 0.7rem) / 2) !important;
+            width: calc((100% - 0.7rem) / 2) !important;
+            max-width: calc((100% - 0.7rem) / 2) !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card {
+            width: 100% !important;
+            min-width: 0 !important;
+            min-height: 108px !important;
+            height: auto !important;
+            padding: 13px 11px !important;
+            box-sizing: border-box !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-title {
+            font-size: 0.64rem !important;
+            line-height: 1.3 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-value {
+            font-size: clamp(1.15rem, 5vw, 1.55rem) !important;
+            line-height: 1.15 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-sub {
+            font-size: 0.68rem !important;
+            line-height: 1.3 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .bims-wbr-chart-summary {
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 12px 10px !important;
+            font-size: 0.76rem !important;
+            line-height: 1.45 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) h4,
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) h5 {
+            font-size: 0.98rem !important;
+            line-height: 1.35 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) [data-testid="stDataFrame"] {
+            max-width: 100% !important;
+            overflow-x: auto !important;
         }
 
         /* El gráfico de evolución CSAT queda estático en móvil:
@@ -5245,6 +5312,8 @@ def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
 # ==========================================
 @st.fragment
 def renderizar_informe_wbr(df_base_in, df_correos_in=None):
+    # Ancla exclusiva para aislar los estilos responsive del WBR.
+    st.markdown('<div class="bims-wbr-scope-anchor"></div>', unsafe_allow_html=True)
     st.markdown("""
         <div style="display: flex; align-items: center; gap: 12px;">
             <div>
