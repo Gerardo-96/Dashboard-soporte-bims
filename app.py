@@ -422,7 +422,8 @@ st.markdown("""
             align-items: stretch !important;
             justify-content: flex-start !important;
             column-gap: 0.55rem !important;
-            row-gap: 0.9rem !important;
+            row-gap: 1.15rem !important;
+            margin-bottom: 0.35rem !important;
             width: 100% !important;
         }
         div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
@@ -465,7 +466,8 @@ st.markdown("""
             align-items: stretch !important;
             justify-content: flex-start !important;
             column-gap: 0.65rem !important;
-            row-gap: 0.9rem !important;
+            row-gap: 1.15rem !important;
+            margin-bottom: 0.35rem !important;
             width: 100% !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) > div[data-testid="column"] {
@@ -484,11 +486,13 @@ st.markdown("""
             flex-direction: column !important;
             justify-content: space-between !important;
             width: 100% !important;
-            height: 150px !important;
-            min-height: 150px !important;
-            max-height: 150px !important;
+            height: auto !important;
+            min-height: 178px !important;
+            max-height: none !important;
+            padding: 15px 13px !important;
             box-sizing: border-box !important;
-            overflow: hidden !important;
+            overflow: visible !important;
+            gap: 7px !important;
         }
 
         /* Ocultar flechas de desplazamiento del tablist en pantallas táctiles.
@@ -572,11 +576,11 @@ st.markdown("""
             flex-wrap: wrap !important;
             align-items: stretch !important;
             column-gap: 0.65rem !important;
-            row-gap: 1.15rem !important;
-            margin-bottom: 0.5rem !important;
+            row-gap: 1.35rem !important;
+            margin-bottom: 0.65rem !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) > div[data-testid="column"] {
-            margin-bottom: 0.35rem !important;
+            margin-bottom: 0.55rem !important;
             box-sizing: border-box !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) .metric-card {
