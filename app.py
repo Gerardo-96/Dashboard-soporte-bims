@@ -458,21 +458,57 @@ st.markdown("""
             box-sizing: border-box !important;
         }
 
-        /* En móvil, quitar las flechas laterales de desplazamiento de pestañas.
-           El desplazamiento horizontal por gesto táctil sigue disponible. */
+        /* Control Operativo & SLA: selector específico de las seis tarjetas.
+           Tres columnas iguales y altura fija para que ninguna se vea más corta. */
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-card) {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            column-gap: 0.55rem !important;
+            row-gap: 0.9rem !important;
+            width: 100% !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-card) > div[data-testid="column"] {
+            display: flex !important;
+            flex: 0 0 calc((100% - 1.1rem) / 3) !important;
+            width: calc((100% - 1.1rem) / 3) !important;
+            max-width: calc((100% - 1.1rem) / 3) !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            align-items: stretch !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-card) .bims-sla-card {
+            width: 100% !important;
+            height: 142px !important;
+            min-height: 142px !important;
+            max-height: 142px !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+        }
+
+        /* Ocultar flechas de desplazamiento del tablist en pantallas táctiles.
+           Las pestañas siguen desplazándose mediante swipe horizontal. */
+        #bims-main-tablist [data-testid*="Scroll"],
+        #bims-main-tablist button:not([role="tab"]),
+        .stTabs [data-testid*="Scroll"],
         .stTabs [data-testid="stTabScrollButton"],
         div[data-testid="stTabs"] [data-testid="stTabScrollButton"],
-        .stTabs [data-baseweb="tab-list"] > button[aria-label*="Scroll"],
-        div[data-testid="stTabs"] [data-baseweb="tab-list"] > button[aria-label*="Scroll"] {
+        #bims-main-tablist button[aria-label*="Scroll"],
+        #bims-main-tablist button[aria-label*="scroll"] {
             display: none !important;
             visibility: hidden !important;
             width: 0 !important;
             min-width: 0 !important;
             max-width: 0 !important;
+            flex: 0 0 0 !important;
             padding: 0 !important;
             margin: 0 !important;
             border: 0 !important;
         }
+        #bims-main-tablist,
         .stTabs [data-baseweb="tab-list"],
         div[data-testid="stTabs"] [data-baseweb="tab-list"] {
             padding-left: 0 !important;
@@ -4108,7 +4144,7 @@ with tab_operativo:
 
         def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
             return f"""
-            <div class="metric-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div class="metric-card bims-sla-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
                     <div class="metric-card-title">{title}</div>
                     <div class="metric-card-value" style="color: {val_color};">{value}</div>
