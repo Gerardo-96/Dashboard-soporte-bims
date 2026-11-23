@@ -412,22 +412,20 @@ st.markdown("""
             overflow-wrap: anywhere;
         }
 
-        /* Control Operativo y SLA: conservar tres columnas en móvil,
-           igualando ancho, separación y altura de las tarjetas por fila. */
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+        /* SLA móvil: selector directo por clase propia de las tarjetas.
+           No depende de wrappers/ancestros de pestañas que pueden variar en Streamlit. */
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) {
             display: flex !important;
             flex-direction: row !important;
             flex-wrap: wrap !important;
             align-items: stretch !important;
             justify-content: flex-start !important;
             column-gap: 0.55rem !important;
-            row-gap: 1.15rem !important;
-            margin-bottom: 0.35rem !important;
+            row-gap: 1.5rem !important;
             width: 100% !important;
+            margin-bottom: 1rem !important;
         }
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] {
             display: flex !important;
             flex: 0 0 calc((100% - 1.1rem) / 3) !important;
             width: calc((100% - 1.1rem) / 3) !important;
@@ -436,12 +434,10 @@ st.markdown("""
             align-items: stretch !important;
             box-sizing: border-box !important;
             padding: 0 !important;
-            margin: 0 !important;
+            margin: 0 0 1.4rem !important;
         }
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] [data-testid="stVerticalBlock"] {
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] [data-testid="stVerticalBlock"] {
             display: flex !important;
             flex-direction: column !important;
             align-items: stretch !important;
@@ -449,42 +445,15 @@ st.markdown("""
             min-width: 0 !important;
             flex: 1 1 auto !important;
         }
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
-            flex: 1 1 auto !important;
+        .bims-sla-kpi-card {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
             width: 100% !important;
-            height: 100% !important;
             min-height: 136px !important;
             height: 100% !important;
+            margin: 0 0 1.4rem !important;
             box-sizing: border-box !important;
-        }
-        /* Separación explícita entre las filas de las seis tarjetas SLA.
-           Se aplica solo a esta familia para no alterar otras métricas. */
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) {
-            row-gap: 1.6rem !important;
-            margin-bottom: 1rem !important;
-        }
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] {
-            margin-bottom: 0.9rem !important;
-        }
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        .bims-sla-kpi-card {
-            min-height: 136px !important;
-            height: auto !important;
-            margin-bottom: 1.35rem !important;
-        }
-        /* Margen aplicado directamente a cada tarjeta: garantiza separación
-           visible aunque Streamlit reconstruya los wrappers de las columnas. */
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        .bims-sla-kpi-card {
-            position: relative !important;
-        }
-        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope)
-        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) {
-            row-gap: 1.4rem !important;
-            padding-bottom: 0.65rem !important;
         }
 
         /* CSAT: dos columnas equilibradas, con tarjetas de igual altura en móvil. */
@@ -3983,7 +3952,41 @@ with tab_operativo:
                 height=380,
                 showlegend=False
             )
-            st.plotly_chart(fig_csat, use_container_width=True)
+            # En móvil se muestran únicamente las 10 semanas más recientes.
+            # El ajuste se realiza en el navegador para no alterar el histórico de escritorio.
+            st.plotly_chart(
+                fig_csat,
+                use_container_width=True,
+                key="bims_csat_evolution_chart",
+                config={"displayModeBar": False, "scrollZoom": False}
+            )
+            st.iframe(f"""
+            <script>
+            (function() {{
+                const doc = window.parent.document;
+                const mobile = window.parent.matchMedia('(max-width: 600px)');
+                const chartSelector = '.st-key-bims_csat_evolution_chart .js-plotly-plot';
+                const applyView = function() {{
+                    const chart = doc.querySelector(chartSelector);
+                    if (!chart || !window.parent.Plotly) return;
+                    if (mobile.matches) {{
+                        window.parent.Plotly.relayout(chart, {{
+                            'xaxis.range': [Math.max(-0.25, max(-0.25, total_semanas - 10.75)), total_semanas - 0.75],
+                            'xaxis.autorange': false
+                        }});
+                    }} else {{
+                        window.parent.Plotly.relayout(chart, {{'xaxis.autorange': true}});
+                    }}
+                }};
+                const observer = new MutationObserver(applyView);
+                observer.observe(doc.body, {{childList: true, subtree: true}});
+                applyView();
+                mobile.addEventListener('change', applyView);
+                setTimeout(() => observer.disconnect(), 5000);
+            }})();
+            </script>
+            """, height=1, width=1)
+
         else:
             st.info(f"No hay encuestas registradas desde Q{q_ant_evo} para generar el gráfico.")
     else:
