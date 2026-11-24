@@ -7671,97 +7671,97 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         )
 
 
-            with st.container(border=True):
+        with st.container(border=True):
+            st.markdown(
+                "<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
+                "letter-spacing:-.2px;margin-bottom:2px'>Resumen ejecutivo</div>"
+                "<div style='font-size:.78rem;color:#94a3b8;margin-bottom:12px'>"
+                + (
+                    "La semana está en curso: aquí puedes supervisar los KPI diariamente. "
+                    "El resumen y el PDF estarán disponibles al cierre."
+                    if semana_en_curso else
+                    "Resumen generado automáticamente para la semana cerrada."
+                )
+                + "</div>",
+                unsafe_allow_html=True
+            )
+
+            # La semana en curso es solo de seguimiento. Gemini y el PDF se reservan
+            # para semanas cerradas y se conservan para evitar regeneraciones.
+            if not semana_en_curso and not resumen_actual:
+                try:
+                    with st.spinner("Generando resumen ejecutivo..."):
+                        resumen_actual = obtener_resumen_wbr_gemini(
+                            metricas_wbr, semana_seleccionada_str
+                        )
+                    st.session_state[clave_resumen] = resumen_actual
+                except Exception as error_ia:
+                    st.error(f"No se pudo generar el resumen: {error_ia}")
+
+            if resumen_actual:
+                st.markdown(resumen_actual)
+            elif not semana_en_curso:
                 st.markdown(
-                    "<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
-                    "letter-spacing:-.2px;margin-bottom:2px'>Resumen ejecutivo</div>"
-                    "<div style='font-size:.78rem;color:#94a3b8;margin-bottom:12px'>"
-                    + (
-                        "La semana está en curso: aquí puedes supervisar los KPI diariamente. "
-                        "El resumen y el PDF estarán disponibles al cierre."
-                        if semana_en_curso else
-                        "Resumen generado automáticamente para la semana cerrada."
-                    )
-                    + "</div>",
+                    "<div style='color:#94a3b8;font-size:.86rem;padding:3px 0 1px'>"
+                    "El resumen estará disponible cuando se complete su generación.</div>",
                     unsafe_allow_html=True
                 )
 
-                # La semana en curso es solo de seguimiento. Gemini y el PDF se reservan
-                # para semanas cerradas y se conservan para evitar regeneraciones.
-                if not semana_en_curso and not resumen_actual:
-                    try:
-                        with st.spinner("Generando resumen ejecutivo..."):
-                            resumen_actual = obtener_resumen_wbr_gemini(
-                                metricas_wbr, semana_seleccionada_str
-                            )
-                        st.session_state[clave_resumen] = resumen_actual
-                    except Exception as error_ia:
-                        st.error(f"No se pudo generar el resumen: {error_ia}")
-
-                if resumen_actual:
-                    st.markdown(resumen_actual)
-                elif not semana_en_curso:
-                    st.markdown(
-                        "<div style='color:#94a3b8;font-size:.86rem;padding:3px 0 1px'>"
-                        "El resumen estará disponible cuando se complete su generación.</div>",
-                        unsafe_allow_html=True
+            # El PDF se construye únicamente cuando el usuario pulsa el botón.
+            # Streamlit ejecuta esta función al solicitar la descarga.
+            if semana_en_curso:
+                st.info(
+                    "El resumen ejecutivo y la descarga del PDF estarán disponibles "
+                    "una vez cerrada esta semana."
+                )
+            elif resumen_actual:
+                def generar_pdf_bajo_demanda():
+                    # El callable se ejecuta al solicitar la descarga; el spinner
+                    # informa del proceso sin provocar un rerun del fragmento WBR.
+                    with st.spinner("Generando el PDF… Esto puede tardar unos segundos."):
+                        return generar_pdf_wbr(
+                        semana_seleccionada_str,
+                        {
+                            "Chats recibidos": f"{tot_sem_rec:,}",
+                            "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
+                            "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
+                            "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
+                            "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
+                            "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
+                            "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
+                            "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
+                            "Cierres humanos": f"{cnt_cerrados_humanos}",
+                            "Promedio de cierres por agente": f"{prom_por_agente}",
+                            "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
+                            "Promedio de gestión": f"{foco_gest} min",
+                            "SLA de gestión": f"{foco_sla_gest}%",
+                            "Primera respuesta": f"{foco_1ra} min",
+                            "SLA primera respuesta": f"{foco_sla_1ra}%",
+                            "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
+                            "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
+                            "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
+                            "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
+                            "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
+                            "Contactos promedio por empresa": f"{foco_ratio:.2f}",
+                            "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
+                            "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
+                            "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
+                            "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
+                            "Ingresos en domingo": f"{tot_domingo}"
+                        },
+                        resumen_actual, graficos_wbr, tablas_wbr
                     )
 
-                # El PDF se construye únicamente cuando el usuario pulsa el botón.
-                # Streamlit ejecuta esta función al solicitar la descarga.
-                if semana_en_curso:
-                    st.info(
-                        "El resumen ejecutivo y la descarga del PDF estarán disponibles "
-                        "una vez cerrada esta semana."
-                    )
-                elif resumen_actual:
-                    def generar_pdf_bajo_demanda():
-                        # El callable se ejecuta al solicitar la descarga; el spinner
-                        # informa del proceso sin provocar un rerun del fragmento WBR.
-                        with st.spinner("Generando el PDF… Esto puede tardar unos segundos."):
-                            return generar_pdf_wbr(
-                            semana_seleccionada_str,
-                            {
-                                "Chats recibidos": f"{tot_sem_rec:,}",
-                                "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
-                                "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
-                                "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
-                                "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
-                                "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
-                                "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
-                                "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
-                                "Cierres humanos": f"{cnt_cerrados_humanos}",
-                                "Promedio de cierres por agente": f"{prom_por_agente}",
-                                "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
-                                "Promedio de gestión": f"{foco_gest} min",
-                                "SLA de gestión": f"{foco_sla_gest}%",
-                                "Primera respuesta": f"{foco_1ra} min",
-                                "SLA primera respuesta": f"{foco_sla_1ra}%",
-                                "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
-                                "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
-                                "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
-                                "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
-                                "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
-                                "Contactos promedio por empresa": f"{foco_ratio:.2f}",
-                                "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
-                                "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
-                                "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
-                                "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
-                                "Ingresos en domingo": f"{tot_domingo}"
-                            },
-                            resumen_actual, graficos_wbr, tablas_wbr
-                        )
-
-                    st.download_button(
-                        "Generar y descargar PDF",
-                        data=generar_pdf_bajo_demanda,
-                        file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
-                        mime="application/pdf",
-                        key=f"download_pdf_wbr_{target_year}_{target_week}",
-                        type="primary",
-                        use_container_width=True,
-                        on_click="ignore"
-                    )
+                st.download_button(
+                    "Generar y descargar PDF",
+                    data=generar_pdf_bajo_demanda,
+                    file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
+                    mime="application/pdf",
+                    key=f"download_pdf_wbr_{target_year}_{target_week}",
+                    type="primary",
+                    use_container_width=True,
+                    on_click="ignore"
+                )
 
 # Llamada limpia en la pestaña
 if tab_l2 is not None:
