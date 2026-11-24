@@ -97,8 +97,9 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 "de Kaleido y Chromium en el despliegue. Detalle: "+str(exc)
             )
         img=RLImage(io.BytesIO(img_bytes))
-        img.drawWidth=doc.width
-        img.drawHeight=min(doc.width*img.imageHeight/float(img.imageWidth),105*mm)
+        escala=min(doc.width/float(img.imageWidth),(105*mm)/float(img.imageHeight))
+        img.drawWidth=img.imageWidth*escala
+        img.drawHeight=img.imageHeight*escala
         story.append(KeepTogether([
             Paragraph(escape(f"{n}. {titulo}"),styles["WBRSection"]),
             img, Spacer(1,3*mm)
@@ -162,7 +163,7 @@ def obtener_resumen_wbr_gemini(metricas, semana):
         "secciones: PANORAMA GENERAL, RESULTADOS POSITIVOS, PUNTOS DE ATENCIÓN y "
         "PRIORIDADES SUGERIDAS. Máximo 300 palabras. Si no hay evidencia suficiente "
         "para una sección, indicá que no hay elementos concluyentes.\\n\\n"
-        "INDICADORES (JSON):\\n"+json.dumps(metricas,ensure_ascii=False,default=str)
+        "INDICADORES (JSON):\n"+json.dumps(metricas,ensure_ascii=False,default=str)
     )
     resp=requests.post(
         url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},
@@ -177,7 +178,7 @@ def obtener_resumen_wbr_gemini(metricas, semana):
             detalle=resp.text[:300]
         raise RuntimeError(f"Gemini respondió HTTP {resp.status_code}. {detalle}")
     partes=resp.json().get("candidates",[{}])[0].get("content",{}).get("parts",[])
-    texto="\\n".join(str(p.get("text","")).strip() for p in partes if p.get("text")).strip()
+    texto="\n".join(str(p.get("text","")).strip() for p in partes if p.get("text")).strip()
     if not texto:
         raise RuntimeError("Gemini no devolvió contenido para el resumen.")
     return texto
