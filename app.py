@@ -202,7 +202,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 "de Kaleido y Chromium en el despliegue. Detalle: "+str(exc)
             )
         img=RLImage(io.BytesIO(img_bytes))
-        escala=min(doc.width/float(img.imageWidth),(145*mm)/float(img.imageHeight))
+        escala=min(doc.width/float(img.imageWidth),(130*mm)/float(img.imageHeight))
         img.drawWidth=img.imageWidth*escala
         img.drawHeight=img.imageHeight*escala
         lectura = Paragraph(resumen_grafico(figura_pdf), styles["WBRChartSummary"])
