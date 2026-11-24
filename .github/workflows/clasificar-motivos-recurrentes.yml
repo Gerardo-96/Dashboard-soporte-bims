@@ -2,8 +2,8 @@ name: Clasificar motivos recurrentes
 
 on:
   schedule:
-    # Lunes 08:00 hora de Paraguay (UTC-3) = 11:00 UTC
-    - cron: "0 11 * * 1"
+    # Todos los días a las 08:00 hora de Paraguay (UTC-3) = 11:00 UTC
+    - cron: "0 11 * * *"
   workflow_dispatch:
 
 permissions:
