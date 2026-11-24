@@ -292,23 +292,10 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
                     primera_respuesta_min = None
 
             # =========================================================================
-            # 3. TIEMPO DE GESTIÓN Y CIERRE
-            # =========================================================================
-            state_intercom = str(conv.get("state", "")).lower()
-            fecha_cierre = datetime.fromtimestamp(first_close_at, tz=tz_local) if first_close_at else None
-            estado = "Cerrado" if (state_intercom in ["closed", "resolved"] or fecha_cierre is not None) else "Abierto"
-
-            tiempo_res_hrs, tiempo_res_min = None, None
-            if fecha_cierre and fecha_cierre >= inicio_real:
-                secs = (fecha_cierre - inicio_real).total_seconds()
-                tiempo_res_hrs = round(secs / 3600, 2)
-                tiempo_res_min = round(secs / 60, 2)
-
-            # =========================================================================
-            # 4. RESOLUCIÓN DE AGENTE: ETIQUETAS (Agente: / L2: / agendamiento)
+            # DETECCIÓN DE CORREO Y FILTRO DE SPAM
+            # Se adelanta para determinar el estado con la lógica específica de correos.
             # =========================================================================
             tags = [tag.get("name") for tag in conv.get("tags", {}).get("tags", [])]
-
             tags_lower = [str(t).strip().lower() for t in tags]
             es_spam = "spam" in tags_lower or "spam-erp" in tags_lower
             if es_spam:
@@ -317,6 +304,26 @@ def sincronizar_intercom(dias=None, fecha_desde=None, fecha_hasta=None, progress
             es_correo = (canal == "Correo electrónico") or ("correo" in tags_lower)
             if es_correo:
                 canal = "Correo electrónico"
+
+            # =========================================================================
+            # 3. TIEMPO DE GESTIÓN Y CIERRE
+            # =========================================================================
+            state_intercom = str(conv.get("state", "")).lower()
+            fecha_cierre = datetime.fromtimestamp(first_close_at, tz=tz_local) if first_close_at else None
+
+            # En correos, el estado actual de Intercom prevalece sobre cierres históricos:
+            # un hilo puede reabrirse aunque conserve first_close_at / last_close_at.
+            if es_correo:
+                estado = "Cerrado" if state_intercom in ["closed", "resolved"] else "Abierto"
+            else:
+                estado = "Cerrado" if (state_intercom in ["closed", "resolved"] or fecha_cierre is not None) else "Abierto"
+
+            tiempo_res_hrs, tiempo_res_min = None, None
+            if fecha_cierre and fecha_cierre >= inicio_real:
+                secs = (fecha_cierre - inicio_real).total_seconds()
+                tiempo_res_hrs = round(secs / 3600, 2)
+                tiempo_res_min = round(secs / 60, 2)
+
 
             # Contar cantidad total de respuestas humanas en todo el hilo (Intercom + Gmail corporativo)
             dominios_corporativos = ("@tivahq.com", "@itti.digital", "@bims.app", "@bimsapp.com", "@bims.intercom-mail.com")
