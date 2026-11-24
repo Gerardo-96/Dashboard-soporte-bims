@@ -189,6 +189,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     return buffer.getvalue()
 
 
+@st.cache_data(ttl=7776000, show_spinner=False)
 def obtener_resumen_wbr_gemini(metricas, semana):
     """Solicita a Gemini una interpretación ejecutiva usando solo métricas agregadas."""
     try:
@@ -5789,13 +5790,37 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         df_wbr_base[["iso_year", "iso_week", "semana_str"]]
         .drop_duplicates()
         .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
+        .reset_index(drop=True)
     )
+
+    # Solo semanas completamente cerradas, desde el inicio del trimestre anterior.
+    hoy_paraguay = datetime.now(timezone(timedelta(hours=-3))).date()
+    inicio_trimestre_actual = date(
+        hoy_paraguay.year, ((hoy_paraguay.month - 1) // 3) * 3 + 1, 1
+    )
+    ultimo_dia_trimestre_anterior = inicio_trimestre_actual - timedelta(days=1)
+    inicio_trimestre_anterior = date(
+        ultimo_dia_trimestre_anterior.year,
+        ((ultimo_dia_trimestre_anterior.month - 1) // 3) * 3 + 1,
+        1
+    )
+    from datetime import datetime as dt_calc
+    semanas_disponibles["fecha_inicio"] = semanas_disponibles.apply(
+        lambda r: dt_calc.fromisocalendar(int(r["iso_year"]), int(r["iso_week"]), 1).date(),
+        axis=1
+    )
+    semanas_disponibles["fecha_fin"] = semanas_disponibles["fecha_inicio"] + timedelta(days=6)
+    semanas_disponibles = semanas_disponibles[
+        (semanas_disponibles["fecha_inicio"] >= inicio_trimestre_anterior) &
+        (semanas_disponibles["fecha_fin"] < hoy_paraguay)
+    ].reset_index(drop=True)
 
     opciones_semanas = semanas_disponibles["semana_str"].tolist()
     if not opciones_semanas:
-        st.info("No hay semanas disponibles en el registro.")
+        st.info("Todavía no hay semanas cerradas disponibles desde el trimestre anterior.")
         return
 
+    st.caption("El resumen ejecutivo se genera automáticamente una vez cerrada cada semana.")
     semana_seleccionada_str = st.selectbox(
         "Seleccionar Semana del Reporte WBR:",
         options=opciones_semanas,
@@ -7232,92 +7257,89 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 "<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
                 "letter-spacing:-.2px;margin-bottom:2px'>Resumen ejecutivo</div>"
                 "<div style='font-size:.78rem;color:#94a3b8;margin-bottom:12px'>"
-                "Lectura gerencial de la semana seleccionada</div>",
+                "Se genera automáticamente al cierre de la semana seleccionada.</div>",
                 unsafe_allow_html=True
             )
-            col_generar, col_pdf, col_descarga = st.columns([1.15, 1.05, 1.35], vertical_alignment="center")
-            with col_generar:
-                if st.button(
-                    "Generar resumen",
-                    key=f"btn_generar_resumen_wbr_{target_year}_{target_week}",
-                    type="primary",
-                    use_container_width=True
-                ):
-                    try:
-                        with st.spinner("Preparando resumen..."):
-                            st.session_state[clave_resumen] = obtener_resumen_wbr_gemini(
-                                metricas_wbr, semana_seleccionada_str
-                            )
-                    except Exception as error_ia:
-                        st.error(f"No se pudo generar el resumen: {error_ia}")
-            with col_pdf:
-                if st.button(
-                    "Preparar PDF",
-                    key=f"btn_preparar_pdf_wbr_{target_year}_{target_week}",
-                    use_container_width=True
-                ):
-                    try:
-                        with st.spinner("Preparando documento..."):
-                            st.session_state[clave_pdf] = generar_pdf_wbr(
-                                semana_seleccionada_str,
-                                {
-                                    "Chats recibidos": f"{tot_sem_rec:,}",
-                                    "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
-                                    "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
-                                    "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
-                                    "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
-                                    "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
-                                    "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
-                                    "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
-                                    "Cierres humanos": f"{cnt_cerrados_humanos}",
-                                    "Promedio de cierres por agente": f"{prom_por_agente}",
-                                    "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
-                                    "Promedio de gestión": f"{foco_gest} min",
-                                    "SLA de gestión": f"{foco_sla_gest}%",
-                                    "Primera respuesta": f"{foco_1ra} min",
-                                    "SLA primera respuesta": f"{foco_sla_1ra}%",
-                                    "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
-                                    "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
-                                    "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
-                                    "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
-                                    "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
-                                    "Contactos promedio por empresa": f"{foco_ratio:.2f}",
-                                    "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
-                                    "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
-                                    "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
-                                    "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
-                                    "Ingresos en domingo": f"{tot_domingo}"
-                                },
-                                resumen_actual, graficos_wbr, tablas_wbr
-                            )
-                    except Exception as error_pdf:
-                        st.error(f"No se pudo preparar el PDF: {error_pdf}")
-            with col_descarga:
-                pdf_generado = st.session_state.get(clave_pdf)
-                if pdf_generado:
-                    st.download_button(
-                        "Descargar PDF",
-                        data=pdf_generado,
-                        file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
-                        mime="application/pdf",
-                        key=f"download_pdf_wbr_{target_year}_{target_week}",
-                        use_container_width=True
-                    )
-                else:
-                    st.button("Descargar PDF", disabled=True, key=f"download_pdf_disabled_{target_year}_{target_week}", use_container_width=True)
 
-            st.markdown(
-                "<div style='height:1px;background:rgba(100,116,139,.24);margin:12px 0 14px'></div>",
-                unsafe_allow_html=True
-            )
-            resumen_actual = st.session_state.get(clave_resumen, "")
+            # La semana ya está cerrada por el filtro del selector. El resultado se
+            # conserva en sesión y la función cacheada evita repetir llamadas a Gemini.
+            if not resumen_actual:
+                try:
+                    with st.spinner("Generando resumen ejecutivo..."):
+                        resumen_actual = obtener_resumen_wbr_gemini(
+                            metricas_wbr, semana_seleccionada_str
+                        )
+                    st.session_state[clave_resumen] = resumen_actual
+                except Exception as error_ia:
+                    st.error(f"No se pudo generar el resumen: {error_ia}")
+
             if resumen_actual:
                 st.markdown(resumen_actual)
             else:
                 st.markdown(
                     "<div style='color:#94a3b8;font-size:.86rem;padding:3px 0 1px'>"
-                    "El resumen de esta semana todavía no fue generado.</div>",
+                    "El resumen estará disponible cuando se complete su generación.</div>",
                     unsafe_allow_html=True
+                )
+
+            # El PDF se prepara automáticamente junto con el resumen. La única
+            # acción manual que queda es descargar el informe terminado.
+            pdf_generado = st.session_state.get(clave_pdf)
+            if resumen_actual and not pdf_generado:
+                try:
+                    with st.spinner("Preparando el informe PDF..."):
+                        pdf_generado = generar_pdf_wbr(
+                            semana_seleccionada_str,
+                            {
+                                "Chats recibidos": f"{tot_sem_rec:,}",
+                                "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
+                                "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
+                                "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
+                                "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
+                                "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
+                                "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
+                                "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
+                                "Cierres humanos": f"{cnt_cerrados_humanos}",
+                                "Promedio de cierres por agente": f"{prom_por_agente}",
+                                "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
+                                "Promedio de gestión": f"{foco_gest} min",
+                                "SLA de gestión": f"{foco_sla_gest}%",
+                                "Primera respuesta": f"{foco_1ra} min",
+                                "SLA primera respuesta": f"{foco_sla_1ra}%",
+                                "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
+                                "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
+                                "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
+                                "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
+                                "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
+                                "Contactos promedio por empresa": f"{foco_ratio:.2f}",
+                                "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
+                                "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
+                                "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
+                                "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
+                                "Ingresos en domingo": f"{tot_domingo}"
+                            },
+                            resumen_actual, graficos_wbr, tablas_wbr
+                        )
+                    st.session_state[clave_pdf] = pdf_generado
+                except Exception as error_pdf:
+                    st.error(f"No se pudo preparar el PDF: {error_pdf}")
+
+            if pdf_generado:
+                st.download_button(
+                    "Descargar informe PDF",
+                    data=pdf_generado,
+                    file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
+                    mime="application/pdf",
+                    key=f"download_pdf_wbr_{target_year}_{target_week}",
+                    type="primary",
+                    use_container_width=True
+                )
+            else:
+                st.button(
+                    "Preparando informe PDF...",
+                    disabled=True,
+                    key=f"download_pdf_pending_{target_year}_{target_week}",
+                    use_container_width=True
                 )
 
 # Llamada limpia en la pestaña
