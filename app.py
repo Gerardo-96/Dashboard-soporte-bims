@@ -5793,7 +5793,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         .reset_index(drop=True)
     )
 
-    # Solo semanas completamente cerradas, desde el inicio del trimestre anterior.
+    # Mostrar semanas desde el trimestre anterior, incluyendo la semana en curso.
     hoy_paraguay = datetime.now(timezone(timedelta(hours=-3))).date()
     inicio_trimestre_actual = date(
         hoy_paraguay.year, ((hoy_paraguay.month - 1) // 3) * 3 + 1, 1
@@ -5805,6 +5805,22 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         1
     )
     from datetime import datetime as dt_calc
+    iso_actual = hoy_paraguay.isocalendar()
+    inicio_semana_actual = dt_calc.fromisocalendar(
+        iso_actual.year, iso_actual.week, 1
+    ).date()
+
+    # Añadir la semana actual aunque todavía no tenga registros, para permitir
+    # supervisar los KPI desde el inicio de la semana.
+    semana_actual_df = pd.DataFrame([{
+        "iso_year": int(iso_actual.year),
+        "iso_week": int(iso_actual.week),
+        "semana_str": f"Semana {int(iso_actual.week):02d} ({int(iso_actual.year)})"
+    }])
+    semanas_disponibles = pd.concat(
+        [semanas_disponibles, semana_actual_df], ignore_index=True
+    ).drop_duplicates(subset=["iso_year", "iso_week"])
+
     semanas_disponibles["fecha_inicio"] = semanas_disponibles.apply(
         lambda r: dt_calc.fromisocalendar(int(r["iso_year"]), int(r["iso_week"]), 1).date(),
         axis=1
@@ -5812,15 +5828,20 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     semanas_disponibles["fecha_fin"] = semanas_disponibles["fecha_inicio"] + timedelta(days=6)
     semanas_disponibles = semanas_disponibles[
         (semanas_disponibles["fecha_inicio"] >= inicio_trimestre_anterior) &
-        (semanas_disponibles["fecha_fin"] < hoy_paraguay)
-    ].reset_index(drop=True)
+        (semanas_disponibles["fecha_inicio"] <= inicio_semana_actual)
+    ].sort_values(
+        by=["iso_year", "iso_week"], ascending=[False, False]
+    ).reset_index(drop=True)
 
     opciones_semanas = semanas_disponibles["semana_str"].tolist()
     if not opciones_semanas:
-        st.info("Todavía no hay semanas cerradas disponibles desde el trimestre anterior.")
+        st.info("No hay semanas disponibles desde el trimestre anterior.")
         return
 
-    st.caption("El resumen ejecutivo se genera automáticamente una vez cerrada cada semana.")
+    st.caption(
+        "Puedes consultar los KPI de la semana en curso. El resumen ejecutivo y el "
+        "informe PDF se habilitarán automáticamente una vez cerrada la semana."
+    )
     semana_seleccionada_str = st.selectbox(
         "Seleccionar Semana del Reporte WBR:",
         options=opciones_semanas,
@@ -5834,6 +5855,10 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     fila_sem = semanas_disponibles[semanas_disponibles["semana_str"] == semana_seleccionada_str].iloc[0]
     target_year = int(fila_sem["iso_year"])
     target_week = int(fila_sem["iso_week"])
+    semana_en_curso = (
+        target_year == int(iso_actual.year) and
+        target_week == int(iso_actual.week)
+    )
 
     resumen_wbr_slot = st.empty()
     graficos_wbr = []
@@ -7257,13 +7282,19 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 "<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
                 "letter-spacing:-.2px;margin-bottom:2px'>Resumen ejecutivo</div>"
                 "<div style='font-size:.78rem;color:#94a3b8;margin-bottom:12px'>"
-                "Se genera automáticamente al cierre de la semana seleccionada.</div>",
+                + (
+                    "La semana está en curso: aquí puedes supervisar los KPI diariamente. "
+                    "El resumen y el PDF estarán disponibles al cierre."
+                    if semana_en_curso else
+                    "Resumen generado automáticamente para la semana cerrada."
+                )
+                + "</div>",
                 unsafe_allow_html=True
             )
 
-            # La semana ya está cerrada por el filtro del selector. El resultado se
-            # conserva en sesión y la función cacheada evita repetir llamadas a Gemini.
-            if not resumen_actual:
+            # La semana en curso es solo de seguimiento. Gemini y el PDF se reservan
+            # para semanas cerradas y se conservan para evitar regeneraciones.
+            if not semana_en_curso and not resumen_actual:
                 try:
                     with st.spinner("Generando resumen ejecutivo..."):
                         resumen_actual = obtener_resumen_wbr_gemini(
@@ -7285,7 +7316,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             # El PDF se prepara automáticamente junto con el resumen. La única
             # acción manual que queda es descargar el informe terminado.
             pdf_generado = st.session_state.get(clave_pdf)
-            if resumen_actual and not pdf_generado:
+            if not semana_en_curso and resumen_actual and not pdf_generado:
                 try:
                     with st.spinner("Preparando el informe PDF..."):
                         pdf_generado = generar_pdf_wbr(
@@ -7324,7 +7355,12 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 except Exception as error_pdf:
                     st.error(f"No se pudo preparar el PDF: {error_pdf}")
 
-            if pdf_generado:
+            if semana_en_curso:
+                st.info(
+                    "El resumen ejecutivo y la descarga del PDF estarán disponibles "
+                    "una vez cerrada esta semana."
+                )
+            elif pdf_generado:
                 st.download_button(
                     "Descargar informe PDF",
                     data=pdf_generado,
