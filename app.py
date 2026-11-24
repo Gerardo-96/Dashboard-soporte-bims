@@ -25,6 +25,13 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
     from xml.sax.saxutils import escape
 
+    def texto_pdf(valor):
+        return (
+            str(valor).replace("★", "*").replace("✨", "")
+            .replace("≥", ">=").replace("≤", "<=")
+            .replace("→", "->").replace("•", "-")
+        )
+
     buffer = io.BytesIO()
     page_size = landscape(A4)
     doc = SimpleDocTemplate(
@@ -53,7 +60,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
 
     story = [
         Paragraph("INFORME EJECUTIVO SEMANAL", styles["WBRTitle"]),
-        Paragraph(escape(str(semana)), styles["Heading2"]),
+        Paragraph(escape(texto_pdf(semana)), styles["Heading2"]),
         Paragraph(
             "Dashboard de Soporte BIMS · Generado "
             + datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
@@ -83,9 +90,9 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         if not linea:
             story.append(Spacer(1,2*mm))
         elif linea.startswith("#"):
-            story.append(Paragraph(escape(linea.lstrip("# ").strip()),styles["Heading3"]))
+            story.append(Paragraph(escape(texto_pdf(linea.lstrip("# ").strip())),styles["Heading3"]))
         else:
-            story.append(Paragraph(escape(linea),styles["WBRBody"]))
+            story.append(Paragraph(escape(texto_pdf(linea)),styles["WBRBody"]))
 
     story.append(Paragraph("Desarrollo completo del WBR",styles["WBRSection"]))
     for n,(titulo,figura) in enumerate(graficos,1):
@@ -109,9 +116,9 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         if df is None or df.empty:
             continue
         story.append(Paragraph(escape(str(titulo)),styles["WBRSection"]))
-        data=[[Paragraph(f"<b>{escape(str(c))}</b>",styles["WBRSmall"]) for c in df.columns]]
+        data=[[Paragraph(f"<b>{escape(texto_pdf(c))}</b>",styles["WBRSmall"]) for c in df.columns]]
         for _,row in df.iterrows():
-            data.append([Paragraph(escape(str(v)),styles["WBRSmall"]) for v in row.tolist()])
+            data.append([Paragraph(escape(texto_pdf(v)),styles["WBRSmall"]) for v in row.tolist()])
         widths=[doc.width/max(1,len(df.columns))]*len(df.columns)
         t=Table(data,colWidths=widths,repeatRows=1,hAlign="LEFT")
         t.setStyle(TableStyle([
