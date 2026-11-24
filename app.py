@@ -7306,7 +7306,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
 
             if resumen_actual:
                 st.markdown(resumen_actual)
-            else:
+            elif not semana_en_curso:
                 st.markdown(
                     "<div style='color:#94a3b8;font-size:.86rem;padding:3px 0 1px'>"
                     "El resumen estará disponible cuando se complete su generación.</div>",
