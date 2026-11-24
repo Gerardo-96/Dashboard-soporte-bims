@@ -179,11 +179,13 @@ def main():
     frecuencias = obtener_titulos_y_frecuencias(supabase)
     print(f"Títulos AI válidos encontrados: {len(frecuencias)}")
 
+    # Cargar el catálogo una sola vez; actualizarlo en memoria tras cada inserción.
+    # Así evitamos volver a descargar miles de filas de Supabase en cada lote.
+    catalogo = obtener_catalogo(supabase)
     total_clasificados = 0
     numero_lote = 0
 
     while True:
-        catalogo = obtener_catalogo(supabase)
         pendientes = [
             titulo for titulo in frecuencias
             if titulo not in catalogo
@@ -222,6 +224,11 @@ def main():
                     realmente_nuevos
                 ).execute()
                 insertados = len(realmente_nuevos)
+            catalogo = catalogo_actualizado
+
+        if insertados:
+            for fila in nuevos:
+                catalogo[fila["ai_title"]] = fila
 
         total_clasificados += insertados
         print(f"Lote {numero_lote} guardado: {insertados} títulos nuevos.")
