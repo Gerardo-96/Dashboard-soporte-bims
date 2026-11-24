@@ -7280,7 +7280,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     color_csat = "#34d399" if diff_csat >= 0 else "#f87171"
     st.markdown(
         f"""
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:4px 0 16px;">
+        <div class="wbr-highlights" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:4px 0 16px;">
             <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:16px 18px;min-height:112px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
                 <div style="font-size:.72rem;font-weight:650;letter-spacing:.7px;color:#94a3b8;text-transform:uppercase;">Chats recibidos</div>
                 <div style="font-size:1.85rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{tot_sem_rec:,}</div>
@@ -7294,7 +7294,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         </div>
         <style>
         @media (max-width: 640px) {{
-            .bims-wbr-scope-anchor ~ div div[style*="grid-template-columns:repeat(2,minmax(0,1fr))"] {{
+            .wbr-highlights {{
                 grid-template-columns:1fr !important;
             }}
         }}
