@@ -138,8 +138,10 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         partes = []
         for traza in figura.data:
             nombre = str(getattr(traza, "name", "") or "Serie")
-            xs = list(getattr(traza, "x", []) or [])
-            ys = list(getattr(traza, "y", []) or [])
+            valores_x = getattr(traza, "x", None)
+            valores_y = getattr(traza, "y", None)
+            xs = list(valores_x) if valores_x is not None else []
+            ys = list(valores_y) if valores_y is not None else []
             pares = []
             for x, y in zip(xs, ys):
                 try:
