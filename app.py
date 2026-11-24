@@ -2369,6 +2369,206 @@ def procesar_fechas_df(df):
 
     return df
 
+# ==========================================
+# CATÁLOGO DE MOTIVOS RECURRENTES (AI TITLE)
+# ==========================================
+@st.cache_data(ttl=60, show_spinner=False)
+def obtener_catalogo_motivos_recurrentes():
+    """Lee el catálogo persistente sin modificar conversaciones."""
+    res = (
+        supabase.table("catalogo_motivos_recurrentes")
+        .select("ai_title, motivo_recurrente, origen, revisado, updated_at")
+        .order("ai_title")
+        .execute()
+    )
+    return res.data or []
+
+
+def clasificar_titulos_recurrentes_ia(titulos):
+    """Clasifica títulos únicos usando solo ai_title."""
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise ValueError("Falta configurar GEMINI_API_KEY en los secretos de Streamlit.")
+
+    resultados = []
+    modelo = "gemini-3.5-flash-lite"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+
+    for inicio in range(0, len(titulos), 40):
+        lote = titulos[inicio:inicio + 40]
+        prompt = (
+            "Actuá como especialista en taxonomía de incidencias de soporte. "
+            "Recibirás títulos breves generados por IA. Agrupá únicamente los que "
+            "describan el mismo problema o solicitud; normalizá singular/plural y "
+            "redacciones equivalentes. Conservá diferencias entre productos, documentos "
+            "y acciones: 'Certificación de factura' y 'Certificación de facturas' pueden "
+            "compartir categoría, pero 'Certificación de ventas' debe quedar diferenciada. "
+            "'Anulación de factura' no debe confundirse con 'Cambio de factura'. "
+            "Usá categorías breves y claras. Si el título es ambiguo, mantenelo como "
+            "categoría independiente. No inventes contexto. Respondé exclusivamente "
+            "JSON válido: {\"items\":[{\"ai_title\":\"título exacto\","
+            "\"motivo_recurrente\":\"categoría\"}]}. Devolvé un elemento por título, "
+            "sin omitir ni alterar el texto original. TÍTULOS: "
+            + json.dumps(lote, ensure_ascii=False)
+        )
+        resp = requests.post(
+            url,
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "responseMimeType": "application/json",
+                    "maxOutputTokens": 5000
+                }
+            },
+            timeout=60
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Gemini respondió HTTP {resp.status_code}: {resp.text[:500]}")
+        payload = resp.json()
+        texto = payload["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if texto.startswith("```"):
+            texto = texto.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(texto)
+        items = parsed.get("items", []) if isinstance(parsed, dict) else []
+        esperados = set(lote)
+        recibidos = set()
+        for item in items:
+            titulo = str(item.get("ai_title", "")).strip()
+            motivo = str(item.get("motivo_recurrente", "")).strip()
+            if titulo in esperados and motivo:
+                resultados.append({
+                    "ai_title": titulo,
+                    "motivo_recurrente": motivo,
+                    "origen": "ia",
+                    "revisado": False
+                })
+                recibidos.add(titulo)
+        faltantes = esperados - recibidos
+        if faltantes:
+            raise ValueError("La IA no clasificó: " + ", ".join(sorted(faltantes)[:8]))
+    return resultados
+
+
+def renderizar_gestion_motivos_recurrentes(df_base_motivos):
+    """Permite clasificar títulos pendientes y corregir equivalencias."""
+    st.markdown("#### Clasificación de motivos recurrentes")
+    st.caption(
+        "Se utiliza exclusivamente AI title. No se consultan ni almacenan mensajes, "
+        "transcripciones o datos personales de las conversaciones."
+    )
+    if df_base_motivos is None or df_base_motivos.empty or "ai_title" not in df_base_motivos.columns:
+        st.info("No hay títulos AI disponibles en el histórico cargado.")
+        return
+
+    titulos = df_base_motivos["ai_title"].fillna("").astype(str).str.strip()
+    titulos = titulos[(titulos != "") & (titulos.str.lower() != "no generado") & (titulos.str.lower() != "nan")]
+    frecuencias = titulos.value_counts()
+    disponibles = set(frecuencias.index.tolist())
+
+    try:
+        catalogo = obtener_catalogo_motivos_recurrentes()
+    except Exception as error:
+        st.error(f"No se pudo consultar el catálogo: {error}")
+        return
+
+    mapa = {str(item.get("ai_title", "")).strip(): item for item in catalogo}
+    pendientes = [titulo for titulo in disponibles if titulo not in mapa]
+    pendientes.sort(key=lambda titulo: (-int(frecuencias.get(titulo, 0)), titulo.lower()))
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Títulos únicos", f"{len(disponibles):,}")
+    c2.metric("Clasificados", f"{len(disponibles) - len(pendientes):,}")
+    c3.metric("Pendientes", f"{len(pendientes):,}")
+
+    if pendientes:
+        st.caption("Se procesan hasta 40 títulos por lote. Los ya clasificados no vuelven a enviarse a la IA.")
+        if st.button(
+            f"Clasificar próximos {min(40, len(pendientes))} títulos con IA",
+            key="btn_clasificar_motivos_recurrentes",
+            type="primary"
+        ):
+            try:
+                with st.spinner(f"Clasificando {min(40, len(pendientes))} títulos..."):
+                    nuevos = clasificar_titulos_recurrentes_ia(pendientes[:40])
+                    supabase.table("catalogo_motivos_recurrentes").upsert(
+                        nuevos, on_conflict="ai_title"
+                    ).execute()
+                obtener_catalogo_motivos_recurrentes.clear()
+                st.success(f"Se clasificaron {len(nuevos)} títulos.")
+                st.rerun()
+            except Exception as error:
+                st.error(f"No se pudo completar la clasificación: {error}")
+    else:
+        st.success("Todos los títulos del histórico cargado tienen clasificación.")
+
+    if catalogo:
+        st.markdown("---")
+        st.markdown("##### Revisar y corregir equivalencias")
+        st.caption(
+            "Editá el motivo recurrente y marcá las categorías revisadas. "
+            "Las correcciones manuales se conservarán en futuras clasificaciones."
+        )
+        df_editor = pd.DataFrame(catalogo)
+        for columna in ["ai_title", "motivo_recurrente", "revisado", "origen"]:
+            if columna not in df_editor.columns:
+                df_editor[columna] = False if columna == "revisado" else ""
+        df_editor = df_editor[["ai_title", "motivo_recurrente", "revisado", "origen"]].copy()
+        df_editor["revisado"] = df_editor["revisado"].fillna(False).astype(bool)
+        df_editor = df_editor.sort_values(["revisado", "ai_title"], ascending=[True, True]).reset_index(drop=True)
+
+        editado = st.data_editor(
+            df_editor,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            key="editor_catalogo_motivos_recurrentes",
+            disabled=["ai_title", "origen"],
+            column_config={
+                "ai_title": st.column_config.TextColumn("AI title", width="large"),
+                "motivo_recurrente": st.column_config.TextColumn("Motivo recurrente", width="large", required=True),
+                "revisado": st.column_config.CheckboxColumn("Revisado"),
+                "origen": st.column_config.TextColumn("Origen", width="small")
+            }
+        )
+        if st.button("Guardar correcciones del catálogo", key="btn_guardar_catalogo_motivos"):
+            originales = {str(row["ai_title"]): row for row in catalogo}
+            cambios = []
+            for _, row in editado.iterrows():
+                titulo = str(row.get("ai_title", "")).strip()
+                motivo = str(row.get("motivo_recurrente", "")).strip()
+                if not titulo or not motivo:
+                    continue
+                original = originales.get(titulo, {})
+                revisado = bool(row.get("revisado", False))
+                if motivo != str(original.get("motivo_recurrente", "")).strip() or revisado != bool(original.get("revisado", False)):
+                    cambios.append({
+                        "ai_title": titulo,
+                        "motivo_recurrente": motivo,
+                        "origen": "manual" if motivo != str(original.get("motivo_recurrente", "")).strip() else original.get("origen", "ia"),
+                        "revisado": revisado,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    })
+            if cambios:
+                try:
+                    supabase.table("catalogo_motivos_recurrentes").upsert(
+                        cambios, on_conflict="ai_title"
+                    ).execute()
+                    obtener_catalogo_motivos_recurrentes.clear()
+                    st.session_state.pop("editor_catalogo_motivos_recurrentes", None)
+                    st.success(f"Se guardaron {len(cambios)} cambios.")
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"No se pudieron guardar las correcciones: {error}")
+            else:
+                st.info("No hay cambios pendientes para guardar.")
+
 COLUMNAS_DASHBOARD = (
     "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
     "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
