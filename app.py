@@ -6687,6 +6687,17 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         color_est = {"Resuelto": "#34d399", "Cerrado": "#10b981", "En progreso": "#38bdf8", "Abierto": "#fbbf24", "Pendiente": "#94a3b8"}
 
         df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
+        tablas_wbr.append((
+            "Detalle de fricción L3 y tickets relacionados",
+            df_l3_neg[[
+                "rating_int", "motivo_clean", "ticket_limpio", "prioridad",
+                "estado", "tenant_clean", "agente_clean"
+            ]].rename(columns={
+                "rating_int": "Calificación", "motivo_clean": "Motivo",
+                "ticket_limpio": "Ticket", "tenant_clean": "Tenant",
+                "agente_clean": "Agente"
+            }).copy()
+        ))
 
         filas_html_l3 = []
         for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
