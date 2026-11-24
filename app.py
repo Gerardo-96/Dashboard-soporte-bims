@@ -85,24 +85,34 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         Spacer(1, 5*mm),
         Paragraph("Indicadores principales", styles["WBRSection"])
     ]
+    # Dos bloques paralelos de Indicador/Resultado para aprovechar el ancho A4.
+    pares_metricas = list(metricas.items())
+    mitad = (len(pares_metricas) + 1) // 2
+    bloque_izq, bloque_der = pares_metricas[:mitad], pares_metricas[mitad:]
     filas = [[
+        Paragraph("Indicador", styles["WBRTableHead"]),
+        Paragraph("Resultado", styles["WBRTableHead"]),
         Paragraph("Indicador", styles["WBRTableHead"]),
         Paragraph("Resultado", styles["WBRTableHead"])
     ]]
-    filas.extend([
-        [Paragraph(escape(texto_pdf(k)), styles["WBRTableCell"]),
-         Paragraph(escape(texto_pdf(v)), styles["WBRTableCell"])]
-        for k, v in metricas.items()
-    ])
-    tabla = Table(filas, colWidths=[75*mm, 90*mm], repeatRows=1)
+    for i in range(mitad):
+        izq = bloque_izq[i]
+        der = bloque_der[i] if i < len(bloque_der) else ("", "")
+        filas.append([
+            Paragraph(escape(texto_pdf(izq[0])), styles["WBRTableCell"]),
+            Paragraph(escape(texto_pdf(izq[1])), styles["WBRTableCell"]),
+            Paragraph(escape(texto_pdf(der[0])), styles["WBRTableCell"]),
+            Paragraph(escape(texto_pdf(der[1])), styles["WBRTableCell"])
+        ])
+    ancho = doc.width
+    tabla = Table(filas, colWidths=[ancho*0.29, ancho*0.21, ancho*0.29, ancho*0.21], repeatRows=1)
     tabla.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17263B")),
-        ("BACKGROUND",(0,1),(-1,-1),colors.HexColor("#111C2E")),
         ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#111C2E"),colors.HexColor("#162337")]),
         ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#334155")),
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("LEFTPADDING",(0,0),(-1,-1),7),("RIGHTPADDING",(0,0),(-1,-1),7),
-        ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)
+        ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)
     ]))
     story.extend([tabla, Spacer(1,4*mm), Paragraph("Resumen ejecutivo",styles["WBRSection"])])
     texto = resumen_ia or "No se generó un resumen con IA para esta semana."
@@ -115,6 +125,43 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         else:
             story.append(Paragraph(escape(texto_pdf(linea)),styles["WBRBody"]))
 
+    styles.add(ParagraphStyle(
+        name="WBRChartSummary", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=9, leading=13, textColor=colors.HexColor("#CBD5E1"),
+        leftIndent=3*mm, borderColor=colors.HexColor("#334155"),
+        borderWidth=0.6, borderPadding=7, backColor=colors.HexColor("#111C2E"),
+        spaceBefore=1*mm, spaceAfter=4*mm
+    ))
+
+    def resumen_grafico(figura):
+        """Genera una lectura descriptiva basada únicamente en los datos visibles del gráfico."""
+        partes = []
+        for traza in figura.data:
+            nombre = str(getattr(traza, "name", "") or "Serie")
+            xs = list(getattr(traza, "x", []) or [])
+            ys = list(getattr(traza, "y", []) or [])
+            pares = []
+            for x, y in zip(xs, ys):
+                try:
+                    if y is not None and np.isfinite(float(y)):
+                        pares.append((str(x), float(y)))
+                except (TypeError, ValueError):
+                    continue
+            if not pares:
+                continue
+            maximo = max(pares, key=lambda p: p[1])
+            minimo = min(pares, key=lambda p: p[1])
+            def fmt(v):
+                return f"{v:,.2f}".rstrip("0").rstrip(".").replace(",", "X").replace(".", ",").replace("X", ".")
+            if len(pares) == 1:
+                partes.append(f"<b>{escape(nombre)}</b>: {escape(maximo[0])} registró {fmt(maximo[1])}.")
+            else:
+                partes.append(
+                    f"<b>{escape(nombre)}</b>: máximo de {fmt(maximo[1])} en {escape(maximo[0])}; "
+                    f"mínimo de {fmt(minimo[1])} en {escape(minimo[0])}."
+                )
+        return " ".join(partes) if partes else "El gráfico presenta la distribución de los datos para el período analizado."
+
     story.append(Paragraph("Desarrollo completo del WBR",styles["WBRSection"]))
     for n,(titulo,figura) in enumerate(graficos,1):
         try:
@@ -122,35 +169,44 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
             figura_pdf.update_layout(
                 paper_bgcolor="#0b1120",
                 plot_bgcolor="#0b1120",
-                font=dict(color="#E2E8F0"),
-                title_font=dict(color="#F8FAFC"),
-                legend=dict(font=dict(color="#CBD5E1")),
+                font=dict(color="#E2E8F0", size=13, family="Arial"),
+                title_font=dict(color="#F8FAFC", size=17, family="Arial"),
+                legend=dict(font=dict(color="#F8FAFC", size=13, family="Arial Black")),
                 xaxis=dict(
-                    tickfont=dict(color="#CBD5E1"),
-                    title_font=dict(color="#CBD5E1"),
+                    tickfont=dict(color="#F8FAFC", size=12, family="Arial Black"),
+                    title_font=dict(color="#CBD5E1", size=13, family="Arial"),
                     gridcolor="#243247", zerolinecolor="#334155",
                     linecolor="#475569"
                 ),
                 yaxis=dict(
-                    tickfont=dict(color="#CBD5E1"),
-                    title_font=dict(color="#CBD5E1"),
+                    tickfont=dict(color="#F8FAFC", size=12, family="Arial Black"),
+                    title_font=dict(color="#CBD5E1", size=13, family="Arial"),
                     gridcolor="#243247", zerolinecolor="#334155",
                     linecolor="#475569"
                 )
             )
-            img_bytes=figura_pdf.to_image(format="png",width=1400,height=760,scale=1.25)
+            for traza in figura_pdf.data:
+                if getattr(traza, "showlegend", None) is not False:
+                    traza.name = str(getattr(traza, "name", "") or "")
+                if hasattr(traza, "textfont"):
+                    traza.textfont = dict(color="#FFFFFF", size=15, family="Arial Black")
+        except Exception as exc:
+            raise RuntimeError("No se pudo preparar un gráfico para el PDF. Detalle: " + str(exc))
+        try:
+            img_bytes=figura_pdf.to_image(format="png",width=1800,height=1000,scale=1.5)
         except Exception as exc:
             raise RuntimeError(
                 "No se pudo convertir un gráfico a imagen. Verificá la instalación "
                 "de Kaleido y Chromium en el despliegue. Detalle: "+str(exc)
             )
         img=RLImage(io.BytesIO(img_bytes))
-        escala=min(doc.width/float(img.imageWidth),(105*mm)/float(img.imageHeight))
+        escala=min(doc.width/float(img.imageWidth),(145*mm)/float(img.imageHeight))
         img.drawWidth=img.imageWidth*escala
         img.drawHeight=img.imageHeight*escala
+        lectura = Paragraph(resumen_grafico(figura_pdf), styles["WBRChartSummary"])
         story.append(KeepTogether([
             Paragraph(escape(f"{n}. {titulo}"),styles["WBRSection"]),
-            img, Spacer(1,3*mm)
+            img, Spacer(1,2*mm), lectura
         ]))
 
     for titulo,df in tablas:
