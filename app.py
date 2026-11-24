@@ -7273,7 +7273,6 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     }
 
     clave_resumen = f"wbr_resumen_ia_{target_year}_{target_week}"
-    clave_pdf = f"wbr_pdf_{target_year}_{target_week}"
     resumen_actual = st.session_state.get(clave_resumen, "")
 
     with resumen_wbr_slot.container():
