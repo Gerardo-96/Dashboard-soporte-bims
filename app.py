@@ -162,7 +162,7 @@ def obtener_resumen_wbr_gemini(metricas, semana):
         "No menciones personas, clientes ni tickets. Organizá la respuesta en estas "
         "secciones: PANORAMA GENERAL, RESULTADOS POSITIVOS, PUNTOS DE ATENCIÓN y "
         "PRIORIDADES SUGERIDAS. Máximo 300 palabras. Si no hay evidencia suficiente "
-        "para una sección, indicá que no hay elementos concluyentes.\\n\\n"
+        "para una sección, indicá que no hay elementos concluyentes.\n\n"
         "INDICADORES (JSON):\n"+json.dumps(metricas,ensure_ascii=False,default=str)
     )
     resp=requests.post(
