@@ -2375,13 +2375,24 @@ def procesar_fechas_df(df):
 @st.cache_data(ttl=60, show_spinner=False)
 def obtener_catalogo_motivos_recurrentes():
     """Lee el catálogo persistente sin modificar conversaciones."""
-    res = (
-        supabase.table("catalogo_motivos_recurrentes")
-        .select("ai_title, motivo_recurrente, origen, revisado, updated_at")
-        .order("ai_title")
-        .execute()
-    )
-    return res.data or []
+    todos = []
+    inicio = 0
+    while True:
+        res = (
+            supabase.table("catalogo_motivos_recurrentes")
+            .select("ai_title, motivo_recurrente, origen, revisado, updated_at")
+            .order("ai_title")
+            .range(inicio, inicio + 999)
+            .execute()
+        )
+        lote = res.data or []
+        if not lote:
+            break
+        todos.extend(lote)
+        if len(lote) < 1000:
+            break
+        inicio += 1000
+    return todos
 
 
 def clasificar_titulos_recurrentes_ia(titulos):
@@ -2561,7 +2572,6 @@ def renderizar_gestion_motivos_recurrentes(df_base_motivos):
                         cambios, on_conflict="ai_title"
                     ).execute()
                     obtener_catalogo_motivos_recurrentes.clear()
-                    st.session_state.pop("editor_catalogo_motivos_recurrentes", None)
                     st.success(f"Se guardaron {len(cambios)} cambios.")
                     st.rerun()
                 except Exception as error:
