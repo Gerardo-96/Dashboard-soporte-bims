@@ -167,7 +167,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         return " ".join(partes) if partes else "El gráfico presenta la distribución de los datos para el período analizado."
 
     story.append(Paragraph("Desarrollo completo del WBR",styles["WBRSection"]))
-    for n,(titulo,figura) in enumerate(graficos,1):
+    for n,(titulo,figura) in enumerate(graficos[:13],1):
         try:
             figura_pdf = go.Figure(figura)
             figura_pdf.update_layout(
@@ -175,7 +175,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 plot_bgcolor="#0b1120",
                 font=dict(color="#E2E8F0", size=15, family="Arial"),
                 title_font=dict(color="#F8FAFC", size=19, family="Arial"),
-                legend=dict(font=dict(color="#F8FAFC", size=16, family="Arial")),
+                legend=dict(font=dict(color="#FFFFFF", size=32, family="Arial Black")),
                 xaxis=dict(
                     tickfont=dict(color="#F8FAFC", size=14, family="Arial"),
                     title_font=dict(color="#CBD5E1", size=14, family="Arial"),
@@ -193,9 +193,9 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 if getattr(traza, "showlegend", None) is not False:
                     traza.name = str(getattr(traza, "name", "") or "")
                 if hasattr(traza, "textfont"):
-                    traza.textfont = dict(color="#FFFFFF", size=24, family="Arial Black")
+                    traza.textfont = dict(color="#FFFFFF", size=48, family="Arial Black")
                 if hasattr(traza, "insidetextfont"):
-                    traza.insidetextfont = dict(color="#FFFFFF", size=23, family="Arial Black")
+                    traza.insidetextfont = dict(color="#FFFFFF", size=46, family="Arial Black")
         except Exception as exc:
             raise RuntimeError("No se pudo preparar un gráfico para el PDF. Detalle: " + str(exc))
         try:
@@ -214,26 +214,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         story.append(KeepTogether([
             Paragraph(escape(f"{n}. {titulo}"),styles["WBRSection"]),
             img, Spacer(1,2*mm), lectura
-        ]))
-
-    for titulo,df in tablas:
-        if df is None or df.empty:
-            continue
-        story.append(Paragraph(escape(str(titulo)),styles["WBRSection"]))
-        data=[[Paragraph(escape(texto_pdf(c)),styles["WBRTableHead"]) for c in df.columns]]
-        for _,row in df.iterrows():
-            data.append([Paragraph(escape(texto_pdf(v)),styles["WBRTableCell"]) for v in row.tolist()])
-        widths=[doc.width/max(1,len(df.columns))]*len(df.columns)
-        t=Table(data,colWidths=widths,repeatRows=1,hAlign="LEFT")
-        t.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17263B")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#111C2E"),colors.HexColor("#162337")]),
-            ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#334155")),
-            ("VALIGN",(0,0),(-1,-1),"TOP"),
-            ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),
-            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)
-        ]))
-        story.extend([t,Spacer(1,3*mm)])
+  (1,3*mm)])
 
     def footer(canvas,documento):
         canvas.saveState()
@@ -8561,4 +8542,3 @@ if st.session_state.get("user_authenticated"):
     })();
     </script>
     """, width=1, height=1)
-
