@@ -6028,11 +6028,17 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     # Ancla exclusiva para aislar los estilos responsive del WBR.
     st.markdown('<div class="bims-wbr-scope-anchor"></div>', unsafe_allow_html=True)
     st.markdown("""
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <div>
-                <h3 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
-                    Informe Ejecutivo Semanal
-                </h3>
+        <div style="margin-bottom: 0.15rem;">
+            <div style="font-size: 0.68rem; line-height: 1.2; font-weight: 700;
+                        letter-spacing: 1.5px; color: #64748b; text-transform: uppercase;">
+                WBR · Seguimiento operativo
+            </div>
+            <h3 style="margin: 0.28rem 0 0.18rem 0; font-size: 1.35rem;
+                       font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
+                Informe Ejecutivo Semanal
+            </h3>
+            <div style="font-size: 0.82rem; line-height: 1.45; color: #94a3b8;">
+                Indicadores de gestión, experiencia del cliente y desempeño semanal.
             </div>
         </div>
     """, unsafe_allow_html=True)
