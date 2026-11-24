@@ -7717,7 +7717,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 # Separar visualmente las secciones del resumen para facilitar
                 # la lectura sin alterar el texto generado ni sus indicadores.
                 secciones_resumen = re.split(
-                    r"(?i)\\b(PANORAMA GENERAL|RESULTADOS POSITIVOS|PUNTOS DE ATENCIÓN|PRIORIDADES SUGERIDAS)\\b",
+                    r"(?i)\b(PANORAMA GENERAL|RESULTADOS POSITIVOS|PUNTOS DE ATENCIÓN|PRIORIDADES SUGERIDAS)\b",
                     resumen_actual
                 )
                 if len(secciones_resumen) > 1:
