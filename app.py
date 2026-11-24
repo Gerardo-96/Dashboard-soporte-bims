@@ -4274,7 +4274,10 @@ st.iframe("""
             const wbrAnchor = doc.querySelector('.bims-wbr-scope-anchor');
             if (wbrAnchor) {
                 const wbrRoot = wbrAnchor.closest('[data-testid="stVerticalBlock"]');
-                if (wbrRoot) wbrRoot.classList.add('bims-wbr-mobile-root');
+                if (wbrRoot) {
+                    wbrRoot.classList.add('bims-wbr-mobile-root');
+                    wbrRoot.style.marginTop = '-1.25rem';
+                }
             }
 
             // Identificar una sola vez la navegación principal. Al moverla fuera
@@ -6119,7 +6122,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         "informe PDF se habilitarán automáticamente una vez cerrada la semana."
     )
     semana_seleccionada_str = st.selectbox(
-        "Seleccionar Semana del Reporte WBR:",
+        "Semana del informe:",
         options=opciones_semanas,
         index=0,
         key="sel_wbr_week"
@@ -7665,7 +7668,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
                     <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Contactos por empresa</div>
                     <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_ratio:.2f}</div>
-                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:#cbd5e1;">{diff_ratio:+.2f}</span></div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:#cbd5e1;">{diff_ratio:+.2f} conversaciones</span></div>
                 </div>
             </div>
             <style>
@@ -7710,7 +7713,39 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     while lineas_resumen and not lineas_resumen[0].strip():
                         lineas_resumen.pop(0)
                 resumen_actual = "\n".join(lineas_resumen).strip()
-                st.markdown(resumen_actual)
+
+                # Separar visualmente las secciones del resumen para facilitar
+                # la lectura sin alterar el texto generado ni sus indicadores.
+                secciones_resumen = re.split(
+                    r"(?i)\\b(PANORAMA GENERAL|RESULTADOS POSITIVOS|PUNTOS DE ATENCIÓN|PRIORIDADES SUGERIDAS)\\b",
+                    resumen_actual
+                )
+                if len(secciones_resumen) > 1:
+                    for i in range(1, len(secciones_resumen), 2):
+                        titulo_seccion = secciones_resumen[i].strip().upper()
+                        texto_seccion = secciones_resumen[i + 1].strip() if i + 1 < len(secciones_resumen) else ""
+                        if not texto_seccion:
+                            continue
+                        color_seccion = {
+                            "PANORAMA GENERAL": "#60A5FA",
+                            "RESULTADOS POSITIVOS": "#34D399",
+                            "PUNTOS DE ATENCIÓN": "#FBBF24",
+                            "PRIORIDADES SUGERIDAS": "#A78BFA",
+                        }.get(titulo_seccion, "#94A3B8")
+                        st.markdown(
+                            f"<div style='font-size:.70rem;font-weight:750;letter-spacing:.8px;"
+                            f"color:{color_seccion};text-transform:uppercase;margin:10px 0 3px;'>"
+                            f"{titulo_seccion}</div>",
+                            unsafe_allow_html=True
+                        )
+                        st.markdown(texto_seccion)
+                        if i + 2 < len(secciones_resumen):
+                            st.markdown(
+                                "<div style='height:1px;background:rgba(148,163,184,.16);margin:9px 0 5px;'></div>",
+                                unsafe_allow_html=True
+                            )
+                else:
+                    st.markdown(resumen_actual)
             elif not semana_en_curso:
                 st.markdown(
                     "<div style='color:#94a3b8;font-size:.86rem;padding:3px 0 1px'>"
