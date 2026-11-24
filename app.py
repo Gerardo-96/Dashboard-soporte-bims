@@ -269,7 +269,9 @@ def obtener_resumen_wbr_gemini(metricas, semana):
         "Si un valor es cero o no está disponible, indicá la limitación sin especular. "
         "No menciones personas, clientes ni tickets. Organizá la respuesta en estas "
         "secciones: PANORAMA GENERAL, RESULTADOS POSITIVOS, PUNTOS DE ATENCIÓN y "
-        "PRIORIDADES SUGERIDAS. Máximo 300 palabras. Si no hay evidencia suficiente "
+        "PRIORIDADES SUGERIDAS. No incluyas un título general ni repitas la semana "
+        "en un encabezado; comenzá directamente con PANORAMA GENERAL. "
+        "Máximo 300 palabras. Si no hay evidencia suficiente "
         "para una sección, indicá que no hay elementos concluyentes. "
         "INDICADORES (JSON):\n"+json.dumps(metricas,ensure_ascii=False,default=str)
     )
@@ -7675,16 +7677,9 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
 
         with st.container(border=True):
             st.markdown(
-                "<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
-                "letter-spacing:-.2px;margin-bottom:2px'>Resumen ejecutivo</div>"
-                "<div style='font-size:.78rem;color:#94a3b8;margin-bottom:12px'>"
-                + (
-                    "La semana está en curso: aquí puedes supervisar los KPI diariamente. "
-                    "El resumen y el PDF estarán disponibles al cierre."
-                    if semana_en_curso else
-                    "Resumen generado automáticamente para la semana cerrada."
-                )
-                + "</div>",
+                f"<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
+                f"letter-spacing:-.2px;margin-bottom:12px'>Resumen ejecutivo – "
+                f"{semana_seleccionada_str}</div>",
                 unsafe_allow_html=True
             )
 
@@ -7701,6 +7696,14 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     st.error(f"No se pudo generar el resumen: {error_ia}")
 
             if resumen_actual:
+                # Evita repetir el encabezado general si quedó guardado en un resumen
+                # generado anteriormente; se conserva el contenido y sus secciones.
+                lineas_resumen = str(resumen_actual).strip().splitlines()
+                if lineas_resumen and lineas_resumen[0].strip().lstrip("#* ").upper().startswith("RESUMEN EJECUTIVO"):
+                    lineas_resumen = lineas_resumen[1:]
+                    while lineas_resumen and not lineas_resumen[0].strip():
+                        lineas_resumen.pop(0)
+                resumen_actual = "\n".join(lineas_resumen).strip()
                 st.markdown(resumen_actual)
             elif not semana_en_curso:
                 st.markdown(
