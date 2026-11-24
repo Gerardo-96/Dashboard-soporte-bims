@@ -193,9 +193,9 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 if getattr(traza, "showlegend", None) is not False:
                     traza.name = str(getattr(traza, "name", "") or "")
                 if hasattr(traza, "textfont"):
-                    traza.textfont = dict(color="#FFFFFF", size=18, family="Arial")
+                    traza.textfont = dict(color="#FFFFFF", size=24, family="Arial Black")
                 if hasattr(traza, "insidetextfont"):
-                    traza.insidetextfont = dict(color="#FFFFFF", size=18, family="Arial")
+                    traza.insidetextfont = dict(color="#FFFFFF", size=23, family="Arial Black")
         except Exception as exc:
             raise RuntimeError("No se pudo preparar un gráfico para el PDF. Detalle: " + str(exc))
         try:
@@ -6315,9 +6315,16 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#cbd5e1", size=11),
                 xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=None),
-                yaxis=dict(autorange="reversed", showgrid=False, tickfont=dict(size=11), title=None),
-                margin=dict(t=12, b=18, l=10, r=34),
-                height=max(330, 42 * len(df_top_motivos))
+                yaxis=dict(
+                    autorange="reversed",
+                    showgrid=False,
+                    showticklabels=True,
+                    tickfont=dict(color="#F8FAFC", size=16, family="Arial Black"),
+                    automargin=True,
+                    title=None
+                ),
+                margin=dict(t=18, b=22, l=260, r=55),
+                height=max(430, 52 * len(df_top_motivos))
             )
             mostrar_grafico_wbr(
                 fig_top_motivos,
