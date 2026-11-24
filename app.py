@@ -97,7 +97,12 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     story.append(Paragraph("Desarrollo completo del WBR",styles["WBRSection"]))
     for n,(titulo,figura) in enumerate(graficos,1):
         try:
-            img_bytes=figura.to_image(format="png",width=1400,height=760,scale=1.25)
+            figura_pdf = go.Figure(figura)
+            figura_pdf.update_layout(
+                paper_bgcolor="#0b1120",
+                plot_bgcolor="#0b1120"
+            )
+            img_bytes=figura_pdf.to_image(format="png",width=1400,height=760,scale=1.25)
         except Exception as exc:
             raise RuntimeError(
                 "No se pudo convertir un gráfico a imagen. Verificá la instalación "
