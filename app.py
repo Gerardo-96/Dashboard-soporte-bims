@@ -214,7 +214,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         story.append(KeepTogether([
             Paragraph(escape(f"{n}. {titulo}"),styles["WBRSection"]),
             img, Spacer(1,2*mm), lectura
-  (1,3*mm)])
+        ]))
 
     def footer(canvas,documento):
         canvas.saveState()
