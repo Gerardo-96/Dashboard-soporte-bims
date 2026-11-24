@@ -58,6 +58,14 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         fontSize=7.5, leading=10, textColor=colors.HexColor("#CBD5E1")
     ))
     styles.add(ParagraphStyle(
+        name="WBRWeek", parent=styles["Heading2"], fontName="Helvetica-Bold",
+        fontSize=13, leading=16, textColor=colors.HexColor("#CBD5E1"), spaceAfter=2*mm
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRSubheading", parent=styles["Heading3"], fontName="Helvetica-Bold",
+        fontSize=10, leading=13, textColor=colors.HexColor("#7DD3FC"), spaceBefore=2*mm
+    ))
+    styles.add(ParagraphStyle(
         name="WBRTableHead", parent=styles["BodyText"], fontName="Helvetica-Bold",
         fontSize=7.5, leading=9, textColor=colors.HexColor("#F8FAFC")
     ))
@@ -68,7 +76,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
 
     story = [
         Paragraph("INFORME EJECUTIVO SEMANAL", styles["WBRTitle"]),
-        Paragraph(escape(texto_pdf(semana)), styles["Heading2"]),
+        Paragraph(escape(texto_pdf(semana)), styles["WBRWeek"]),
         Paragraph(
             "Dashboard de Soporte BIMS · Generado "
             + datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
@@ -103,7 +111,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         if not linea:
             story.append(Spacer(1,2*mm))
         elif linea.startswith("#"):
-            story.append(Paragraph(escape(texto_pdf(linea.lstrip("# ").strip())),styles["Heading3"]))
+            story.append(Paragraph(escape(texto_pdf(linea.lstrip("# ").strip())),styles["WBRSubheading"]))
         else:
             story.append(Paragraph(escape(texto_pdf(linea)),styles["WBRBody"]))
 
@@ -7240,7 +7248,6 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                             st.session_state[clave_resumen] = obtener_resumen_wbr_gemini(
                                 metricas_wbr, semana_seleccionada_str
                             )
-                        st.rerun()
                     except Exception as error_ia:
                         st.error(f"No se pudo generar el resumen: {error_ia}")
             with col_pdf:
@@ -7283,7 +7290,6 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                                 },
                                 resumen_actual, graficos_wbr, tablas_wbr
                             )
-                        st.rerun()
                     except Exception as error_pdf:
                         st.error(f"No se pudo preparar el PDF: {error_pdf}")
             with col_descarga:
@@ -7304,6 +7310,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 "<div style='height:1px;background:rgba(100,116,139,.24);margin:12px 0 14px'></div>",
                 unsafe_allow_html=True
             )
+            resumen_actual = st.session_state.get(clave_resumen, "")
             if resumen_actual:
                 st.markdown(resumen_actual)
             else:
