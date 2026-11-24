@@ -7313,65 +7313,57 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     unsafe_allow_html=True
                 )
 
-            # El PDF se prepara automáticamente junto con el resumen. La única
-            # acción manual que queda es descargar el informe terminado.
-            pdf_generado = st.session_state.get(clave_pdf)
-            if not semana_en_curso and resumen_actual and not pdf_generado:
-                try:
-                    with st.spinner("Preparando el informe PDF..."):
-                        pdf_generado = generar_pdf_wbr(
-                            semana_seleccionada_str,
-                            {
-                                "Chats recibidos": f"{tot_sem_rec:,}",
-                                "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
-                                "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
-                                "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
-                                "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
-                                "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
-                                "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
-                                "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
-                                "Cierres humanos": f"{cnt_cerrados_humanos}",
-                                "Promedio de cierres por agente": f"{prom_por_agente}",
-                                "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
-                                "Promedio de gestión": f"{foco_gest} min",
-                                "SLA de gestión": f"{foco_sla_gest}%",
-                                "Primera respuesta": f"{foco_1ra} min",
-                                "SLA primera respuesta": f"{foco_sla_1ra}%",
-                                "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
-                                "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
-                                "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
-                                "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
-                                "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
-                                "Contactos promedio por empresa": f"{foco_ratio:.2f}",
-                                "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
-                                "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
-                                "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
-                                "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
-                                "Ingresos en domingo": f"{tot_domingo}"
-                            },
-                            resumen_actual, graficos_wbr, tablas_wbr
-                        )
-                    st.session_state[clave_pdf] = pdf_generado
-                except Exception as error_pdf:
-                    st.error(f"No se pudo preparar el PDF: {error_pdf}")
-
+            # El PDF se construye únicamente cuando el usuario pulsa el botón.
+            # Streamlit ejecuta esta función al solicitar la descarga.
             if semana_en_curso:
                 st.info(
                     "El resumen ejecutivo y la descarga del PDF estarán disponibles "
                     "una vez cerrada esta semana."
                 )
-            elif pdf_generado:
+            elif resumen_actual:
+                def generar_pdf_bajo_demanda():
+                    return generar_pdf_wbr(
+                        semana_seleccionada_str,
+                        {
+                            "Chats recibidos": f"{tot_sem_rec:,}",
+                            "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
+                            "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
+                            "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
+                            "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
+                            "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
+                            "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
+                            "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
+                            "Cierres humanos": f"{cnt_cerrados_humanos}",
+                            "Promedio de cierres por agente": f"{prom_por_agente}",
+                            "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
+                            "Promedio de gestión": f"{foco_gest} min",
+                            "SLA de gestión": f"{foco_sla_gest}%",
+                            "Primera respuesta": f"{foco_1ra} min",
+                            "SLA primera respuesta": f"{foco_sla_1ra}%",
+                            "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
+                            "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
+                            "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
+                            "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
+                            "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
+                            "Contactos promedio por empresa": f"{foco_ratio:.2f}",
+                            "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
+                            "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
+                            "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
+                            "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
+                            "Ingresos en domingo": f"{tot_domingo}"
+                        },
+                        resumen_actual, graficos_wbr, tablas_wbr
+                    )
+
                 st.download_button(
-                    "Descargar informe PDF",
-                    data=pdf_generado,
+                    "Generar y descargar PDF",
+                    data=generar_pdf_bajo_demanda,
                     file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
                     mime="application/pdf",
                     key=f"download_pdf_wbr_{target_year}_{target_week}",
                     type="primary",
                     use_container_width=True
                 )
-            else:
-                st.caption("El enlace de descarga aparecerá cuando termine de prepararse el PDF.")
 
 # Llamada limpia en la pestaña
 if tab_l2 is not None:
