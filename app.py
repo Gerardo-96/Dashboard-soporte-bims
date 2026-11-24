@@ -7335,12 +7335,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     use_container_width=True
                 )
             else:
-                st.button(
-                    "Preparando informe PDF...",
-                    disabled=True,
-                    key=f"download_pdf_pending_{target_year}_{target_week}",
-                    use_container_width=True
-                )
+                st.caption("El enlace de descarga aparecerá cuando termine de prepararse el PDF.")
 
 # Llamada limpia en la pestaña
 if tab_l2 is not None:
