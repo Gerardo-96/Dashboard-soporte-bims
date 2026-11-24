@@ -7593,6 +7593,10 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 df_l1_motivos.groupby("motivo_normalizado")["Cantidad"].sum()
                 .sort_values(ascending=False).head(5).to_dict()
                 if "df_l1_motivos" in locals() and not df_l1_motivos.empty else {}
+            ),
+            "motivos_recurrentes_top10": (
+                dict(zip(df_top_motivos["Motivo recurrente"], df_top_motivos["Conversaciones"]))
+                if not df_top_motivos.empty else {}
             )
         },
         "niveles_y_correos": {
@@ -7762,7 +7766,7 @@ if GLOBAL_SYNC_STATE.get("cache_invalidation_pending", False):
     GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
 
 @st.fragment
-def renderizar_panel_admin():
+def renderizar_panel_admin(df_base_motivos=None):
     st.markdown("### Centro de Administración")
     st.caption("Gestiona el estado del sistema, los datos, los accesos y las reglas operativas desde secciones independientes.")
 
@@ -7774,6 +7778,7 @@ def renderizar_panel_admin():
         "💬 CSAT y notificaciones",
         "📅 Calendario",
         "🧩 Versionado",
+        "🔎 Motivos recurrentes",
     ])
 
     with admin_tabs[0]:
@@ -8365,9 +8370,12 @@ def renderizar_panel_admin():
 
         st.info("Esta información se genera automáticamente al publicar cambios en la rama main. Si no aparece una versión, el sistema de publicación todavía no ha generado los metadatos.")
 
+    with admin_tabs[7]:
+        renderizar_gestion_motivos_recurrentes(df_base_motivos)
+
 if tab_admin is not None:
     with tab_admin:
-        renderizar_panel_admin()
+        renderizar_panel_admin(df_all)
 
 with tab_faq:
     st.markdown("### Preguntas Frecuentes & Criterios Operativos")
