@@ -42,20 +42,28 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(
         name="WBRTitle", parent=styles["Title"], fontName="Helvetica-Bold",
-        fontSize=20, leading=24, textColor=colors.HexColor("#12304A"), spaceAfter=4*mm
+        fontSize=20, leading=24, textColor=colors.HexColor("#F8FAFC"), spaceAfter=4*mm
     ))
     styles.add(ParagraphStyle(
         name="WBRSection", parent=styles["Heading2"], fontName="Helvetica-Bold",
-        fontSize=13, leading=16, textColor=colors.HexColor("#075985"),
+        fontSize=13, leading=16, textColor=colors.HexColor("#7DD3FC"),
         spaceBefore=5*mm, spaceAfter=2.5*mm
     ))
     styles.add(ParagraphStyle(
         name="WBRBody", parent=styles["BodyText"], fontName="Helvetica",
-        fontSize=9, leading=13, textColor=colors.HexColor("#263445"), spaceAfter=2*mm
+        fontSize=9, leading=13, textColor=colors.HexColor("#E2E8F0"), spaceAfter=2*mm
     ))
     styles.add(ParagraphStyle(
         name="WBRSmall", parent=styles["BodyText"], fontName="Helvetica",
-        fontSize=7.5, leading=10, textColor=colors.HexColor("#526273")
+        fontSize=7.5, leading=10, textColor=colors.HexColor("#CBD5E1")
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRTableHead", parent=styles["BodyText"], fontName="Helvetica-Bold",
+        fontSize=7.5, leading=9, textColor=colors.HexColor("#F8FAFC")
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRTableCell", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=7.2, leading=9, textColor=colors.HexColor("#E2E8F0")
     ))
 
     story = [
@@ -69,16 +77,21 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         Spacer(1, 5*mm),
         Paragraph("Indicadores principales", styles["WBRSection"])
     ]
-    filas = [["Indicador", "Resultado"]]
-    filas.extend([[texto_pdf(k), texto_pdf(v)] for k, v in metricas.items()])
+    filas = [[
+        Paragraph("Indicador", styles["WBRTableHead"]),
+        Paragraph("Resultado", styles["WBRTableHead"])
+    ]]
+    filas.extend([
+        [Paragraph(escape(texto_pdf(k)), styles["WBRTableCell"]),
+         Paragraph(escape(texto_pdf(v)), styles["WBRTableCell"])]
+        for k, v in metricas.items()
+    ])
     tabla = Table(filas, colWidths=[75*mm, 90*mm], repeatRows=1)
     tabla.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#12304A")),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-        ("FONTSIZE",(0,0),(-1,-1),8),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#F1F5F9")]),
-        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#CBD5E1")),
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17263B")),
+        ("BACKGROUND",(0,1),(-1,-1),colors.HexColor("#111C2E")),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#111C2E"),colors.HexColor("#162337")]),
+        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#334155")),
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
         ("LEFTPADDING",(0,0),(-1,-1),7),("RIGHTPADDING",(0,0),(-1,-1),7),
         ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)
@@ -100,7 +113,22 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
             figura_pdf = go.Figure(figura)
             figura_pdf.update_layout(
                 paper_bgcolor="#0b1120",
-                plot_bgcolor="#0b1120"
+                plot_bgcolor="#0b1120",
+                font=dict(color="#E2E8F0"),
+                title_font=dict(color="#F8FAFC"),
+                legend=dict(font=dict(color="#CBD5E1")),
+                xaxis=dict(
+                    tickfont=dict(color="#CBD5E1"),
+                    title_font=dict(color="#CBD5E1"),
+                    gridcolor="#243247", zerolinecolor="#334155",
+                    linecolor="#475569"
+                ),
+                yaxis=dict(
+                    tickfont=dict(color="#CBD5E1"),
+                    title_font=dict(color="#CBD5E1"),
+                    gridcolor="#243247", zerolinecolor="#334155",
+                    linecolor="#475569"
+                )
             )
             img_bytes=figura_pdf.to_image(format="png",width=1400,height=760,scale=1.25)
         except Exception as exc:
@@ -121,16 +149,15 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         if df is None or df.empty:
             continue
         story.append(Paragraph(escape(str(titulo)),styles["WBRSection"]))
-        data=[[Paragraph(f"<b>{escape(texto_pdf(c))}</b>",styles["WBRSmall"]) for c in df.columns]]
+        data=[[Paragraph(escape(texto_pdf(c)),styles["WBRTableHead"]) for c in df.columns]]
         for _,row in df.iterrows():
-            data.append([Paragraph(escape(texto_pdf(v)),styles["WBRSmall"]) for v in row.tolist()])
+            data.append([Paragraph(escape(texto_pdf(v)),styles["WBRTableCell"]) for v in row.tolist()])
         widths=[doc.width/max(1,len(df.columns))]*len(df.columns)
         t=Table(data,colWidths=widths,repeatRows=1,hAlign="LEFT")
         t.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#12304A")),
-            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#F1F5F9")]),
-            ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#CBD5E1")),
+            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17263B")),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#111C2E"),colors.HexColor("#162337")]),
+            ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#334155")),
             ("VALIGN",(0,0),(-1,-1),"TOP"),
             ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),
             ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)
@@ -139,10 +166,12 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
 
     def footer(canvas,documento):
         canvas.saveState()
-        canvas.setStrokeColor(colors.HexColor("#CBD5E1"))
+        canvas.setFillColor(colors.HexColor("#0B1120"))
+        canvas.rect(0,0,page_size[0],page_size[1],fill=1,stroke=0)
+        canvas.setStrokeColor(colors.HexColor("#334155"))
         canvas.line(16*mm,11*mm,page_size[0]-16*mm,11*mm)
         canvas.setFont("Helvetica",7)
-        canvas.setFillColor(colors.HexColor("#64748B"))
+        canvas.setFillColor(colors.HexColor("#94A3B8"))
         canvas.drawString(16*mm,7*mm,"Dashboard de Soporte BIMS · Informe WBR")
         canvas.drawRightString(page_size[0]-16*mm,7*mm,f"Página {documento.page}")
         canvas.restoreState()
@@ -7186,86 +7215,103 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     }
 
     clave_resumen = f"wbr_resumen_ia_{target_year}_{target_week}"
+    clave_pdf = f"wbr_pdf_{target_year}_{target_week}"
+    resumen_actual = st.session_state.get(clave_resumen, "")
+
     with resumen_wbr_slot.container():
         with st.container(border=True):
-            col_titulo, col_estado = st.columns([4, 1])
-            with col_titulo:
-                st.markdown("### ✨ Resumen ejecutivo")
-                st.caption("Interpretación de los indicadores de la semana seleccionada mediante Gemini.")
-            with col_estado:
-                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-                st.caption("IA · Gemini")
-            if st.button(
-                "Generar resumen ejecutivo",
-                key=f"btn_generar_resumen_wbr_{target_year}_{target_week}",
-                type="primary"
-            ):
-                try:
-                    with st.spinner("Analizando los indicadores de la semana..."):
-                        st.session_state[clave_resumen] = obtener_resumen_wbr_gemini(
-                            metricas_wbr, semana_seleccionada_str
-                        )
-                    st.success("Resumen ejecutivo generado.")
-                except Exception as error_ia:
-                    st.error(f"No se pudo generar el resumen: {error_ia}")
-            resumen_actual = st.session_state.get(clave_resumen, "")
+            st.markdown(
+                "<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
+                "letter-spacing:-.2px;margin-bottom:2px'>Resumen ejecutivo</div>"
+                "<div style='font-size:.78rem;color:#94a3b8;margin-bottom:12px'>"
+                "Lectura gerencial de la semana seleccionada</div>",
+                unsafe_allow_html=True
+            )
+            col_generar, col_pdf, col_descarga = st.columns([1.15, 1.05, 1.35], vertical_alignment="center")
+            with col_generar:
+                if st.button(
+                    "Generar resumen",
+                    key=f"btn_generar_resumen_wbr_{target_year}_{target_week}",
+                    type="primary",
+                    use_container_width=True
+                ):
+                    try:
+                        with st.spinner("Preparando resumen..."):
+                            st.session_state[clave_resumen] = obtener_resumen_wbr_gemini(
+                                metricas_wbr, semana_seleccionada_str
+                            )
+                        st.rerun()
+                    except Exception as error_ia:
+                        st.error(f"No se pudo generar el resumen: {error_ia}")
+            with col_pdf:
+                if st.button(
+                    "Preparar PDF",
+                    key=f"btn_preparar_pdf_wbr_{target_year}_{target_week}",
+                    use_container_width=True
+                ):
+                    try:
+                        with st.spinner("Preparando documento..."):
+                            st.session_state[clave_pdf] = generar_pdf_wbr(
+                                semana_seleccionada_str,
+                                {
+                                    "Chats recibidos": f"{tot_sem_rec:,}",
+                                    "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
+                                    "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
+                                    "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
+                                    "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
+                                    "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
+                                    "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
+                                    "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
+                                    "Cierres humanos": f"{cnt_cerrados_humanos}",
+                                    "Promedio de cierres por agente": f"{prom_por_agente}",
+                                    "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
+                                    "Promedio de gestión": f"{foco_gest} min",
+                                    "SLA de gestión": f"{foco_sla_gest}%",
+                                    "Primera respuesta": f"{foco_1ra} min",
+                                    "SLA primera respuesta": f"{foco_sla_1ra}%",
+                                    "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
+                                    "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
+                                    "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
+                                    "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
+                                    "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
+                                    "Contactos promedio por empresa": f"{foco_ratio:.2f}",
+                                    "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
+                                    "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
+                                    "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
+                                    "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
+                                    "Ingresos en domingo": f"{tot_domingo}"
+                                },
+                                resumen_actual, graficos_wbr, tablas_wbr
+                            )
+                        st.rerun()
+                    except Exception as error_pdf:
+                        st.error(f"No se pudo preparar el PDF: {error_pdf}")
+            with col_descarga:
+                pdf_generado = st.session_state.get(clave_pdf)
+                if pdf_generado:
+                    st.download_button(
+                        "Descargar PDF",
+                        data=pdf_generado,
+                        file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
+                        mime="application/pdf",
+                        key=f"download_pdf_wbr_{target_year}_{target_week}",
+                        use_container_width=True
+                    )
+                else:
+                    st.button("Descargar PDF", disabled=True, key=f"download_pdf_disabled_{target_year}_{target_week}", use_container_width=True)
+
+            st.markdown(
+                "<div style='height:1px;background:rgba(100,116,139,.24);margin:12px 0 14px'></div>",
+                unsafe_allow_html=True
+            )
             if resumen_actual:
                 st.markdown(resumen_actual)
             else:
-                st.info(
-                    "Generá el resumen cuando lo necesites. Gemini recibirá únicamente "
-                    "indicadores agregados, no conversaciones ni datos personales."
+                st.markdown(
+                    "<div style='color:#94a3b8;font-size:.86rem;padding:3px 0 1px'>"
+                    "El resumen de esta semana todavía no fue generado.</div>",
+                    unsafe_allow_html=True
                 )
-
-        clave_pdf = f"wbr_pdf_{target_year}_{target_week}"
-        if st.button("Preparar PDF completo", key=f"btn_preparar_pdf_wbr_{target_year}_{target_week}"):
-            try:
-                with st.spinner("Preparando el PDF con todos los gráficos del informe..."):
-                    st.session_state[clave_pdf] = generar_pdf_wbr(
-                        semana_seleccionada_str,
-                        {
-                            "Chats recibidos": f"{tot_sem_rec:,}",
-                            "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
-                            "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
-                            "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
-                            "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
-                            "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
-                            "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
-                            "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
-                            "Cierres humanos": f"{cnt_cerrados_humanos}",
-                            "Promedio de cierres por agente": f"{prom_por_agente}",
-                            "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
-                            "Promedio de gestión": f"{foco_gest} min",
-                            "SLA de gestión": f"{foco_sla_gest}%",
-                            "Primera respuesta": f"{foco_1ra} min",
-                            "SLA primera respuesta": f"{foco_sla_1ra}%",
-                            "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
-                            "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
-                            "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
-                            "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
-                            "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
-                            "Contactos promedio por empresa": f"{foco_ratio:.2f}",
-                            "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
-                            "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
-                            "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
-                            "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
-                            "Ingresos en domingo": f"{tot_domingo}"
-                        },
-                        resumen_actual, graficos_wbr, tablas_wbr
-                    )
-                st.success("PDF completo preparado.")
-            except Exception as error_pdf:
-                st.error(f"No se pudo preparar el PDF: {error_pdf}")
-
-        pdf_generado = st.session_state.get(clave_pdf)
-        if pdf_generado:
-            st.download_button(
-                "Descargar WBR completo en PDF",
-                data=pdf_generado,
-                file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
-                mime="application/pdf",
-                key=f"download_pdf_wbr_{target_year}_{target_week}"
-            )
 
 # Llamada limpia en la pestaña
 if tab_l2 is not None:
