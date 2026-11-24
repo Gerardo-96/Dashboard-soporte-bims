@@ -5818,6 +5818,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         })
 
     df_res_5w = pd.DataFrame(res_5w)
+    tablas_wbr.append(("Evolución de volumen de las últimas cinco semanas", df_res_5w.copy()))
     pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
 
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
@@ -5958,6 +5959,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             })
 
         df_dias_agg = pd.DataFrame(filas_dias)
+        tablas_wbr.append(("Chats recibidos y cerrados por día", df_dias_agg.copy()))
 
         fig_dias = go.Figure()
         fig_dias.add_trace(go.Bar(
@@ -6055,6 +6057,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         df_target_cerrados["agente_nom"] = df_target_cerrados.apply(agrupar_agente_donut_wbr, axis=1)
         df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
         df_ag_pie.columns = ["Agente", "Cerrados"]
+        tablas_wbr.append(("Cierres por agente", df_ag_pie.copy()))
 
         palette_donut = [
             "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
@@ -6170,6 +6173,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         })
 
     df_evol_tiempos = pd.DataFrame(evol_tiempos)
+    tablas_wbr.append(("Evolución semanal de tiempos y cumplimiento SLA", df_evol_tiempos.copy()))
 
     foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
     foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
@@ -6806,6 +6810,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         })
 
     df_evol_csat = pd.DataFrame(evol_csat)
+    tablas_wbr.append(("Evolución semanal de CSAT y contactos por empresa", df_evol_csat.copy()))
 
     foco_csat = df_evol_csat.iloc[-1]["CSAT"]
     prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
@@ -6913,6 +6918,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     orden_niveles_wbr = ["Nivel 1 (L1)", "Nivel 2 (L2)", "Nivel 3 (L3)"]
     df_niveles_cnt = df_target["nivel_wbr_cat"].value_counts().reindex(orden_niveles_wbr, fill_value=0).reset_index()
     df_niveles_cnt.columns = ["Nivel", "Cantidad"]
+    tablas_wbr.append(("Distribución de conversaciones por nivel", df_niveles_cnt.copy()))
     tot_niv_wbr = df_niveles_cnt["Cantidad"].sum()
     df_niveles_cnt["Texto"] = df_niveles_cnt["Cantidad"].apply(
         lambda c: f"{c} ({round(c / tot_niv_wbr * 100, 1)}%)" if tot_niv_wbr > 0 else "0 (0%)"
@@ -7076,6 +7082,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             
             df_dias_ext_cnt = df_ext_ingresados["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
             df_dias_ext_cnt.columns = ["Día", "Cantidad"]
+            tablas_wbr.append(("Ingresos por día en horario extendido", df_dias_ext_cnt.copy()))
             df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
 
             fig_bar_dias_ext = go.Figure(go.Bar(
@@ -7215,14 +7222,29 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                             "Chats recibidos": f"{tot_sem_rec:,}",
                             "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
                             "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
+                            "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
+                            "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
+                            "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
+                            "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
+                            "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
+                            "Cierres humanos": f"{cnt_cerrados_humanos}",
+                            "Promedio de cierres por agente": f"{prom_por_agente}",
+                            "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
                             "Promedio de gestión": f"{foco_gest} min",
                             "SLA de gestión": f"{foco_sla_gest}%",
                             "Primera respuesta": f"{foco_1ra} min",
                             "SLA primera respuesta": f"{foco_sla_1ra}%",
                             "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
-                            "Casos negativos L1 / L3": f"{tot_l1_neg} / {tot_l3_neg}",
-                            "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w}",
-                            "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados"
+                            "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
+                            "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
+                            "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
+                            "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
+                            "Contactos promedio por empresa": f"{foco_ratio:.2f}",
+                            "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
+                            "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
+                            "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
+                            "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
+                            "Ingresos en domingo": f"{tot_domingo}"
                         },
                         resumen_actual, graficos_wbr, tablas_wbr
                     )
