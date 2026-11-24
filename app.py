@@ -7257,6 +7257,8 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
     diff_csat = round(foco_csat - prev_csat, 2)
     foco_ratio = df_evol_csat.iloc[-1]["Ratio_Empresa"]
+    prev_ratio = df_evol_csat.iloc[-2]["Ratio_Empresa"] if len(df_evol_csat) >= 2 else 0.0
+    diff_ratio = round(foco_ratio - prev_ratio, 2)
 
     col_g_csat, col_g_ratio = st.columns(2)
 
@@ -7655,7 +7657,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
                     <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Contactos por empresa</div>
                     <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_ratio:.2f}</div>
-                    <div style="font-size:.76rem;color:#94a3b8;">Promedio de conversaciones por empresa</div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:#cbd5e1;">{diff_ratio:+.2f}</span></div>
                 </div>
             </div>
             <style>
