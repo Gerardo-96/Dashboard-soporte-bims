@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 from collections import Counter
 
 import requests
@@ -70,23 +71,65 @@ def clasificar_lote(titulos, api_key):
         "sin omitir ni alterar el texto original. TÍTULOS: "
         + json.dumps(titulos, ensure_ascii=False)
     )
-    respuesta = requests.post(
-        url,
-        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.1,
-                "responseMimeType": "application/json",
-                "maxOutputTokens": 5000,
-            },
+    cuerpo = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 5000,
         },
-        timeout=90,
-    )
-    if respuesta.status_code >= 400:
-        raise RuntimeError(
-            f"Gemini respondió HTTP {respuesta.status_code}: {respuesta.text[:500]}"
+    }
+
+    # Gemini puede responder temporalmente 429/5xx por cuotas o alta demanda.
+    # Reintentar con espera exponencial evita perder la ejecución por un pico breve.
+    max_intentos = 6
+    respuesta = None
+    for intento in range(1, max_intentos + 1):
+        try:
+            respuesta = requests.post(
+                url,
+                headers={
+                    "x-goog-api-key": api_key,
+                    "Content-Type": "application/json",
+                },
+                json=cuerpo,
+                timeout=90,
+            )
+        except requests.RequestException as error:
+            if intento == max_intentos:
+                raise RuntimeError(
+                    f"No se pudo conectar con Gemini tras {max_intentos} intentos: {error}"
+                ) from error
+            espera = min(15 * (2 ** (intento - 1)), 180)
+            print(
+                f"Fallo de conexión con Gemini (intento {intento}/{max_intentos}). "
+                f"Nuevo intento en {espera}s.",
+                flush=True,
+            )
+            time.sleep(espera)
+            continue
+
+        if respuesta.status_code < 400:
+            break
+
+        if respuesta.status_code not in {408, 429, 500, 502, 503, 504}:
+            raise RuntimeError(
+                f"Gemini respondió HTTP {respuesta.status_code}: {respuesta.text[:500]}"
+            )
+
+        if intento == max_intentos:
+            raise RuntimeError(
+                f"Gemini sigue respondiendo HTTP {respuesta.status_code} "
+                f"tras {max_intentos} intentos: {respuesta.text[:500]}"
+            )
+
+        espera = min(15 * (2 ** (intento - 1)), 180)
+        print(
+            f"Gemini respondió HTTP {respuesta.status_code} "
+            f"(intento {intento}/{max_intentos}). Nuevo intento en {espera}s.",
+            flush=True,
         )
+        time.sleep(espera)
 
     payload = respuesta.json()
     candidatos = payload.get("candidates") or []
