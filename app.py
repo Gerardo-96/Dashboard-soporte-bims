@@ -70,7 +70,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         Paragraph("Indicadores principales", styles["WBRSection"])
     ]
     filas = [["Indicador", "Resultado"]]
-    filas.extend([[str(k), str(v)] for k, v in metricas.items()])
+    filas.extend([[texto_pdf(k), texto_pdf(v)] for k, v in metricas.items()])
     tabla = Table(filas, colWidths=[75*mm, 90*mm], repeatRows=1)
     tabla.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#12304A")),
