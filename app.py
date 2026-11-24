@@ -48,7 +48,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     styles.add(ParagraphStyle(
         name="WBRSection", parent=styles["Heading2"], fontName="Helvetica-Bold",
         fontSize=13, leading=16, textColor=colors.HexColor("#7DD3FC"),
-        spaceBefore=5*mm, spaceAfter=2.5*mm
+        spaceBefore=5*mm, spaceAfter=2.5*mm, keepWithNext=1
     ))
     styles.add(ParagraphStyle(
         name="WBRBody", parent=styles["BodyText"], fontName="Helvetica",
@@ -64,15 +64,16 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     ))
     styles.add(ParagraphStyle(
         name="WBRSubheading", parent=styles["Heading3"], fontName="Helvetica-Bold",
-        fontSize=10, leading=13, textColor=colors.HexColor("#7DD3FC"), spaceBefore=2*mm
+        fontSize=10, leading=13, textColor=colors.HexColor("#7DD3FC"), spaceBefore=2*mm,
+        keepWithNext=1
     ))
     styles.add(ParagraphStyle(
         name="WBRTableHead", parent=styles["BodyText"], fontName="Helvetica-Bold",
-        fontSize=7.5, leading=9, textColor=colors.HexColor("#F8FAFC")
+        fontSize=9.5, leading=11.5, textColor=colors.HexColor("#F8FAFC")
     ))
     styles.add(ParagraphStyle(
         name="WBRTableCell", parent=styles["BodyText"], fontName="Helvetica",
-        fontSize=7.2, leading=9, textColor=colors.HexColor("#E2E8F0")
+        fontSize=8.7, leading=10.5, textColor=colors.HexColor("#E2E8F0")
     ))
 
     story = [
@@ -172,18 +173,18 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
             figura_pdf.update_layout(
                 paper_bgcolor="#0b1120",
                 plot_bgcolor="#0b1120",
-                font=dict(color="#E2E8F0", size=13, family="Arial"),
-                title_font=dict(color="#F8FAFC", size=17, family="Arial"),
-                legend=dict(font=dict(color="#F8FAFC", size=13, family="Arial Black")),
+                font=dict(color="#E2E8F0", size=15, family="Arial"),
+                title_font=dict(color="#F8FAFC", size=19, family="Arial"),
+                legend=dict(font=dict(color="#F8FAFC", size=16, family="Arial")),
                 xaxis=dict(
-                    tickfont=dict(color="#F8FAFC", size=12, family="Arial Black"),
-                    title_font=dict(color="#CBD5E1", size=13, family="Arial"),
+                    tickfont=dict(color="#F8FAFC", size=14, family="Arial"),
+                    title_font=dict(color="#CBD5E1", size=14, family="Arial"),
                     gridcolor="#243247", zerolinecolor="#334155",
                     linecolor="#475569"
                 ),
                 yaxis=dict(
-                    tickfont=dict(color="#F8FAFC", size=12, family="Arial Black"),
-                    title_font=dict(color="#CBD5E1", size=13, family="Arial"),
+                    tickfont=dict(color="#F8FAFC", size=14, family="Arial"),
+                    title_font=dict(color="#CBD5E1", size=14, family="Arial"),
                     gridcolor="#243247", zerolinecolor="#334155",
                     linecolor="#475569"
                 )
@@ -192,7 +193,9 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 if getattr(traza, "showlegend", None) is not False:
                     traza.name = str(getattr(traza, "name", "") or "")
                 if hasattr(traza, "textfont"):
-                    traza.textfont = dict(color="#FFFFFF", size=15, family="Arial Black")
+                    traza.textfont = dict(color="#FFFFFF", size=18, family="Arial")
+                if hasattr(traza, "insidetextfont"):
+                    traza.insidetextfont = dict(color="#FFFFFF", size=18, family="Arial")
         except Exception as exc:
             raise RuntimeError("No se pudo preparar un gráfico para el PDF. Detalle: " + str(exc))
         try:
@@ -203,7 +206,8 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 "de Kaleido y Chromium en el despliegue. Detalle: "+str(exc)
             )
         img=RLImage(io.BytesIO(img_bytes))
-        escala=min(doc.width/float(img.imageWidth),(130*mm)/float(img.imageHeight))
+        # Reservar espacio suficiente para título y lectura del gráfico en la misma página.
+        escala=min(doc.width/float(img.imageWidth),(112*mm)/float(img.imageHeight))
         img.drawWidth=img.imageWidth*escala
         img.drawHeight=img.imageHeight*escala
         lectura = Paragraph(resumen_grafico(figura_pdf), styles["WBRChartSummary"])
