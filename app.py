@@ -6244,6 +6244,87 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     ].copy()
     tot_sem_rec = len(df_target)
 
+
+    # =========================================================================
+    # TOP 10 DE MOTIVOS RECURRENTES (NORMALIZACIÓN DEL AI TITLE)
+    # =========================================================================
+    st.markdown("##### Top 10 de motivos recurrentes")
+    try:
+        catalogo_motivos_wbr = obtener_catalogo_motivos_recurrentes()
+        mapa_motivos_wbr = {
+            str(item.get("ai_title", "")).strip(): str(item.get("motivo_recurrente", "")).strip()
+            for item in catalogo_motivos_wbr
+            if str(item.get("ai_title", "")).strip()
+            and str(item.get("motivo_recurrente", "")).strip()
+        }
+        titulos_semana = df_target.get(
+            "ai_title", pd.Series("", index=df_target.index)
+        ).fillna("").astype(str).str.strip()
+        validos_titulo = (
+            (titulos_semana != "")
+            & (titulos_semana.str.lower() != "no generado")
+            & (titulos_semana.str.lower() != "nan")
+        )
+        df_motivos_semana = df_target.loc[validos_titulo].copy()
+        df_motivos_semana["motivo_recurrente_wbr"] = titulos_semana.loc[validos_titulo].map(mapa_motivos_wbr)
+        pendientes_semana = int(df_motivos_semana["motivo_recurrente_wbr"].isna().sum())
+        df_motivos_semana = df_motivos_semana[
+            df_motivos_semana["motivo_recurrente_wbr"].notna()
+            & (df_motivos_semana["motivo_recurrente_wbr"].str.strip() != "")
+        ]
+        df_top_motivos = (
+            df_motivos_semana["motivo_recurrente_wbr"]
+            .value_counts()
+            .head(10)
+            .rename_axis("Motivo recurrente")
+            .reset_index(name="Conversaciones")
+        )
+        if not df_top_motivos.empty:
+            tablas_wbr.append(("Top 10 de motivos recurrentes", df_top_motivos.copy()))
+            fig_top_motivos = go.Figure(go.Bar(
+                x=df_top_motivos["Conversaciones"],
+                y=df_top_motivos["Motivo recurrente"],
+                orientation="h",
+                text=df_top_motivos["Conversaciones"],
+                textposition="outside",
+                cliponaxis=False,
+                marker=dict(color="#0284c7", cornerradius=7),
+                textfont=dict(color="#f8fafc", size=12, family="Arial Black")
+            ))
+            fig_top_motivos.update_layout(
+                hovermode=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11),
+                xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=None),
+                yaxis=dict(autorange="reversed", showgrid=False, tickfont=dict(size=11), title=None),
+                margin=dict(t=12, b=18, l=10, r=34),
+                height=max(330, 42 * len(df_top_motivos))
+            )
+            mostrar_grafico_wbr(
+                fig_top_motivos,
+                "Top 10 de motivos recurrentes por conversaciones",
+                use_container_width=True
+            )
+            total_clasificado_semana = int(df_motivos_semana.shape[0])
+            total_titulos_validos_semana = int(validos_titulo.sum())
+            st.caption(
+                f"{total_clasificado_semana:,} conversaciones clasificadas de "
+                f"{total_titulos_validos_semana:,} con AI title válido. "
+                f"Pendientes de clasificación: {pendientes_semana:,}. "
+                "Se excluyen los títulos vacíos y «No Generado»."
+            )
+        else:
+            st.info("Todavía no hay motivos clasificados para esta semana. La clasificación se administra desde Administración.")
+            pendientes_semana = int(validos_titulo.sum())
+            df_top_motivos = pd.DataFrame(columns=["Motivo recurrente", "Conversaciones"])
+    except Exception as error_motivos:
+        st.warning(f"No se pudo cargar el Top 10 de motivos recurrentes: {error_motivos}")
+        df_top_motivos = pd.DataFrame(columns=["Motivo recurrente", "Conversaciones"])
+        pendientes_semana = 0
+
+    st.markdown("---")
+
     df_target_cerrados = df_wbr_base[
         (df_wbr_base["es_cerrado"] == True) &
         (df_wbr_base["close_iso_year"] == target_year) & 
