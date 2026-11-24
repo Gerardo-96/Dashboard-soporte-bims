@@ -15,6 +15,175 @@ from supabase import create_client, Client
 from guardias import render_widget_guardia
 import extra_streamlit_components as stx
 
+
+def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
+    """Construye un PDF ejecutivo con métricas, resumen y gráficos del WBR."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
+    from xml.sax.saxutils import escape
+
+    buffer = io.BytesIO()
+    page_size = landscape(A4)
+    doc = SimpleDocTemplate(
+        buffer, pagesize=page_size, rightMargin=16*mm, leftMargin=16*mm,
+        topMargin=15*mm, bottomMargin=16*mm,
+        title=f"Informe WBR - {semana}", author="Dashboard Soporte BIMS"
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="WBRTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=20, leading=24, textColor=colors.HexColor("#12304A"), spaceAfter=4*mm
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRSection", parent=styles["Heading2"], fontName="Helvetica-Bold",
+        fontSize=13, leading=16, textColor=colors.HexColor("#075985"),
+        spaceBefore=5*mm, spaceAfter=2.5*mm
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRBody", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=9, leading=13, textColor=colors.HexColor("#263445"), spaceAfter=2*mm
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRSmall", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=7.5, leading=10, textColor=colors.HexColor("#526273")
+    ))
+
+    story = [
+        Paragraph("INFORME EJECUTIVO SEMANAL", styles["WBRTitle"]),
+        Paragraph(escape(str(semana)), styles["Heading2"]),
+        Paragraph(
+            "Dashboard de Soporte BIMS · Generado "
+            + datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
+            + " (hora de Paraguay)", styles["WBRSmall"]
+        ),
+        Spacer(1, 5*mm),
+        Paragraph("Indicadores principales", styles["WBRSection"])
+    ]
+    filas = [["Indicador", "Resultado"]]
+    filas.extend([[str(k), str(v)] for k, v in metricas.items()])
+    tabla = Table(filas, colWidths=[75*mm, 90*mm], repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#12304A")),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+        ("FONTSIZE",(0,0),(-1,-1),8),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#F1F5F9")]),
+        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#CBD5E1")),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("LEFTPADDING",(0,0),(-1,-1),7),("RIGHTPADDING",(0,0),(-1,-1),7),
+        ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)
+    ]))
+    story.extend([tabla, Spacer(1,4*mm), Paragraph("Resumen ejecutivo",styles["WBRSection"])])
+    texto = resumen_ia or "No se generó un resumen con IA para esta semana."
+    for linea in str(texto).splitlines():
+        linea=linea.strip()
+        if not linea:
+            story.append(Spacer(1,2*mm))
+        elif linea.startswith("#"):
+            story.append(Paragraph(escape(linea.lstrip("# ").strip()),styles["Heading3"]))
+        else:
+            story.append(Paragraph(escape(linea),styles["WBRBody"]))
+
+    story.append(Paragraph("Desarrollo completo del WBR",styles["WBRSection"]))
+    for n,(titulo,figura) in enumerate(graficos,1):
+        try:
+            img_bytes=figura.to_image(format="png",width=1400,height=760,scale=1.25)
+        except Exception as exc:
+            raise RuntimeError(
+                "No se pudo convertir un gráfico a imagen. Verificá la instalación "
+                "de Kaleido y Chromium en el despliegue. Detalle: "+str(exc)
+            )
+        img=RLImage(io.BytesIO(img_bytes))
+        img.drawWidth=doc.width
+        img.drawHeight=min(doc.width*img.imageHeight/float(img.imageWidth),105*mm)
+        story.append(KeepTogether([
+            Paragraph(escape(f"{n}. {titulo}"),styles["WBRSection"]),
+            img, Spacer(1,3*mm)
+        ]))
+
+    for titulo,df in tablas:
+        if df is None or df.empty:
+            continue
+        story.append(Paragraph(escape(str(titulo)),styles["WBRSection"]))
+        data=[[Paragraph(f"<b>{escape(str(c))}</b>",styles["WBRSmall"]) for c in df.columns]]
+        for _,row in df.iterrows():
+            data.append([Paragraph(escape(str(v)),styles["WBRSmall"]) for v in row.tolist()])
+        widths=[doc.width/max(1,len(df.columns))]*len(df.columns)
+        t=Table(data,colWidths=widths,repeatRows=1,hAlign="LEFT")
+        t.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#12304A")),
+            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#F1F5F9")]),
+            ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#CBD5E1")),
+            ("VALIGN",(0,0),(-1,-1),"TOP"),
+            ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)
+        ]))
+        story.extend([t,Spacer(1,3*mm)])
+
+    def footer(canvas,documento):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#CBD5E1"))
+        canvas.line(16*mm,11*mm,page_size[0]-16*mm,11*mm)
+        canvas.setFont("Helvetica",7)
+        canvas.setFillColor(colors.HexColor("#64748B"))
+        canvas.drawString(16*mm,7*mm,"Dashboard de Soporte BIMS · Informe WBR")
+        canvas.drawRightString(page_size[0]-16*mm,7*mm,f"Página {documento.page}")
+        canvas.restoreState()
+
+    doc.build(story,onFirstPage=footer,onLaterPages=footer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def obtener_resumen_wbr_gemini(metricas, semana):
+    """Solicita a Gemini una interpretación ejecutiva usando solo métricas agregadas."""
+    try:
+        api_key=st.secrets.get("GEMINI_API_KEY","")
+    except Exception:
+        api_key=os.environ.get("GEMINI_API_KEY","")
+    if not api_key:
+        api_key=os.environ.get("GEMINI_API_KEY","")
+    if not api_key:
+        raise ValueError("Falta configurar GEMINI_API_KEY en los secretos de Streamlit.")
+
+    modelo="gemini-3.5-flash-lite"
+    url=f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+    prompt=(
+        "Actuá como analista gerencial de operaciones de soporte. Redactá en español "
+        f"un resumen ejecutivo claro y objetivo para {semana}. Usá exclusivamente los "
+        "indicadores agregados siguientes. No recalcules ni inventes datos. No afirmes "
+        "que una variación es positiva o negativa sin considerar su significado operativo. "
+        "Si un valor es cero o no está disponible, indicá la limitación sin especular. "
+        "No menciones personas, clientes ni tickets. Organizá la respuesta en estas "
+        "secciones: PANORAMA GENERAL, RESULTADOS POSITIVOS, PUNTOS DE ATENCIÓN y "
+        "PRIORIDADES SUGERIDAS. Máximo 300 palabras. Si no hay evidencia suficiente "
+        "para una sección, indicá que no hay elementos concluyentes.\\n\\n"
+        "INDICADORES (JSON):\\n"+json.dumps(metricas,ensure_ascii=False,default=str)
+    )
+    resp=requests.post(
+        url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},
+        json={"contents":[{"parts":[{"text":prompt}]}],
+              "generationConfig":{"temperature":0.25,"maxOutputTokens":1100}},
+        timeout=50
+    )
+    if resp.status_code>=400:
+        try:
+            detalle=resp.json().get("error",{}).get("message","")
+        except Exception:
+            detalle=resp.text[:300]
+        raise RuntimeError(f"Gemini respondió HTTP {resp.status_code}. {detalle}")
+    partes=resp.json().get("candidates",[{}])[0].get("content",{}).get("parts",[])
+    texto="\\n".join(str(p.get("text","")).strip() for p in partes if p.get("text")).strip()
+    if not texto:
+        raise RuntimeError("Gemini no devolvió contenido para el resumen.")
+    return texto
+
+
+
 # ==========================================
 # 1. CONFIGURACIÓN ÚNICA DE PÁGINA
 # ==========================================
@@ -5591,6 +5760,14 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     target_year = int(fila_sem["iso_year"])
     target_week = int(fila_sem["iso_week"])
 
+    resumen_wbr_slot = st.empty()
+    graficos_wbr = []
+    tablas_wbr = []
+
+    def mostrar_grafico_wbr(figura, titulo, **kwargs):
+        graficos_wbr.append((titulo, figura))
+        st.plotly_chart(figura, **kwargs)
+
     from datetime import datetime as dt_calc
     fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
 
@@ -5693,7 +5870,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         margin=dict(t=50, b=20, l=30, r=20),
         height=380
     )
-    st.plotly_chart(fig_5w, use_container_width=True)
+    mostrar_grafico_wbr(fig_5w, 'Evolutivo de volumen: chats recibidos y cerrados', use_container_width=True)
 
     st.markdown("---")
 
@@ -5805,7 +5982,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=30, b=20, l=20, r=20),
             height=360
         )
-        st.plotly_chart(fig_dias, use_container_width=True)
+        mostrar_grafico_wbr(fig_dias, 'Detalle operativo: recibidos y cerrados día a día', use_container_width=True)
 
         color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
         color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
@@ -5896,7 +6073,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=30, b=30, l=40, r=40),
             height=360
         )
-        st.plotly_chart(fig_pie_w, use_container_width=True)
+        mostrar_grafico_wbr(fig_pie_w, 'Chats cerrados por agente', use_container_width=True)
 
         cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
         empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
@@ -6037,7 +6214,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=30, b=20, l=20, r=20),
             height=360
         )
-        st.plotly_chart(fig_bar_gest, use_container_width=True)
+        mostrar_grafico_wbr(fig_bar_gest, 'Evolución del tiempo promedio de gestión', use_container_width=True)
 
         color_wow_g = "#34d399" if wow_gest_pct <= 0 else "#f43f5e"
         color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
@@ -6070,7 +6247,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=30, b=20, l=20, r=20),
             height=360
         )
-        st.plotly_chart(fig_bar_1ra, use_container_width=True)
+        mostrar_grafico_wbr(fig_bar_1ra, 'Evolución del tiempo promedio de primera respuesta', use_container_width=True)
 
         color_wow_1 = "#34d399" if wow_1ra_pct <= 0 else "#f43f5e"
         color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
@@ -6238,7 +6415,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=35, b=20, l=20, r=20),
             height=360
         )
-        st.plotly_chart(fig_niv, use_container_width=True)
+        mostrar_grafico_wbr(fig_niv, 'Distribución de puntuaciones CSAT', use_container_width=True)
 
     with col_p_sent:
         st.markdown("##### Sentimiento de Usuarios (CSAT Positivo vs Negativo)")
@@ -6267,7 +6444,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=30, b=30, l=30, r=30),
             height=360
         )
-        st.plotly_chart(fig_sent, use_container_width=True)
+        mostrar_grafico_wbr(fig_sent, 'Sentimiento: CSAT positivo y negativo', use_container_width=True)
 
     st.markdown("---")
 
@@ -6343,8 +6520,10 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 "% del Total a L1": st.column_config.TextColumn("% del Total a L1")
             }
             
+            tabla_l1_pdf = pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False)
+            tablas_wbr.append(("Distribución de fricción en Nivel 1", tabla_l1_pdf.copy()))
             st.dataframe(
-                pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False),
+                tabla_l1_pdf,
                 column_config=config_matriz_l1,
                 hide_index=True,
                 use_container_width=True
@@ -6362,6 +6541,12 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
         )
         df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
+        tablas_wbr.append((
+            "Motivos normalizados de reclamos en Nivel 1",
+            df_l1_motivos[["rating_int", "motivo_normalizado", "Cantidad"]].rename(
+                columns={"rating_int": "Calificación"}
+            ).copy()
+        ))
 
         filas_html_l1 = []
         for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
@@ -6449,8 +6634,10 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 "% del Total a L3": st.column_config.TextColumn("% del Total a L3")
             }
             
+            tabla_l3_pdf = pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False)
+            tablas_wbr.append(("Distribución de fricción en Nivel 3", tabla_l3_pdf.copy()))
             st.dataframe(
-                pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False),
+                tabla_l3_pdf,
                 column_config=config_matriz_l3,
                 hide_index=True,
                 use_container_width=True
@@ -6629,7 +6816,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=30, b=20, l=20, r=20),
             height=360
         )
-        st.plotly_chart(fig_bar_csat, use_container_width=True)
+        mostrar_grafico_wbr(fig_bar_csat, 'Evolución semanal del CSAT', use_container_width=True)
 
         color_diff_csat = "#34d399" if diff_csat >= 0 else "#f43f5e"
         st.markdown(f"""
@@ -6660,7 +6847,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=30, b=20, l=20, r=20),
             height=360
         )
-        st.plotly_chart(fig_bar_ratio, use_container_width=True)
+        mostrar_grafico_wbr(fig_bar_ratio, 'Promedio de contactos por empresa', use_container_width=True)
 
         st.markdown(f"""
         <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
@@ -6752,7 +6939,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             margin=dict(t=35, b=20, l=20, r=20),
             height=320
         )
-        st.plotly_chart(fig_niveles_wbr, use_container_width=True)
+        mostrar_grafico_wbr(fig_niveles_wbr, 'Chats tratados por nivel L1, L2 y L3', use_container_width=True)
 
     with col_cor_card:
         st.markdown("##### Gestión de Correos Electrónicos (Intercom)")
@@ -6841,7 +7028,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 margin=dict(t=25, b=25, l=40, r=40),
                 height=310
             )
-            st.plotly_chart(fig_pie_ext, use_container_width=True)
+            mostrar_grafico_wbr(fig_pie_ext, 'Cierres por agente en horario extendido', use_container_width=True)
 
             st.markdown(f"""
             <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
@@ -6908,7 +7095,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 margin=dict(t=35, b=10, l=10, r=25),
                 height=310
             )
-            st.plotly_chart(fig_bar_dias_ext, use_container_width=True)
+            mostrar_grafico_wbr(fig_bar_dias_ext, 'Chats ingresados por día en horario extendido', use_container_width=True)
 
             st.markdown(f"""
             <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
@@ -6918,6 +7105,121 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             """, unsafe_allow_html=True)
         else:
             st.info("Sin registros diarios de ingreso en horario extendido.")
+
+    # Solo se envían indicadores agregados a Gemini: nunca conversaciones ni tickets.
+    metricas_wbr = {
+        "semana": semana_seleccionada_str,
+        "volumen": {
+            "chats_recibidos": int(tot_sem_rec), "chats_cerrados": int(tot_sem_cer),
+            "tasa_cierre_pct": float(pct_sem_cer),
+            "variacion_recibidos_vs_semana_anterior_pct": float(diff_rec_pct),
+            "variacion_cerrados_vs_semana_anterior_pct": float(diff_cer_pct),
+            "semana_anterior_recibidos": int(tot_prev_rec),
+            "semana_anterior_cerrados": int(tot_prev_cer)
+        },
+        "atencion_y_sla": {
+            "promedio_gestion_min": float(foco_gest), "sla_gestion_pct": float(foco_sla_gest),
+            "promedio_primera_respuesta_min": float(foco_1ra),
+            "sla_primera_respuesta_pct": float(foco_sla_1ra),
+            "variacion_gestion_vs_semana_anterior_pct": float(wow_gest_pct),
+            "variacion_primera_respuesta_vs_semana_anterior_pct": float(wow_1ra_pct)
+        },
+        "satisfaccion": {
+            "csat_pct": float(foco_csat),
+            "variacion_csat_puntos_vs_semana_anterior": float(diff_csat),
+            "encuestas": int(tot_evaluados), "positivas": int(tot_positivas),
+            "negativas": int(tot_negativas)
+        },
+        "friccion": {
+            "casos_negativos_l1": int(tot_l1_neg), "casos_negativos_l3": int(tot_l3_neg),
+            "motivos_l1_mas_frecuentes": (
+                df_l1_motivos.groupby("motivo_normalizado")["Cantidad"].sum()
+                .sort_values(ascending=False).head(5).to_dict()
+                if "df_l1_motivos" in locals() and not df_l1_motivos.empty else {}
+            )
+        },
+        "niveles_y_correos": {
+            "chats_l1": int(df_niveles_cnt.loc[df_niveles_cnt["Nivel"]=="Nivel 1 (L1)","Cantidad"].sum()),
+            "chats_l2": int(df_niveles_cnt.loc[df_niveles_cnt["Nivel"]=="Nivel 2 (L2)","Cantidad"].sum()),
+            "chats_l3": int(df_niveles_cnt.loc[df_niveles_cnt["Nivel"]=="Nivel 3 (L3)","Cantidad"].sum()),
+            "correos_recibidos": int(tot_correos_rec_w),
+            "correos_cerrados": int(tot_correos_cer_w),
+            "tasa_cierre_correos_pct": float(pct_cor_res),
+            "respuestas_por_correo": int(tot_resp_correos_w)
+        },
+        "horario_extendido": {
+            "chats_ingresados": int(tot_ext), "chats_cerrados": int(tot_ext_cerrados),
+            "cierres_humanos": int(cerrados_hum_ext), "cierres_ia": int(cerrados_ia_ext),
+            "ingresos_domingo": int(tot_domingo)
+        }
+    }
+
+    clave_resumen = f"wbr_resumen_ia_{target_year}_{target_week}"
+    with resumen_wbr_slot.container():
+        with st.container(border=True):
+            col_titulo, col_estado = st.columns([4, 1])
+            with col_titulo:
+                st.markdown("### ✨ Resumen ejecutivo")
+                st.caption("Interpretación de los indicadores de la semana seleccionada mediante Gemini.")
+            with col_estado:
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                st.caption("IA · Gemini")
+            if st.button(
+                "Generar resumen ejecutivo",
+                key=f"btn_generar_resumen_wbr_{target_year}_{target_week}",
+                type="primary"
+            ):
+                try:
+                    with st.spinner("Analizando los indicadores de la semana..."):
+                        st.session_state[clave_resumen] = obtener_resumen_wbr_gemini(
+                            metricas_wbr, semana_seleccionada_str
+                        )
+                    st.success("Resumen ejecutivo generado.")
+                except Exception as error_ia:
+                    st.error(f"No se pudo generar el resumen: {error_ia}")
+            resumen_actual = st.session_state.get(clave_resumen, "")
+            if resumen_actual:
+                st.markdown(resumen_actual)
+            else:
+                st.info(
+                    "Generá el resumen cuando lo necesites. Gemini recibirá únicamente "
+                    "indicadores agregados, no conversaciones ni datos personales."
+                )
+
+        clave_pdf = f"wbr_pdf_{target_year}_{target_week}"
+        if st.button("Preparar PDF completo", key=f"btn_preparar_pdf_wbr_{target_year}_{target_week}"):
+            try:
+                with st.spinner("Preparando el PDF con todos los gráficos del informe..."):
+                    st.session_state[clave_pdf] = generar_pdf_wbr(
+                        semana_seleccionada_str,
+                        {
+                            "Chats recibidos": f"{tot_sem_rec:,}",
+                            "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
+                            "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
+                            "Promedio de gestión": f"{foco_gest} min",
+                            "SLA de gestión": f"{foco_sla_gest}%",
+                            "Primera respuesta": f"{foco_1ra} min",
+                            "SLA primera respuesta": f"{foco_sla_1ra}%",
+                            "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
+                            "Casos negativos L1 / L3": f"{tot_l1_neg} / {tot_l3_neg}",
+                            "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w}",
+                            "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados"
+                        },
+                        resumen_actual, graficos_wbr, tablas_wbr
+                    )
+                st.success("PDF completo preparado.")
+            except Exception as error_pdf:
+                st.error(f"No se pudo preparar el PDF: {error_pdf}")
+
+        pdf_generado = st.session_state.get(clave_pdf)
+        if pdf_generado:
+            st.download_button(
+                "Descargar WBR completo en PDF",
+                data=pdf_generado,
+                file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
+                mime="application/pdf",
+                key=f"download_pdf_wbr_{target_year}_{target_week}"
+            )
 
 # Llamada limpia en la pestaña
 if tab_l2 is not None:
