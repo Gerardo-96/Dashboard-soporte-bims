@@ -4572,9 +4572,21 @@ with tab_operativo:
         [d for d in [df_all, df_correos_all] if not d.empty],
         ignore_index=True
     ) if (not df_all.empty or not df_correos_all.empty) else pd.DataFrame()
-    if not df_unificado_backlog.empty and "es_cerrado" in df_unificado_backlog.columns:
+    if not df_unificado_backlog.empty and "estado" in df_unificado_backlog.columns:
+        # Recalcular el estado después de unir chats y correos.
+        # df_correos_all se separa antes de que df_all reciba es_cerrado,
+        # por lo que no se debe interpretar un es_cerrado nulo como abierto.
+        estados_cerrados_backlog = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+        estado_backlog = (
+            df_unificado_backlog["estado"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+        df_unificado_backlog["es_cerrado"] = estado_backlog.isin(estados_cerrados_backlog)
         df_abiertos_all = df_unificado_backlog[
-            ~df_unificado_backlog["es_cerrado"].fillna(False).astype(bool)
+            ~df_unificado_backlog["es_cerrado"]
         ].drop_duplicates(subset=["id"], keep="first").copy()
     else:
         df_abiertos_all = pd.DataFrame()
