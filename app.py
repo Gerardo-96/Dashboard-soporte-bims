@@ -4566,7 +4566,18 @@ with tab_operativo:
         df_filtered = df_filtered[(df_filtered["hora_solo"] >= hora_inicio) & (df_filtered["hora_solo"] <= hora_fin)]
 
     now_dt = pd.Timestamp.now(tz="America/Asuncion")
-    df_abiertos_all = df_all[~df_all["es_cerrado"]].copy() if not df_all.empty and "es_cerrado" in df_all.columns else pd.DataFrame()
+    # El backlog histórico reúne chats y correos; el resto del dashboard
+    # conserva su universo habitual, separado de los correos.
+    df_unificado_backlog = pd.concat(
+        [d for d in [df_all, df_correos_all] if not d.empty],
+        ignore_index=True
+    ) if (not df_all.empty or not df_correos_all.empty) else pd.DataFrame()
+    if not df_unificado_backlog.empty and "es_cerrado" in df_unificado_backlog.columns:
+        df_abiertos_all = df_unificado_backlog[
+            ~df_unificado_backlog["es_cerrado"].fillna(False).astype(bool)
+        ].drop_duplicates(subset=["id"], keep="first").copy()
+    else:
+        df_abiertos_all = pd.DataFrame()
 
     # CSAT SCORECARD ULTRA-RÁPIDO (PRE-PROCESADO EN UN SOLO PASO)
     st.markdown("### CSAT Performance")
@@ -5301,7 +5312,7 @@ with tab_operativo:
         if "created_at_dt" in df_rank.columns:
             df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
 
-        cols_deseadas = ["intercom_url", "ai_title", "created_at_fmt", "agente_asignado", "Horas Transcurridas", 
+        cols_deseadas = ["intercom_url", "ai_title", "created_at_fmt", "canal", "agente_asignado", "Horas Transcurridas", 
                          "nombre_contacto", "tenant", "company"]
 
         st.dataframe(
@@ -5310,6 +5321,7 @@ with tab_operativo:
                 "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
                 "ai_title": "AI Title",
                 "created_at_fmt": "Fecha Creación", 
+                "canal": "Canal",
                 "agente_asignado": "Agente Asignado",
                 "Horas Transcurridas": "Horas Abierto",
                 "nombre_contacto": "Contacto",
