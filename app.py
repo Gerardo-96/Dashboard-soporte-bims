@@ -7628,33 +7628,48 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     clave_resumen = f"wbr_resumen_ia_{target_year}_{target_week}"
     resumen_actual = st.session_state.get(clave_resumen, "")
 
-    # Indicadores principales de la semana, antes del resumen ejecutivo.
+    # Los cuatro KPI se renderizan en el ancla superior, inmediatamente antes del resumen.
     color_recibidos = "#34d399" if diff_rec_pct <= 0 else "#f87171"
     color_csat = "#34d399" if diff_csat >= 0 else "#f87171"
-    st.markdown(
-        f"""
-        <div class="wbr-highlights" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:4px 0 16px;">
-            <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:16px 18px;min-height:112px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
-                <div style="font-size:.72rem;font-weight:650;letter-spacing:.7px;color:#94a3b8;text-transform:uppercase;">Chats recibidos</div>
-                <div style="font-size:1.85rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{tot_sem_rec:,}</div>
-                <div style="font-size:.78rem;color:#94a3b8;">Variación semanal <span style="font-weight:650;color:{color_recibidos};">{diff_rec_pct:+.2f}%</span></div>
+    color_primera = "#34d399" if wow_1ra_pct <= 0 else "#f87171"
+
+    with resumen_wbr_slot.container():
+        st.markdown(
+            f"""
+            <div class="wbr-highlights" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:4px 0 16px;">
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Chats recibidos</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{tot_sem_rec:,}</div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:{color_recibidos};">{diff_rec_pct:+.2f}%</span></div>
+                </div>
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">CSAT</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_csat}%</div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:{color_csat};">{diff_csat:+.2f} puntos</span></div>
+                </div>
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Primera respuesta</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_1ra:.2f} <span style="font-size:.95rem;font-weight:600;">min</span></div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:{color_primera};">{wow_1ra_pct:+.2f}%</span></div>
+                </div>
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Contactos por empresa</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_ratio:.2f}</div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Promedio de conversaciones por empresa</div>
+                </div>
             </div>
-            <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:16px 18px;min-height:112px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
-                <div style="font-size:.72rem;font-weight:650;letter-spacing:.7px;color:#94a3b8;text-transform:uppercase;">CSAT</div>
-                <div style="font-size:1.85rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_csat}%</div>
-                <div style="font-size:.78rem;color:#94a3b8;">Variación semanal <span style="font-weight:650;color:{color_csat};">{diff_csat:+.2f} puntos</span></div>
-            </div>
-        </div>
-        <style>
-        @media (max-width: 640px) {{
-            .wbr-highlights {{
-                grid-template-columns:1fr !important;
+            <style>
+            @media (max-width: 900px) {{
+                .wbr-highlights {{ grid-template-columns:repeat(2,minmax(0,1fr)) !important; }}
             }}
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+            @media (max-width: 420px) {{
+                .wbr-highlights {{ grid-template-columns:1fr !important; }}
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
 
     with resumen_wbr_slot.container():
         with st.container(border=True):
