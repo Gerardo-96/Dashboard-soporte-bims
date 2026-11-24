@@ -5321,6 +5321,73 @@ with tab_operativo:
     else:
         st.info("No hay chats abiertos pendientes en este momento.")
 
+    # ==========================================
+    # ANTIGÜEDAD DEL BACKLOG HISTÓRICO
+    # ==========================================
+    st.markdown("#### Antigüedad del Backlog por Agente")
+
+    df_abiertos_filtro = df_abiertos_rank_filtro.copy()
+
+    if not df_abiertos_filtro.empty:
+            now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
+            df_abiertos_filtro["dias_antiguedad_num"] = df_abiertos_filtro.apply(
+                lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_resumen) / 60.0 / 8.0),
+                axis=1
+            ).fillna(0.0)
+
+            def clasificar_antiguedad(dias_habiles):
+                if dias_habiles < 1.0: 
+                    return "0 días (Hoy)"
+                elif dias_habiles < 2.0: 
+                    return "1 día hábil"
+                elif dias_habiles < 3.0: 
+                    return "2 días hábiles"
+                elif dias_habiles <= 4.0: 
+                    return "3 días hábiles"
+                else: 
+                    return ">3 días hábiles"
+
+            df_abiertos_filtro["Rango_Antiguedad"] = df_abiertos_filtro["dias_antiguedad_num"].apply(clasificar_antiguedad)
+            df_antiguedad_grp = df_abiertos_filtro.groupby(["agente_asignado", "Rango_Antiguedad"]).size().reset_index(name="Cantidad")
+
+            orden_rangos = ["0 días (Hoy)", "1 día hábil", "2 días hábiles", "3 días hábiles", ">3 días hábiles"]
+            color_map_antiguedad = {
+                "0 días (Hoy)": "#10b981",
+                "1 día hábil": "#38bdf8",
+                "2 días hábiles": "#fbbf24",
+                "3 días hábiles": "#f97316",
+                ">3 días hábiles": "#ef4444"
+            }
+
+            fig_antiguedad = px.bar(
+                df_antiguedad_grp,
+                x="agente_asignado",
+                y="Cantidad",
+                color="Rango_Antiguedad",
+                category_orders={"Rango_Antiguedad": orden_rangos},
+                color_discrete_map=color_map_antiguedad,
+                barmode="stack",
+                text="Cantidad"
+            )
+
+            fig_antiguedad.update_traces(textposition="inside", marker=dict(cornerradius=4))
+            fig_antiguedad.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=12),
+                xaxis=dict(gridcolor="#1e293b", title=None),
+                yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats Abiertos"),
+                legend_title_text="Antigüedad", 
+                height=380,
+                margin=dict(t=20, b=20, l=20, r=20)
+            )
+
+            st.plotly_chart(fig_antiguedad, use_container_width=True)
+        else:
+            st.info("No existen chats abiertos asignados a agentes humanos actualmente.")
+    else:
+        st.info("No existen chats abiertos pendientes en el sistema.")
+
     st.markdown("---")
 
     # BÚSQUEDA DINÁMICA POR TENANT O AGENTE
@@ -5473,79 +5540,8 @@ def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hor
 
         st.markdown("---")
 
-        # ==========================================
-        # 2. ANTIGÜEDAD DE CHATS PENDIENTES HISTÓRICOS POR DÍA
-        # ==========================================
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### Antigüedad de Chats Pendientes por Día")
-
-        df_abiertos_historicos = df_all_in[~df_all_in["es_cerrado"]].copy() if not df_all_in.empty and "es_cerrado" in df_all_in.columns else pd.DataFrame()
-
-        if not df_abiertos_historicos.empty:
-            agentes_excluidos = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
-            df_abiertos_filtro = df_abiertos_historicos[
-                ~df_abiertos_historicos["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_excluidos)
-            ].copy()
-
-            if not df_abiertos_filtro.empty:
-                now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
-                df_abiertos_filtro["dias_antiguedad_num"] = df_abiertos_filtro.apply(
-                    lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_resumen) / 60.0 / 8.0),
-                    axis=1
-                ).fillna(0.0)
-
-                def clasificar_antiguedad(dias_habiles):
-                    if dias_habiles < 1.0: 
-                        return "0 días (Hoy)"
-                    elif dias_habiles < 2.0: 
-                        return "1 día hábil"
-                    elif dias_habiles < 3.0: 
-                        return "2 días hábiles"
-                    elif dias_habiles <= 4.0: 
-                        return "3 días hábiles"
-                    else: 
-                        return ">3 días hábiles"
-
-                df_abiertos_filtro["Rango_Antiguedad"] = df_abiertos_filtro["dias_antiguedad_num"].apply(clasificar_antiguedad)
-                df_antiguedad_grp = df_abiertos_filtro.groupby(["agente_asignado", "Rango_Antiguedad"]).size().reset_index(name="Cantidad")
-
-                orden_rangos = ["0 días (Hoy)", "1 día hábil", "2 días hábiles", "3 días hábiles", ">3 días hábiles"]
-                color_map_antiguedad = {
-                    "0 días (Hoy)": "#10b981",
-                    "1 día hábil": "#38bdf8",
-                    "2 días hábiles": "#fbbf24",
-                    "3 días hábiles": "#f97316",
-                    ">3 días hábiles": "#ef4444"
-                }
-
-                fig_antiguedad = px.bar(
-                    df_antiguedad_grp,
-                    x="agente_asignado",
-                    y="Cantidad",
-                    color="Rango_Antiguedad",
-                    category_orders={"Rango_Antiguedad": orden_rangos},
-                    color_discrete_map=color_map_antiguedad,
-                    barmode="stack",
-                    text="Cantidad"
-                )
-
-                fig_antiguedad.update_traces(textposition="inside", marker=dict(cornerradius=4))
-                fig_antiguedad.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)", 
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#cbd5e1", size=12),
-                    xaxis=dict(gridcolor="#1e293b", title=None),
-                    yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats Abiertos"),
-                    legend_title_text="Antigüedad", 
-                    height=380,
-                    margin=dict(t=20, b=20, l=20, r=20)
-                )
-
-                st.plotly_chart(fig_antiguedad, use_container_width=True)
-            else:
-                st.info("No existen chats abiertos asignados a agentes humanos actualmente.")
-        else:
-            st.info("No existen chats abiertos pendientes en el sistema.")
+        # El gráfico de antigüedad histórica se trasladó al ranking general
+        # de chats abiertos de la pestaña Control Operativo & SLA.
 
         st.markdown("---")
 
