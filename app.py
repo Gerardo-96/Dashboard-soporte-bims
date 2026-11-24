@@ -7275,6 +7275,34 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
     clave_resumen = f"wbr_resumen_ia_{target_year}_{target_week}"
     resumen_actual = st.session_state.get(clave_resumen, "")
 
+    # Indicadores principales de la semana, antes del resumen ejecutivo.
+    color_recibidos = "#34d399" if diff_rec_pct <= 0 else "#f87171"
+    color_csat = "#34d399" if diff_csat >= 0 else "#f87171"
+    st.markdown(
+        f"""
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:4px 0 16px;">
+            <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:16px 18px;min-height:112px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                <div style="font-size:.72rem;font-weight:650;letter-spacing:.7px;color:#94a3b8;text-transform:uppercase;">Chats recibidos</div>
+                <div style="font-size:1.85rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{tot_sem_rec:,}</div>
+                <div style="font-size:.78rem;color:#94a3b8;">Variación semanal <span style="font-weight:650;color:{color_recibidos};">{diff_rec_pct:+.2f}%</span></div>
+            </div>
+            <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:16px 18px;min-height:112px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                <div style="font-size:.72rem;font-weight:650;letter-spacing:.7px;color:#94a3b8;text-transform:uppercase;">CSAT</div>
+                <div style="font-size:1.85rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_csat}%</div>
+                <div style="font-size:.78rem;color:#94a3b8;">Variación semanal <span style="font-weight:650;color:{color_csat};">{diff_csat:+.2f} puntos</span></div>
+            </div>
+        </div>
+        <style>
+        @media (max-width: 640px) {{
+            .bims-wbr-scope-anchor ~ div div[style*="grid-template-columns:repeat(2,minmax(0,1fr))"] {{
+                grid-template-columns:1fr !important;
+            }}
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     with resumen_wbr_slot.container():
         with st.container(border=True):
             st.markdown(
@@ -7321,7 +7349,10 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                 )
             elif resumen_actual:
                 def generar_pdf_bajo_demanda():
-                    return generar_pdf_wbr(
+                    # El callable se ejecuta al solicitar la descarga; el spinner
+                    # informa del proceso sin provocar un rerun del fragmento WBR.
+                    with st.spinner("Generando el PDF… Esto puede tardar unos segundos."):
+                        return generar_pdf_wbr(
                         semana_seleccionada_str,
                         {
                             "Chats recibidos": f"{tot_sem_rec:,}",
@@ -7361,7 +7392,8 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     mime="application/pdf",
                     key=f"download_pdf_wbr_{target_year}_{target_week}",
                     type="primary",
-                    use_container_width=True
+                    use_container_width=True,
+                    on_click="ignore"
                 )
 
 # Llamada limpia en la pestaña
