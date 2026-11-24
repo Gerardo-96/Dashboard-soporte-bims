@@ -185,9 +185,10 @@ def main():
 
         if insertados == 0:
             # Evita un bucle infinito si otro proceso está modificando el catálogo.
+            catalogo_final = obtener_catalogo(supabase)
             pendientes_actuales = [
                 titulo for titulo in frecuencias
-                if titulo not in obtener_catalogo(supabase)
+                if titulo not in catalogo_final
             ]
             if pendientes_actuales:
                 raise RuntimeError(
