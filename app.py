@@ -1470,12 +1470,16 @@ if not st.user.is_logged_in:
         [data-testid="stSidebar"] { display: none !important; }
         .stAppDeployButton, #MainMenu, footer { display: none !important; }
         div[data-testid="stAppViewBlockContainer"] {
-            padding-top: clamp(3rem, 10vh, 7rem) !important;
-            padding-bottom: 2rem !important;
+            min-height: 100vh !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            padding: 1.25rem 1rem !important;
         }
         .st-key-bims_login_panel {
-            width: 100%; max-width: 460px; margin: 0 auto;
-            padding: 38px 34px 26px;
+            width: 100%; max-width: 410px; margin: auto;
+            padding: 28px 30px 22px;
             background: linear-gradient(155deg, rgba(30,41,59,.97), rgba(12,22,39,.98));
             border: 1px solid rgba(100, 116, 139, .38); border-radius: 20px;
             box-shadow: 0 28px 70px rgba(0,0,0,.38);
@@ -1485,38 +1489,39 @@ if not st.user.is_logged_in:
             text-align: center;
         }
         .bims-google-login-logo {
-            width: 62px; height: 62px; margin: 0 auto 18px;
-            border-radius: 18px; background: linear-gradient(145deg, #0f766e, #0e7490);
-            border: 1px solid rgba(94,234,212,.28);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.8rem; font-weight: 800; color: #f8fafc;
-            box-shadow: 0 8px 24px rgba(13,148,136,.2);
+            width: fit-content; min-width: 112px; margin: 0 auto 12px;
+            padding: 5px 14px; border-radius: 10px;
+            color: #f8fafc; font-size: 1.55rem; font-weight: 800;
+            letter-spacing: .16em; line-height: 1.2;
+            background: linear-gradient(110deg, #5eead4, #38bdf8);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         .bims-google-login-title {
-            color: #f8fafc; font-size: 1.45rem; font-weight: 750;
-            letter-spacing: -.035em; margin-bottom: 8px;
+            color: #f8fafc; font-size: 1.32rem; font-weight: 730;
+            letter-spacing: -.035em; margin-bottom: 6px;
         }
         .bims-google-login-subtitle {
-            color: #a8b5c7; font-size: .91rem; line-height: 1.55;
-            margin: 0 auto 22px; max-width: 320px;
+            color: #a8b5c7; font-size: .88rem; line-height: 1.5;
+            margin: 0 auto 14px; max-width: 320px;
         }
-        .st-key-btn_google_login { max-width: 392px; margin: 8px auto 0; }
+        .st-key-btn_google_login { max-width: 278px; margin: 10px auto 0; }
         .st-key-btn_google_login button {
             position: relative !important;
             display: flex !important; align-items: center !important;
             justify-content: center !important;
-            border-radius: 11px !important; min-height: 50px !important;
-            padding: 0 48px !important;
-            font-weight: 650 !important; font-size: .94rem !important;
-            color: #1f2937 !important; background: #ffffff !important;
-            border: 1px solid #d7dde5 !important;
-            box-shadow: 0 5px 14px rgba(0,0,0,.16) !important;
+            border-radius: 10px !important; min-height: 44px !important;
+            padding: 0 42px !important;
+            font-weight: 600 !important; font-size: .9rem !important;
+            color: #e5edf7 !important; background: rgba(30,41,59,.58) !important;
+            border: 1px solid rgba(148,163,184,.34) !important;
+            box-shadow: 0 4px 14px rgba(0,0,0,.14) !important;
             transition: background .16s ease, box-shadow .16s ease, transform .16s ease !important;
         }
         .st-key-btn_google_login button:hover {
-            background: #f8fafc !important;
-            border-color: #c5ced9 !important;
-            box-shadow: 0 8px 20px rgba(0,0,0,.22) !important;
+            background: rgba(51,65,85,.78) !important;
+            border-color: rgba(148,163,184,.55) !important;
+            box-shadow: 0 7px 18px rgba(0,0,0,.2) !important;
             transform: translateY(-1px);
         }
         .st-key-btn_google_login button::before {
@@ -1527,8 +1532,8 @@ if not st.user.is_logged_in:
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.73 7.18l7.63 5.91c4.45-4.11 7.14-10.17 7.14-17.56z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.54 2.56 10.78l7.97-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.9-5.89l-7.63-5.91c-2.12 1.42-4.84 2.26-8.27 2.26-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/svg%3E");
         }
         .bims-login-footnote {
-            color: #8291a6; text-align: center; font-size: .78rem;
-            max-width: 390px; margin: 12px auto 0; line-height: 1.5;
+            color: #8291a6; text-align: center; font-size: .75rem;
+            max-width: 310px; margin: 10px auto 0; line-height: 1.45;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -1537,7 +1542,7 @@ if not st.user.is_logged_in:
     with col_centro:
         with st.container(key="bims_login_panel"):
             st.markdown("""
-            <div class="bims-google-login-logo">B</div>
+            <div class="bims-google-login-logo">BIMS</div>
             <div class="bims-google-login-title">Dashboard Soporte BIMS</div>
             <div class="bims-google-login-subtitle">
                 Accede de forma segura con tu cuenta de Google
