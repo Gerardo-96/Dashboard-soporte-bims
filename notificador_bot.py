@@ -41,6 +41,47 @@ CRON_SECRET_TOKEN = os.environ.get("CRON_SECRET_TOKEN", "bims_secret_cron_123")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 tz_py = timezone(timedelta(hours=-3))
 
+
+def registrar_evento_sistema(source, category, level, event, message=None, details=None):
+    """Guarda eventos técnicos en Supabase sin interrumpir la operación si falla el registro."""
+    try:
+        supabase.table("system_logs").insert({
+            "source": str(source),
+            "category": str(category),
+            "level": str(level),
+            "event": str(event),
+            "message": str(message) if message is not None else None,
+            "details": details or {}
+        }).execute()
+        return True
+    except Exception as exc:
+        print(f"⚠️ No se pudo guardar el evento en Supabase ({event}): {exc}")
+        return False
+
+
+def registrar_notificacion(channel, notification_type, status, destination_label=None,
+                           conversation_id=None, provider=None, provider_status_code=None,
+                           provider_message_id=None, attempt=1, error=None, details=None):
+    """Guarda el resultado de una notificación sin afectar el flujo de envío."""
+    try:
+        supabase.table("notification_logs").insert({
+            "channel": str(channel),
+            "notification_type": str(notification_type),
+            "status": str(status),
+            "conversation_id": str(conversation_id) if conversation_id is not None else None,
+            "destination_label": str(destination_label) if destination_label is not None else None,
+            "provider": str(provider) if provider is not None else None,
+            "provider_status_code": provider_status_code,
+            "provider_message_id": str(provider_message_id) if provider_message_id is not None else None,
+            "attempt": int(attempt or 1),
+            "error": str(error)[:2000] if error is not None else None,
+            "details": details or {}
+        }).execute()
+        return True
+    except Exception as exc:
+        print(f"⚠️ No se pudo guardar el historial de notificaciones: {exc}")
+        return False
+
 FERIADOS_DEFAULT = [
     "2026-01-01", "2026-03-02", "2026-04-02", "2026-04-03", "2026-05-01",
     "2026-05-14", "2026-05-15", "2026-06-12", "2026-06-22", "2026-06-30",
@@ -121,12 +162,20 @@ def asegurar_conexion_whatsapp():
         res = requests.get(url_state, headers=headers, timeout=8)
         if res.status_code != 200:
             print(f"⚠️ Evolution no pudo informar el estado de WhatsApp (HTTP {res.status_code}).")
+            registrar_evento_sistema("notificador_bot", "whatsapp", "warning",
+                                     "evolution_state_check_failed",
+                                     "Evolution no pudo informar el estado de WhatsApp.",
+                                     {"http_status": res.status_code})
             return False
 
         datos = res.json()
         estado = str(datos.get("instance", {}).get("state", "")).strip().lower()
     except Exception as e:
         print(f"⚠️ Error verificando estado de WhatsApp/Evolution: {e}")
+        registrar_evento_sistema("notificador_bot", "whatsapp", "error",
+                                 "evolution_state_check_error",
+                                 "Error verificando el estado de WhatsApp/Evolution.",
+                                 {"error": str(e)})
         return False
 
     if estado == "open":
@@ -140,6 +189,10 @@ def asegurar_conexion_whatsapp():
     # Solo reconectar ante estados explícitos de desconexión.
     if estado not in ("close", "closed", "disconnected"):
         print(f"⚠️ Estado de WhatsApp no reconocido ({estado or 'vacío'}). No se fuerza la reconexión.")
+        registrar_evento_sistema("notificador_bot", "whatsapp", "warning",
+                                 "whatsapp_state_unrecognized",
+                                 "Estado de WhatsApp no reconocido; no se forzó la reconexión.",
+                                 {"state": estado or "empty"})
         return False
 
     # El cron se ejecuta cada minuto: limitar los intentos a uno cada 2 minutos.
@@ -160,10 +213,22 @@ def asegurar_conexion_whatsapp():
         res_connect = requests.get(url_connect, headers=headers, timeout=10)
         if res_connect.status_code == 200:
             print("🔄 Solicitud de reconexión enviada a Evolution API.")
+            registrar_evento_sistema("notificador_bot", "whatsapp", "warning",
+                                     "whatsapp_reconnection_requested",
+                                     "Se solicitó reconectar WhatsApp ante una desconexión confirmada.",
+                                     {"previous_state": estado, "http_status": res_connect.status_code})
         else:
             print(f"⚠️ Evolution rechazó la solicitud de reconexión (HTTP {res_connect.status_code}).")
+            registrar_evento_sistema("notificador_bot", "whatsapp", "error",
+                                     "whatsapp_reconnection_rejected",
+                                     "Evolution rechazó la solicitud de reconexión.",
+                                     {"previous_state": estado, "http_status": res_connect.status_code})
     except Exception as e:
         print(f"⚠️ Error al solicitar la reconexión de WhatsApp: {e}")
+        registrar_evento_sistema("notificador_bot", "whatsapp", "error",
+                                 "whatsapp_reconnection_error",
+                                 "Error al solicitar la reconexión de WhatsApp.",
+                                 {"previous_state": estado, "error": str(e)})
 
     # La conexión se verificará nuevamente en la próxima ejecución del cron.
     return False
@@ -272,12 +337,19 @@ def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
 
     return round(total_minutos_habiles, 1)
 
-def enviar_whatsapp(numero_destino, texto, menciones=[], mencionar_todos=False):
-    """Envía un mensaje de WhatsApp con formato estándar para Evolution API v2."""
+def enviar_whatsapp(numero_destino, texto, menciones=None, mencionar_todos=False,
+                    notification_type="whatsapp", conversation_id=None,
+                    destination_label="Destino configurado"):
+    """Envía un mensaje de WhatsApp y registra su resultado sin guardar el contenido."""
     if not bot_esta_activo():
         print("⏸️ [BOT PAUSADO] Envío de WhatsApp cancelado manualmente desde el panel.")
-        return
-        
+        registrar_notificacion("whatsapp", notification_type, "skipped",
+                               destination_label=destination_label,
+                               conversation_id=conversation_id,
+                               provider="evolution",
+                               error="Bot pausado manualmente")
+        return {"status": "skipped", "reason": "bot_paused"}
+
     base_url = EVOLUTION_API_URL.rstrip('/')
     url = f"{base_url}/message/sendText/{INSTANCE_NAME}"
     
@@ -301,8 +373,37 @@ def enviar_whatsapp(numero_destino, texto, menciones=[], mencionar_todos=False):
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=10)
         print(f"Respuesta Evolution API ({res.status_code}): {res.text}")
+        respuesta = {}
+        try:
+            respuesta = res.json() if res.content else {}
+        except Exception:
+            respuesta = {}
+        message_id = (
+            respuesta.get("key", {}).get("id")
+            or respuesta.get("message", {}).get("key", {}).get("id")
+            or respuesta.get("id")
+        ) if isinstance(respuesta, dict) else None
+        status = "sent" if 200 <= res.status_code < 300 else "failed"
+        registrar_notificacion(
+            "whatsapp", notification_type, status,
+            destination_label=destination_label,
+            conversation_id=conversation_id,
+            provider="evolution",
+            provider_status_code=res.status_code,
+            provider_message_id=message_id,
+            error=None if status == "sent" else f"Evolution HTTP {res.status_code}"
+        )
+        return {"status": status, "http_status": res.status_code, "provider_message_id": message_id}
     except Exception as e:
         print(f"Error enviando WhatsApp: {e}")
+        registrar_notificacion(
+            "whatsapp", notification_type, "failed",
+            destination_label=destination_label,
+            conversation_id=conversation_id,
+            provider="evolution",
+            error=str(e)
+        )
+        return {"status": "failed", "error": str(e)}
 
 # ==========================================
 # PROCESAMIENTO PRINCIPAL
@@ -399,7 +500,12 @@ def procesar_alertas_y_reportes():
                 )
                 
                 # Enviamos con el flag activar mención global
-                enviar_whatsapp(tel_destino_indiv, msg, mencionar_todos=True)
+                enviar_whatsapp(
+                    tel_destino_indiv, msg, mencionar_todos=True,
+                    notification_type="sla_sin_primera_respuesta",
+                    conversation_id=c.get("id"),
+                    destination_label="Alerta individual de SLA"
+                )
 
     # -------------------------------------------------------------
     # B. ALERTA GRUPAL RECURRENTE (Múltiplos de X hs HÁBILES)
@@ -507,7 +613,12 @@ def procesar_alertas_y_reportes():
                     f"*Espera:* {hs_habiles} hs hábiles"
                 )
 
-                enviar_whatsapp(jid_grupo, msg_chat, menciones=menciones_list)
+                enviar_whatsapp(
+                    jid_grupo, msg_chat, menciones=menciones_list,
+                    notification_type="sla_recurrente_grupal",
+                    conversation_id=c.get("id"),
+                    destination_label="Grupo de soporte BIMS"
+                )
 
                 # Actualizar el registro en Supabase con el nuevo múltiplo notificado
                 supabase.table("conversaciones")\
@@ -537,6 +648,12 @@ def trigger_notificaciones(authorization: str = Header(None)):
         return PlainTextResponse("OK", status_code=200)
     except Exception as e:
         print(f"❌ ERROR CRÍTICO EN PROCESAR NOTIFICACIONES:\n{traceback.format_exc()}")
+        registrar_evento_sistema(
+            "notificador_bot", "cron", "critical",
+            "notification_job_failed",
+            "Falló la ejecución del proceso de notificaciones.",
+            {"error": str(e), "traceback": traceback.format_exc()[-6000:]}
+        )
         # Retornamos 200 con el detalle en log para que cron-job.org no suspenda el cron
         return PlainTextResponse(f"ERROR: {str(e)}", status_code=200)
 
@@ -579,12 +696,24 @@ def reiniciar_servicio(authorization: str = Header(None)):
 
     try:
         res = requests.post(RENDER_DEPLOY_HOOK_URL, timeout=10)
+        registrar_evento_sistema(
+            "notificador_bot", "render", "warning",
+            "manual_restart_requested",
+            "Se envió una solicitud manual de reinicio a Render.",
+            {"render_response_code": res.status_code}
+        )
         return {
             "status": "success",
             "message": "Petición de reinicio enviada a Render exitosamente.",
             "render_response_code": res.status_code
         }
     except Exception as e:
+        registrar_evento_sistema(
+            "notificador_bot", "render", "error",
+            "manual_restart_request_failed",
+            "Falló la solicitud manual de reinicio a Render.",
+            {"error": str(e)}
+        )
         return {"status": "error", "message": str(e)}
 
 #Recordatorio de guardia sabatina
@@ -1029,6 +1158,15 @@ def trigger_reporte_email(authorization: str = Header(None)):
         asunto_mail = f"Cierre Operativo Soporte BIMS - {hoy_str}"
         res_mail = enviar_correo_gmail_api(EMAIL_EMISOR, email_dest, asunto_mail, html_body)
         print(f"📧 [Reporte Email] Resultado: {res_mail}")
+        resultado_mail = res_mail or {}
+        registrar_notificacion(
+            "email", "reporte_diario",
+            "sent" if resultado_mail.get("status") == "success" else "failed",
+            destination_label="Destinatario del reporte diario",
+            provider="gmail",
+            provider_message_id=resultado_mail.get("gmail_id"),
+            error=resultado_mail.get("error") if resultado_mail.get("status") != "success" else None
+        )
 
         return PlainTextResponse("OK", status_code=200)
 
