@@ -20,6 +20,8 @@ app = FastAPI()
 # Controla la frecuencia de los intentos de reconexión de WhatsApp.
 _ultimo_intento_reconexion = 0.0
 _lock_reconexion = threading.Lock()
+_ultimo_estado_whatsapp = None
+_lock_estado_whatsapp = threading.Lock()
 _INTERVALO_RECONEXION_SEGUNDOS = 120
 
 # ==========================================
@@ -170,6 +172,18 @@ def asegurar_conexion_whatsapp():
 
         datos = res.json()
         estado = str(datos.get("instance", {}).get("state", "")).strip().lower()
+        global _ultimo_estado_whatsapp
+        with _lock_estado_whatsapp:
+            if estado != _ultimo_estado_whatsapp:
+                estado_anterior = _ultimo_estado_whatsapp
+                _ultimo_estado_whatsapp = estado
+                registrar_evento_sistema(
+                    "notificador_bot", "whatsapp",
+                    "info" if estado == "open" else "warning",
+                    "whatsapp_connection_state_changed",
+                    "Se detectó un cambio en el estado de conexión de WhatsApp.",
+                    {"previous_state": estado_anterior, "state": estado or "empty"}
+                )
     except Exception as e:
         print(f"⚠️ Error verificando estado de WhatsApp/Evolution: {e}")
         registrar_evento_sistema("notificador_bot", "whatsapp", "error",
@@ -378,9 +392,12 @@ def enviar_whatsapp(numero_destino, texto, menciones=None, mencionar_todos=False
             respuesta = res.json() if res.content else {}
         except Exception:
             respuesta = {}
+        key_data = respuesta.get("key") or {} if isinstance(respuesta, dict) else {}
+        message_data = respuesta.get("message") or {} if isinstance(respuesta, dict) else {}
+        message_key_data = message_data.get("key") or {} if isinstance(message_data, dict) else {}
         message_id = (
-            respuesta.get("key", {}).get("id")
-            or respuesta.get("message", {}).get("key", {}).get("id")
+            key_data.get("id")
+            or message_key_data.get("id")
             or respuesta.get("id")
         ) if isinstance(respuesta, dict) else None
         status = "sent" if 200 <= res.status_code < 300 else "failed"
