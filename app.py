@@ -1341,7 +1341,6 @@ except ImportError:
     SYNC_AVAILABLE = False
 
 INTERCOM_APP_ID = "co9kozj6"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 # URL de tu webhook FastAPI de Python desplegado en Render
 NOTIFICADOR_API_URL = os.environ.get("NOTIFICADOR_API_URL", "https://dashboard-soporte-bims-ctcu.onrender.com")
@@ -1415,8 +1414,7 @@ def validar_usuario_autorizado_google(email):
 @st.cache_data(ttl=300)
 def obtener_permisos_usuario(identificador_usuario):
     """
-    Consulta en Supabase las banderas de permisos del usuario.
-    identificador_usuario puede ser el email o el nombre según tu autenticación.
+    Consulta los permisos exclusivamente por el correo verificado de Google.
     """
     if not identificador_usuario:
         return {"acceso_wbr": False, "acceso_admin": False}
@@ -1424,7 +1422,7 @@ def obtener_permisos_usuario(identificador_usuario):
         res = (
             supabase.table("usuarios_autorizados")
             .select("acceso_wbr, acceso_admin")
-            .or_(f"email.eq.{identificador_usuario},nombre.eq.{identificador_usuario}")
+            .eq("email", identificador_usuario.strip().lower())
             .limit(1)
             .execute()
         )
@@ -3153,9 +3151,6 @@ if "sla_gest_th" not in st.session_state:
     st.session_state["sla_gest_th"] = 60.0
 if "alerta_nuevo_th" not in st.session_state:
     st.session_state["alerta_nuevo_th"] = 1.0
-if "admin_authenticated" not in st.session_state:
-    st.session_state["admin_authenticated"] = False
-
 hoy_local = obtener_fecha_local_hoy()
 if "input_f_desde" not in st.session_state:
     st.session_state["input_f_desde"] = hoy_local
@@ -3854,8 +3849,6 @@ with st.container(key="bims_sidebar_panel"):
     if st.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
         st.session_state["user_authenticated"] = False
         st.session_state["user_email"] = ""
-        if "admin_authenticated" in st.session_state:
-            st.session_state["admin_authenticated"] = False
         st.logout()
 
 with st.container(key="bims_dashboard_header"):
@@ -3990,7 +3983,7 @@ st.markdown('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
 
 
 # 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
-usuario_actual = st.session_state.get("usuario_conectado") or st.session_state.get("user_email", "")
+usuario_actual = st.session_state.get("user_email", "").strip().lower()
 permisos = obtener_permisos_usuario(usuario_actual)
 
 puede_ver_wbr = permisos["acceso_wbr"]
@@ -4586,13 +4579,8 @@ with tab_operativo:
     else:
         st.info("Sin registros en la base de datos.")
 
-    # DEFINIR CORREO AUTORIZADO A EDITAR (Tu usuario o Sesión Admin)
-    USUARIO_ADMIN_EMAIL = "gerardo.gaona@itti.digital" 
-
-    es_super_usuario = (
-        st.session_state.get("user_email", "").strip().lower() == USUARIO_ADMIN_EMAIL.lower()
-        or st.session_state.get("admin_authenticated", False)
-    )
+    # La edición de motivos CSAT utiliza el mismo permiso de Administración.
+    es_super_usuario = puede_ver_admin
 
     # DETALLE Y CATEGORIZACIÓN CSAT DIRECTO EN TABLA (Filtrado por fecha_calificacion, no por fecha de creación)
     if not df_all.empty and "rating" in df_all.columns and "fecha_calificacion_solo" in df_all.columns:
