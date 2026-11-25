@@ -524,10 +524,13 @@ def health_status():
     except Exception as e:
         print(f"Error consultando estado de WhatsApp: {e}")
 
+    bot_active = bot_esta_activo()
+
     return {
         "webhook_online": True,
         "evolution_online": evolution_online,
         "whatsapp_state": estado_whatsapp,
+        "bot_active": bot_active,
         "status_general": "OK" if (evolution_online and estado_whatsapp == "open") else "CRITICAL"
     }
 
