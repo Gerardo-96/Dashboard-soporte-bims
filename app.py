@@ -8140,12 +8140,12 @@ def renderizar_panel_admin(df_base_motivos=None):
                 if bot_pausado:
                     if st.button("▶ Reanudar", type="secondary", key="btn_reanudar_bot_admin", help="Reactivar el envío de alertas y mensajes"):
                         supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
-                        obtener_estado_bot_salud.clear()
+                        # La consulta de salud ya no utiliza caché; no requiere clear().
                         st.rerun(scope="fragment")
                 else:
                     if st.button("Ⅱ Pausar", type="secondary", key="btn_pausar_bot_admin", help="Detener temporalmente los envíos del bot"):
                         supabase.table("config_notificaciones").update({"bot_activo": False}).eq("id", 1).execute()
-                        obtener_estado_bot_salud.clear()
+                        # La consulta de salud ya no utiliza caché; no requiere clear().
                         st.rerun(scope="fragment")
 
             with col_status3:
