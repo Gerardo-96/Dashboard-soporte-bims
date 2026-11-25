@@ -4094,21 +4094,25 @@ with st.container(key="bims_dashboard_header"):
         width:26px; height:26px; flex:0 0 26px; color:var(--bims-bot-color);
     }
     .bims-bot-head {
-        position:relative; display:block; width:19px; height:16px; margin-top:5px;
+        position:relative; display:flex; flex-direction:column; align-items:center;
+        justify-content:flex-start; width:20px; height:17px; margin-top:5px;
         border:2px solid currentColor; border-radius:5px; box-sizing:border-box;
     }
     .bims-bot-head::before {
-        content:""; position:absolute; width:2px; height:4px; left:50%; top:-6px;
+        content:""; position:absolute; width:2px; height:4px; left:50%; top:-7px;
         transform:translateX(-50%); background:currentColor; border-radius:2px;
     }
-    .bims-bot-head::after {
-        content:""; position:absolute; width:3px; height:3px; left:4px; top:4px;
+    .bims-bot-eyes {
+        display:flex; justify-content:center; align-items:center; gap:6px;
+        width:100%; margin-top:3px;
+    }
+    .bims-bot-eyes span {
+        display:block; width:3px; height:3px; flex:0 0 3px;
         background:currentColor; border-radius:50%;
-        box-shadow:7px 0 0 currentColor;
     }
     .bims-bot-mouth {
-        position:absolute; left:50%; bottom:2px; width:5px; height:2px;
-        transform:translateX(-50%); background:currentColor; border-radius:2px;
+        display:block; width:5px; height:2px; margin-top:2px;
+        background:currentColor; border-radius:2px;
     }
     .bims-bot-online .bims-bot-mouth { width:7px; height:3px; border-radius:0 0 6px 6px; }
     .bims-bot-ear {
@@ -4138,7 +4142,7 @@ with st.container(key="bims_dashboard_header"):
         <span class="bims-bot-state-icon {clase_estado_bot}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-bot-color:{color_bot};">
             <span class="bims-bot-ear bims-bot-ear-left"></span>
             <span class="bims-bot-ear bims-bot-ear-right"></span>
-            <span class="bims-bot-head"><span class="bims-bot-mouth"></span></span>
+            <span class="bims-bot-head"><span class="bims-bot-eyes"><span></span><span></span></span><span class="bims-bot-mouth"></span></span>
             {'' if bot_online else '<span class="bims-bot-sleep">Z</span>'}
         </span>
     """
