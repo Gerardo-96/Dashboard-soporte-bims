@@ -4117,8 +4117,8 @@ with st.container(key="bims_dashboard_header"):
         background-color:var(--bims-whatsapp-color);
         opacity:0;
         transform:rotate(-90deg) scale(.72);
-        -webkit-mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
-        mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
+        -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4.8 9A8 8 0 0 1 18.6 6L20 12'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M19.2 15A8 8 0 0 1 5.4 18L4 12'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+        mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4.8 9A8 8 0 0 1 18.6 6L20 12'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M19.2 15A8 8 0 0 1 5.4 18L4 12'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
     }
     .bims-whatsapp-state-icon.is-online {
         animation:bims-whatsapp-logo-to-sync 4.8s ease-in-out infinite;
@@ -4138,24 +4138,6 @@ with st.container(key="bims_dashboard_header"):
     .bims-whatsapp-state-icon.is-offline::after {
         animation:none !important;
     }
-    /* Sync de dos flechas, inspirado en el icono de referencia. */
-    .bims-whatsapp-sync-icon {
-        display:inline-block;
-        width:10px; height:10px; flex:0 0 10px;
-        background-color:var(--bims-whatsapp-color);
-        transform:translate( -3px, 10px);
-        -webkit-mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
-        mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
-        animation:none !important;
-    }
-    .bims-whatsapp-sync-icon.is-offline {
-        width:9px; height:9px; flex-basis:9px;
-        background:none;
-        color:var(--bims-whatsapp-color);
-        font-family:Arial, sans-serif; font-size:12px; font-weight:400;
-        line-height:9px; text-align:center;
-        -webkit-mask:none; mask:none;
-    }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
     .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; }
     </style>
@@ -4171,7 +4153,6 @@ with st.container(key="bims_dashboard_header"):
     texto_estado_bot = "WhatsApp conectado" if bot_online else "WhatsApp desconectado"
     indicador_bot_html = f"""
         <span class="bims-whatsapp-state-icon {'is-online' if bot_online else 'is-offline'}" aria-hidden="true" style="--bims-whatsapp-color:{color_bot};"></span>
-        <span class="bims-whatsapp-sync-icon {'is-online' if bot_online else 'is-offline'}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">{'' if bot_online else '×'}</span>
     """
 
     estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:0;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
