@@ -1138,25 +1138,44 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         .st-key-bims_dashboard_header .bims-header-bot-status {
             display: none !important;
         }
-        /* En móvil, título y estado del bot pasan a filas separadas.
-           Evita que el badge fuerce el ancho de la cabecera y se monte
-           sobre la navegación o el contenido. */
+        /* En móvil, el título y el perfil permanecen en una misma fila.
+           La columna intermedia del estado del bot se oculta: su indicador
+           ya se muestra junto al título para evitar una fila vacía. */
         .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type {
             display: flex !important;
-            flex-wrap: wrap !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            column-gap: .35rem !important;
             row-gap: 0 !important;
-        }
-        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"] {
-            flex: 0 0 100% !important;
             width: 100% !important;
+        }
+        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(1) {
+            flex: 1 1 auto !important;
+            width: auto !important;
+            max-width: none !important;
             min-width: 0 !important;
         }
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"] [data-testid="stHorizontalBlock"] {
+        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(2) {
+            display: none !important;
+        }
+        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(3) {
+            display: flex !important;
+            flex: 0 0 42px !important;
+            width: 42px !important;
+            max-width: 42px !important;
+            min-width: 42px !important;
             justify-content: flex-end !important;
         }
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"] [data-testid="stHorizontalBlock"] [data-testid="column"] {
-            flex: 0 0 auto !important;
-            width: auto !important;
+        .st-key-bims_dashboard_header h1 {
+            font-size: clamp(.95rem, 4vw, 1.15rem) !important;
+            line-height: 1.2 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+        .st-key-bims_dashboard_header .bims-mobile-bot-icon .bims-whatsapp-state-icon {
+            width: 17px !important;
+            height: 17px !important;
         }
         .st-key-bims_dashboard_header [role="tablist"] {
             padding-left: 0 !important;
@@ -1216,7 +1235,7 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         /* Gráficos y tablas: una columna completa por fila. */
         .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
             display: flex !important;
-            flex: 0 0 100% !important;
+            flex: 1 1 100% !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
@@ -1225,15 +1244,13 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             margin: 0 !important;
             box-sizing: border-box !important;
         }
-        /* En WBR no se aplica la grilla de 3 columnas de CSAT/SLA.
-           Todo bloque de contenido (gráfico, tabla o tarjeta-resumen) ocupa
-           una fila completa; la grilla de KPI pertenece a su pestaña propia. */
-        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        /* Cada gráfico, tabla o tarjeta ocupa una fila completa.
+           min-width:0 evita que el ancho mínimo del wrapper desborde el móvil. */
         .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > [data-testid="column"] {
-            flex: 0 0 100% !important;
+            flex: 1 1 100% !important;
             width: 100% !important;
             max-width: 100% !important;
-            min-width: 100% !important;
+            min-width: 0 !important;
         }
         .bims-wbr-mobile-root [data-testid="stElementContainer"],
         .bims-wbr-mobile-root [data-testid="stVerticalBlock"],
@@ -6239,7 +6256,13 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
 
     def mostrar_grafico_wbr(figura, titulo, **kwargs):
         graficos_wbr.append((titulo, figura))
-        st.plotly_chart(figura, **kwargs)
+        # Plotly debe recalcular el ancho real de su contenedor, especialmente
+        # cuando Streamlit apila las columnas del WBR en pantallas pequeñas.
+        figura.update_layout(autosize=True, width=None)
+        kwargs.setdefault("use_container_width", True)
+        config_plotly = dict(kwargs.pop("config", {}) or {})
+        config_plotly["responsive"] = True
+        st.plotly_chart(figura, config=config_plotly, **kwargs)
 
     from datetime import datetime as dt_calc
     fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
