@@ -4902,8 +4902,8 @@ with tab_operativo:
     
             else:
                 st.info(f"No hay encuestas registradas desde Q{q_ant_evo} para generar el gráfico.")
-    else:
-        st.info("Sin registros en la base de datos.")
+        else:
+            st.info("Sin registros en la base de datos.")
 
     # La edición de motivos CSAT utiliza el mismo permiso de Administración.
     es_super_usuario = puede_ver_admin
