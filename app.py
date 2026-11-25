@@ -4088,44 +4088,15 @@ with st.container(key="bims_dashboard_header"):
         gap: 0 !important;
         justify-content: center !important;
     }
-    /* Robot de estado: dibujo CSS para evitar que el SVG sea filtrado por el renderizador HTML. */
-    .bims-bot-state-icon {
-        position:relative; display:inline-flex; align-items:center; justify-content:center;
-        width:26px; height:26px; flex:0 0 26px; color:var(--bims-bot-color);
+    /* Indicador de conexión de WhatsApp. */
+    .bims-whatsapp-state-icon {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:26px; height:26px; flex:0 0 26px; color:var(--bims-whatsapp-color);
     }
-    .bims-bot-head {
-        position:relative; display:flex; flex-direction:column; align-items:center;
-        justify-content:flex-start; width:20px; height:17px; margin-top:5px;
-        border:2px solid currentColor; border-radius:5px; box-sizing:border-box;
-    }
-    .bims-bot-head::before {
-        content:""; position:absolute; width:2px; height:4px; left:50%; top:-7px;
-        transform:translateX(-50%); background:currentColor; border-radius:2px;
-    }
-    .bims-bot-eyes {
-        display:flex; justify-content:center; align-items:center; gap:6px;
-        width:100%; margin-top:3px;
-    }
-    .bims-bot-eyes span {
-        display:block; width:3px; height:3px; flex:0 0 3px;
-        background:currentColor; border-radius:50%;
-    }
-    .bims-bot-mouth {
-        display:block; width:5px; height:2px; margin-top:2px;
-        background:currentColor; border-radius:2px;
-    }
-    .bims-bot-online .bims-bot-mouth { width:7px; height:3px; border-radius:0 0 6px 6px; }
-    .bims-bot-ear {
-        position:absolute; top:11px; width:3px; height:6px; background:currentColor; border-radius:2px;
-    }
-    .bims-bot-ear-left { left:1px; }
-    .bims-bot-ear-right { right:1px; }
-    .bims-bot-sleep {
-        position:absolute; top:-2px; right:-2px; font-size:9px; line-height:1;
-        font-weight:800; color:currentColor;
-    }
+    .bims-whatsapp-state-icon svg { display:block; width:25px; height:25px; }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
-    .bims-mobile-bot-icon .bims-bot-state-icon { width:19px; height:19px; transform:scale(.78); transform-origin:center; }
+    .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; }
+    .bims-mobile-bot-icon .bims-whatsapp-state-icon svg { width:19px; height:19px; }
     </style>
     """)
 
@@ -4136,14 +4107,13 @@ with st.container(key="bims_dashboard_header"):
     )
 
     color_bot = "#34d399" if bot_online else "#f87171"
-    texto_estado_bot = "Bot Operativo" if bot_online else "Bot Desconectado"
-    clase_estado_bot = "bims-bot-online" if bot_online else "bims-bot-offline"
+    texto_estado_bot = "WhatsApp conectado" if bot_online else "WhatsApp desconectado"
     indicador_bot_html = f"""
-        <span class="bims-bot-state-icon {clase_estado_bot}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-bot-color:{color_bot};">
-            <span class="bims-bot-ear bims-bot-ear-left"></span>
-            <span class="bims-bot-ear bims-bot-ear-right"></span>
-            <span class="bims-bot-head"><span class="bims-bot-eyes"><span></span><span></span></span><span class="bims-bot-mouth"></span></span>
-            {'' if bot_online else '<span class="bims-bot-sleep">Z</span>'}
+        <span class="bims-whatsapp-state-icon" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M20.05 3.95A11.3 11.3 0 0 0 2.2 17.58L.8 23.2l5.75-1.36A11.3 11.3 0 0 0 20.05 3.95Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8.1 7.4c-.25-.55-.52-.56-.76-.57h-.65c-.23 0-.6.09-.91.43-.31.34-1.19 1.16-1.19 2.83s1.22 3.28 1.39 3.51c.17.22 2.35 3.76 5.8 5.12 2.87 1.13 3.45.91 4.07.85.62-.06 2-.82 2.28-1.61.28-.79.28-1.47.2-1.61-.08-.14-.31-.23-.65-.4-.34-.17-2-.99-2.31-1.1-.31-.11-.54-.17-.76.17-.23.34-.88 1.1-1.08 1.33-.2.23-.4.26-.74.09-.34-.17-1.43-.53-2.72-1.69-1.01-.9-1.69-2.01-1.89-2.35-.2-.34-.02-.52.15-.69.15-.15.34-.4.51-.6.17-.2.23-.34.34-.57.11-.23.06-.43-.03-.6-.08-.17-.74-1.84-1.04-2.51Z" fill="currentColor"/>
+            </svg>
         </span>
     """
 
