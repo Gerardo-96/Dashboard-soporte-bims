@@ -4115,7 +4115,7 @@ with st.container(key="bims_dashboard_header"):
         display:inline-block;
         width:10px; height:10px; flex:0 0 10px;
         background-color:var(--bims-whatsapp-color);
-        transform:translateY(3px);
+        transform:translateY(7px);
         -webkit-mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
         mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
         animation:none !important;
