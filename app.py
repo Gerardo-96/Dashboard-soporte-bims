@@ -2366,7 +2366,7 @@ def motivo_por_reglas_recurrentes(titulo, reglas):
     for regla in reglas_ordenadas:
         if not regla.get("activo", True):
             continue
-        palabras = re.split(r"[,;\\n]", str(regla.get("palabras_clave") or ""))
+        palabras = str(regla.get("palabras_clave") or "").replace(";", ",").split(",")
         for palabra in palabras:
             palabra_norm = normalizar_texto_regla(palabra)
             if palabra_norm and palabra_norm in titulo_norm:
