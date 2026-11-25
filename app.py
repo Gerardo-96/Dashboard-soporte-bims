@@ -1462,7 +1462,7 @@ if not st.user.is_logged_in:
     <style>
         .stApp {
             background:
-                radial-gradient(ellipse at 50% 18%, rgba(30, 64, 105, .34), transparent 48%),
+                radial-gradient(ellipse at 50% 50%, rgba(30, 64, 105, .34), transparent 48%),
                 linear-gradient(145deg, #080f1d 0%, #0b1120 55%, #101b2d 100%) !important;
             color: #f8fafc;
         }
