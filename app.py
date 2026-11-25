@@ -4022,8 +4022,23 @@ with st.container(key="bims_dashboard_header"):
     # INDICADOR DE ESTADO EN VIVO (CABECERA)
     # ==========================================
     # ==========================================
-    @st.cache_data(ttl=120, show_spinner=False)
     def obtener_estado_bot_salud():
+        # El estado manual se lee directamente de Supabase para no depender
+        # de que Render ya haya desplegado la versión nueva de /health-status.
+        bot_active = None
+        try:
+            res_cfg = (
+                supabase.table("config_notificaciones")
+                .select("bot_activo")
+                .eq("id", 1)
+                .limit(1)
+                .execute()
+            )
+            if res_cfg.data:
+                bot_active = bool(res_cfg.data[0].get("bot_activo", True))
+        except Exception:
+            pass
+
         try:
             url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
             url_salud = f"{url_base}/health-status"
@@ -4032,13 +4047,13 @@ with st.container(key="bims_dashboard_header"):
                 data = res.json()
                 state = str(data.get("whatsapp_state", "disconnected")).strip().lower()
                 # La salud del servidor no equivale a la conexión de WhatsApp.
-                # Evolution suele informar "open" cuando el dispositivo está conectado.
                 online = state in {"open", "connected", "online", "authenticated"}
-                bot_active = bool(data.get("bot_active", True))
+                if bot_active is None:
+                    bot_active = bool(data.get("bot_active", True))
                 return online, state, bot_active
         except Exception:
             pass
-        return False, "offline", True
+        return False, "offline", True if bot_active is None else bot_active
 
     bot_online, bot_state, bot_activo_header = obtener_estado_bot_salud()
 
@@ -4296,7 +4311,8 @@ st.iframe("""
         const controllerKey = '__bimsMainNavigationController';
         const previousController = parentWindow[controllerKey];
 
-        // Cada rerun reemplaza el observador anterior en lugar de acumular otro.
+        // Cada rerun sustituye el observador, pero conserva la referencia a la
+        // lista principal por si Streamlit reconstruye el encabezado o su contenedor.
         if (previousController && previousController.observer) {
             previousController.observer.disconnect();
         }
@@ -4304,6 +4320,9 @@ st.iframe("""
         const headerSelector = '.st-key-bims_dashboard_header';
         const mainNavigationSelector = '.st-key-bims_main_navigation .stTabs [role="tablist"]';
         const placeholderId = 'bims-fixed-tabs-placeholder';
+        let tabList = previousController && previousController.tabList
+            ? previousController.tabList
+            : null;
 
         function integrarNavegacion() {
             const header = doc.querySelector(headerSelector);
@@ -4336,16 +4355,16 @@ st.iframe("""
             }
 
             const listasCandidatas = doc.querySelectorAll(mainNavigationSelector);
-            let tabList = Array.from(listasCandidatas).find(esNavegacionPrincipal) || null;
+            const listaNueva = Array.from(listasCandidatas).find(esNavegacionPrincipal) || null;
 
-            // Si no hay una lista nueva, conservar la que ya está alojada en la cabecera.
-            if (!tabList) {
+            // Priorizar una lista recién creada por Streamlit. Si todavía no existe,
+            // reutilizar la referencia conservada aunque el nodo esté temporalmente
+            // separado del DOM durante un rerun o una reanudación de sesión.
+            if (listaNueva) {
+                tabList = listaNueva;
+            } else if (!tabList) {
                 const currentTabList = doc.getElementById('bims-main-tablist');
-                if (
-                    currentTabList &&
-                    currentTabList.dataset.bimsMainTablist === 'true' &&
-                    headerInner.contains(currentTabList)
-                ) {
+                if (currentTabList && currentTabList.dataset.bimsMainTablist === 'true') {
                     tabList = currentTabList;
                 }
             }
@@ -4383,7 +4402,7 @@ st.iframe("""
         integrarNavegacion();
 
         const observer = new parentWindow.MutationObserver(integrarNavegacion);
-        parentWindow[controllerKey] = { observer: observer };
+        parentWindow[controllerKey] = { observer: observer, get tabList() { return tabList; } };
         observer.observe(doc.body, { childList: true, subtree: true });
     } catch (error) {
         console.error('BIMS: no se pudo integrar la navegación fija', error);
