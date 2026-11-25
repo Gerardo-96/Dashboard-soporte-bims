@@ -7235,23 +7235,7 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
             .str.strip()
         )
 
-        try:
-            res_tickets = supabase.table("tickets_l3").select("ticket_id, prioridad, estado").execute()
-            df_meta_tk = pd.DataFrame(res_tickets.data or [])
-            if not df_meta_tk.empty:
-                df_l3_neg = df_l3_neg.merge(df_meta_tk, left_on="ticket_limpio", right_on="ticket_id", how="left")
-        except Exception:
-            pass
 
-        if "prioridad" not in df_l3_neg.columns:
-            df_l3_neg["prioridad"] = "Media"
-        else:
-            df_l3_neg["prioridad"] = df_l3_neg["prioridad"].fillna("Media")
-
-        if "estado" not in df_l3_neg.columns:
-            df_l3_neg["estado"] = "Pendiente"
-        else:
-            df_l3_neg["estado"] = df_l3_neg["estado"].fillna("Pendiente")
 
         df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
             lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
@@ -7260,15 +7244,13 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
         df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
 
-        color_prio = {"Crítica": "#ef4444", "Alta": "#f97316", "Media": "#38bdf8", "Baja": "#94a3b8"}
-        color_est = {"Resuelto": "#34d399", "Cerrado": "#10b981", "En progreso": "#38bdf8", "Abierto": "#fbbf24", "Pendiente": "#94a3b8"}
 
         df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
         tablas_wbr.append((
             "Detalle de fricción L3 y tickets relacionados",
             df_l3_neg[[
-                "rating_int", "motivo_clean", "ticket_limpio", "prioridad",
-                "estado", "tenant_clean", "agente_clean"
+                "rating_int", "motivo_clean", "ticket_limpio",
+                "tenant_clean", "agente_clean"
             ]].rename(columns={
                 "rating_int": "Calificación", "motivo_clean": "Motivo",
                 "ticket_limpio": "Ticket", "tenant_clean": "Tenant",
@@ -7287,8 +7269,6 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     f"{r_item['Calificación_HTML']}</td>"
                     if idx == 0 else ""
                 )
-                c_p = color_prio.get(r_item['prioridad'], "#94a3b8")
-                c_e = color_est.get(r_item['estado'], "#94a3b8")
 
                 ticket_txt = r_item['ticket_limpio']
                 badge_ticket = (
@@ -7296,15 +7276,11 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     if ticket_txt != "Sin ticket" else f"<span style='color:#64748b;'>{ticket_txt}</span>"
                 )
 
-                badge_prio = f"<span style='color:{c_p}; font-weight:600; font-size:0.8rem;'>● {r_item['prioridad']}</span>"
-                badge_est = f"<span style='border:1px solid {c_e}; color:{c_e}; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:600;'>{r_item['estado']}</span>"
 
                 filas_html_l3.append(
                     f"<tr>{td_calif}"
                     f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{r_item['motivo_clean']}</td>"
                     f"<td style='padding:10px 14px; border:1px solid #334155;'>{badge_ticket}</td>"
-                    f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center;'>{badge_prio}</td>"
-                    f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center;'>{badge_est}</td>"
                     f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{r_item['tenant_clean']}</td>"
                     f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{r_item['agente_clean']}</td></tr>"
                 )
@@ -7316,8 +7292,6 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
                     <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:18%;'>Calificación</th>
                     <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
                     <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Ticket</th>
-                    <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:11%;'>Prioridad</th>
-                    <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:12%;'>Estado</th>
                     <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Tenant</th>
                     <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:13%;'>Agente</th>
                 </tr>
