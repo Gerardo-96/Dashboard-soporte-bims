@@ -4022,16 +4022,18 @@ with st.container(key="bims_dashboard_header"):
     # INDICADOR DE ESTADO EN VIVO (CABECERA)
     # ==========================================
     # ==========================================
-    @st.cache_data(ttl=120, show_spinner=False)
+    @st.cache_data(ttl=15, show_spinner=False)
     def obtener_estado_bot_salud():
         try:
             url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
             url_salud = f"{url_base}/health-status"
-            res = requests.get(url_salud, timeout=1.5)
+            res = requests.get(url_salud, timeout=2)
             if res.status_code == 200:
                 data = res.json()
-                online = data.get("status_general") == "OK"
-                state = data.get("whatsapp_state", "desconectado")
+                state = str(data.get("whatsapp_state", "disconnected")).strip().lower()
+                # La salud del servidor no equivale a la conexión de WhatsApp.
+                # Evolution suele informar "open" cuando el dispositivo está conectado.
+                online = state in {"open", "connected", "online", "authenticated"}
                 return online, state
         except Exception:
             pass
@@ -4254,10 +4256,12 @@ if puede_ver_admin:
 
 titulos_tabs.append("FAQ")
 
-# 3. Crear las pestañas
-tabs_creadas = st.tabs(titulos_tabs)
+# 3. Crear las pestañas principales dentro de un contenedor identificable.
+# Este ancla permite distinguirlas siempre de las subpestañas de Administración.
+with st.container(key="bims_main_navigation"):
+    tabs_creadas = st.tabs(titulos_tabs)
 
-# Integra la navegación real de Streamlit dentro de la cabecera fija.
+# Integra únicamente la navegación principal de Streamlit dentro de la cabecera fija.
 # Se conserva el nodo original para mantener los eventos y el estado de las pestañas.
 # Ejecuta el traslado desde un iframe same-origin, igual que el control lateral BIMS.
 # El observador permanece activo para recuperar la navegación si Streamlit reconstruye el DOM.
@@ -4267,7 +4271,7 @@ st.iframe("""
     try {
         const doc = window.parent.document;
         const headerSelector = '.st-key-bims_dashboard_header';
-        const tabSelector = '.stTabs [role="tablist"]';
+        const mainNavigationSelector = '.st-key-bims_main_navigation .stTabs [role="tablist"]';
         const placeholderId = 'bims-fixed-tabs-placeholder';
 
         function integrarNavegacion() {
@@ -4286,15 +4290,19 @@ st.iframe("""
                 }
             }
 
-            // Identificar una sola vez la navegación principal. Al moverla fuera
-            // de .stTabs, el selector genérico podía encontrar después las pestañas
-            // secundarias de Administración y trasladarlas también al encabezado.
+            // Recuperar primero el nodo ya identificado. Si Streamlit lo reconstruye,
+            // buscarlo exclusivamente dentro del contenedor de navegación principal.
+            // Nunca buscar el primer .stTabs global: Administración tiene sus propias tabs.
             let tabList = doc.getElementById('bims-main-tablist');
+            if (tabList && tabList.dataset.bimsMainTablist !== 'true') {
+                tabList = null;
+            }
             if (!tabList) {
-                const firstTabList = doc.querySelector(tabSelector);
-                if (firstTabList) {
-                    firstTabList.id = 'bims-main-tablist';
-                    tabList = firstTabList;
+                const mainTabList = doc.querySelector(mainNavigationSelector);
+                if (mainTabList) {
+                    mainTabList.id = 'bims-main-tablist';
+                    mainTabList.dataset.bimsMainTablist = 'true';
+                    tabList = mainTabList;
                 }
             }
             if (!headerInner || !tabList) return;
