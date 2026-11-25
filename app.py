@@ -4217,7 +4217,24 @@ with st.container(key="bims_dashboard_header"):
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
         with col_estado_bot:
-            st.html(f'<div class="bims-header-bot-status" style="display:flex; justify-content:center; align-items:center; min-height:50px; box-sizing:border-box; transform:translateX(-7px);">{estado_bot_html}</div>')
+            @st.fragment(run_every=30)
+            def renderizar_estado_bot_header():
+                online, state, activo = obtener_estado_bot_salud()
+                color = "#fbbf24" if not activo else ("#34d399" if online else "#f87171")
+                texto = "Bot pausado manualmente" if not activo else ("WhatsApp conectado" if online else "WhatsApp desconectado")
+                clase = "is-paused" if not activo else ("is-online" if online else "is-offline")
+                icono = (
+                    f'<span class="bims-whatsapp-state-icon {clase}" '
+                    f'aria-hidden="true" style="--bims-whatsapp-color:{color};"></span>'
+                )
+                st.html(
+                    '<div class="bims-header-bot-status" '
+                    'style="display:flex;justify-content:center;align-items:center;'
+                    'min-height:50px;box-sizing:border-box;transform:translateX(-7px);" '
+                    f'title="{texto}">{icono}</div>'
+                )
+
+            renderizar_estado_bot_header()
 
     with col_header_user:
         avatar_url = st.session_state.get("user_picture", "")
