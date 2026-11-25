@@ -194,8 +194,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
             # Las etiquetas de dona necesitan más espacio exterior para evitar recortes.
             if any(getattr(traza, "type", "") == "pie" for traza in figura_pdf.data):
                 figura_pdf.update_layout(
-                    margin=dict(l=150, r=150, t=110, b=110),
-                    uniformtext=dict(minsize=18, mode="hide")
+                    margin=dict(l=170, r=170, t=130, b=130)
                 )
             for traza in figura_pdf.data:
                 if getattr(traza, "showlegend", None) is not False:
