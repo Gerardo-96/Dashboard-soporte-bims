@@ -1,4 +1,6 @@
 import os
+import time as time_module
+import threading
 import requests
 import smtplib
 from email.mime.text import MIMEText
@@ -14,6 +16,11 @@ from email.mime.image import MIMEImage
 import base64
 
 app = FastAPI()
+
+# Controla la frecuencia de los intentos de reconexión de WhatsApp.
+_ultimo_intento_reconexion = 0.0
+_lock_reconexion = threading.Lock()
+_INTERVALO_RECONEXION_SEGUNDOS = 120
 
 # ==========================================
 # CONFIGURACIÓN DE ENTORNO
@@ -102,28 +109,63 @@ def parsear_fecha_utc(fecha_raw):
         return None
 
 def asegurar_conexion_whatsapp():
-    """Valida la conexión con WhatsApp e intenta reconectar si no está abierta."""
+    """Comprueba WhatsApp y reconecta solo ante desconexión confirmada, con cooldown."""
+    global _ultimo_intento_reconexion
+
     base_url = EVOLUTION_API_URL.rstrip('/')
+    headers = {"apikey": EVOLUTION_API_KEY}
     url_state = f"{base_url}/instance/connectionState/{INSTANCE_NAME}"
-    
+
+    # Si Evolution no responde o devuelve un error, no asumir que WhatsApp está desconectado.
     try:
-        res = requests.get(url_state, headers={"apikey": EVOLUTION_API_KEY}, timeout=8)
-        if res.status_code == 200:
-            estado = res.json().get("instance", {}).get("state")
-            if estado == "open":
-                return True # Conexión saludable
+        res = requests.get(url_state, headers=headers, timeout=8)
+        if res.status_code != 200:
+            print(f"⚠️ Evolution no pudo informar el estado de WhatsApp (HTTP {res.status_code}).")
+            return False
+
+        datos = res.json()
+        estado = str(datos.get("instance", {}).get("state", "")).strip().lower()
     except Exception as e:
-        print(f"⚠️ Error verificando estado de WhatsApp: {e}")
+        print(f"⚠️ Error verificando estado de WhatsApp/Evolution: {e}")
+        return False
 
-    print("🚨 [Auto-Healing] Conexión de WhatsApp caída o inestable. Intentando reconectar...")
+    if estado == "open":
+        return True
 
-    # Intento 1: Llamar al endpoint de conexión
+    # Si ya está conectando, dejar que Evolution complete el proceso.
+    if estado == "connecting":
+        print("⏳ WhatsApp figura como connecting. Se esperará sin solicitar otra conexión.")
+        return False
+
+    # Solo reconectar ante estados explícitos de desconexión.
+    if estado not in ("close", "closed", "disconnected"):
+        print(f"⚠️ Estado de WhatsApp no reconocido ({estado or 'vacío'}). No se fuerza la reconexión.")
+        return False
+
+    # El cron se ejecuta cada minuto: limitar los intentos a uno cada 2 minutos.
+    with _lock_reconexion:
+        ahora = time_module.monotonic()
+        transcurrido = ahora - _ultimo_intento_reconexion
+        if transcurrido < _INTERVALO_RECONEXION_SEGUNDOS:
+            restante = int(_INTERVALO_RECONEXION_SEGUNDOS - transcurrido)
+            print(f"⏳ Reconexión en cooldown. Se volverá a intentar en aproximadamente {restante} segundos.")
+            return False
+
+        # Reservar el intento antes de llamar a Evolution para evitar duplicados concurrentes.
+        _ultimo_intento_reconexion = ahora
+
+    print(f"🚨 [Auto-Healing] WhatsApp figura como '{estado}'. Se solicitará una reconexión.")
     try:
         url_connect = f"{base_url}/instance/connect/{INSTANCE_NAME}"
-        requests.get(url_connect, headers={"apikey": EVOLUTION_API_KEY}, timeout=10)
+        res_connect = requests.get(url_connect, headers=headers, timeout=10)
+        if res_connect.status_code == 200:
+            print("🔄 Solicitud de reconexión enviada a Evolution API.")
+        else:
+            print(f"⚠️ Evolution rechazó la solicitud de reconexión (HTTP {res_connect.status_code}).")
     except Exception as e:
-        print(f"⚠️ Error al intentar re-conectar: {e}")
+        print(f"⚠️ Error al solicitar la reconexión de WhatsApp: {e}")
 
+    # La conexión se verificará nuevamente en la próxima ejecución del cron.
     return False
 
 # ==========================================
