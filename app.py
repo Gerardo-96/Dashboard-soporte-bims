@@ -4034,12 +4034,13 @@ with st.container(key="bims_dashboard_header"):
                 # La salud del servidor no equivale a la conexión de WhatsApp.
                 # Evolution suele informar "open" cuando el dispositivo está conectado.
                 online = state in {"open", "connected", "online", "authenticated"}
-                return online, state
+                bot_active = bool(data.get("bot_active", True))
+                return online, state, bot_active
         except Exception:
             pass
-        return False, "offline"
+        return False, "offline", True
 
-    bot_online, bot_state = obtener_estado_bot_salud()
+    bot_online, bot_state, bot_activo_header = obtener_estado_bot_salud()
 
     # Estilos CSS de pulso sutil tipo "radar"
     st.html("""
@@ -4163,8 +4164,13 @@ with st.container(key="bims_dashboard_header"):
         opacity:1;
         animation:none !important;
     }
-    .bims-whatsapp-state-icon.is-offline::after {
+    .bims-whatsapp-state-icon.is-offline::after,
+    .bims-whatsapp-state-icon.is-paused::after {
         opacity:0;
+        animation:none !important;
+    }
+    .bims-whatsapp-state-icon.is-paused::before {
+        opacity:1;
         animation:none !important;
     }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
@@ -4178,10 +4184,11 @@ with st.container(key="bims_dashboard_header"):
         else fecha_desde.strftime("%d %b %Y")
     )
 
-    color_bot = "#34d399" if bot_online else "#f87171"
-    texto_estado_bot = "WhatsApp conectado" if bot_online else "WhatsApp desconectado"
+    color_bot = "#fbbf24" if not bot_activo_header else ("#34d399" if bot_online else "#f87171")
+    texto_estado_bot = "Bot pausado manualmente" if not bot_activo_header else ("WhatsApp conectado" if bot_online else "WhatsApp desconectado")
+    clase_estado_bot = "is-paused" if not bot_activo_header else ("is-online" if bot_online else "is-offline")
     indicador_bot_html = f"""
-        <span class="bims-whatsapp-state-icon {'is-online' if bot_online else 'is-offline'}" aria-hidden="true" style="--bims-whatsapp-color:{color_bot};"></span>
+        <span class="bims-whatsapp-state-icon {clase_estado_bot}" aria-hidden="true" style="--bims-whatsapp-color:{color_bot};"></span>
     """
 
     estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:0;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
@@ -8097,15 +8104,13 @@ def renderizar_panel_admin(df_base_motivos=None):
                 if bot_pausado:
                     if st.button("▶ Reanudar", type="secondary", key="btn_reanudar_bot_admin", help="Reactivar el envío de alertas y mensajes"):
                         supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
-                        st.success("Bot reanudado. Volverá a emitir alertas.")
-                        time_lib.sleep(0.5)
-                        st.rerun()
+                        obtener_estado_bot_salud.clear()
+                        st.rerun(scope="fragment")
                 else:
                     if st.button("Ⅱ Pausar", type="secondary", key="btn_pausar_bot_admin", help="Detener temporalmente los envíos del bot"):
                         supabase.table("config_notificaciones").update({"bot_activo": False}).eq("id", 1).execute()
-                        st.warning("Bot pausado. No se enviarán mensajes ni alertas.")
-                        time_lib.sleep(0.5)
-                        st.rerun()
+                        obtener_estado_bot_salud.clear()
+                        st.rerun(scope="fragment")
 
             with col_status3:
                 if st.button("↻ Reiniciar", type="secondary", key="btn_reiniciar_bot_admin", help="Enviar una orden de reinicio a Render"):
