@@ -4110,7 +4110,7 @@ with st.container(key="bims_dashboard_header"):
         -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
         mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
     }
-    /* Indicador de conexión compacto, ligeramente más bajo que el logo de WhatsApp. */
+    /* Indicador de sync estático, compacto y ligeramente más bajo que WhatsApp. */
     .bims-whatsapp-sync-icon {
         display:inline-flex; align-items:center; justify-content:center;
         width:9px; height:9px; flex:0 0 9px;
@@ -4118,16 +4118,10 @@ with st.container(key="bims_dashboard_header"):
         font-family:Arial, sans-serif; font-size:11px; font-weight:500;
         line-height:1;
         transform:translateY(3px);
-    }
-    .bims-whatsapp-sync-icon.is-online {
-        animation:bims-sync-rotate 1.6s linear infinite;
+        animation:none !important;
     }
     .bims-whatsapp-sync-icon.is-offline {
-        font-size:12px; font-weight:400; animation:none;
-    }
-    @keyframes bims-sync-rotate {
-        from { rotate:0deg; }
-        to { rotate:360deg; }
+        font-size:12px; font-weight:400;
     }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
     .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; }
@@ -4144,7 +4138,7 @@ with st.container(key="bims_dashboard_header"):
     texto_estado_bot = "WhatsApp conectado" if bot_online else "WhatsApp desconectado"
     indicador_bot_html = f"""
         <span class="bims-whatsapp-state-icon" aria-hidden="true" style="--bims-whatsapp-color:{color_bot};"></span>
-        <span class="bims-whatsapp-sync-icon {'is-online' if bot_online else 'is-offline'}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">{'⟳' if bot_online else '×'}</span>
+        <span class="bims-whatsapp-sync-icon {'is-online' if bot_online else 'is-offline'}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">{'↻' if bot_online else '×'}</span>
     """
 
     estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:0;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
