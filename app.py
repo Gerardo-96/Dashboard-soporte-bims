@@ -4127,8 +4127,8 @@ with st.container(key="bims_dashboard_header"):
         animation:bims-whatsapp-sync-to-logo 4.8s ease-in-out infinite;
     }
     @keyframes bims-whatsapp-logo-to-sync {
-        0%, 12%, 88%, 100% { opacity:1; transform:scale(1) rotate(0deg); }
-        36%, 64% { opacity:0; transform:scale(.72) rotate(90deg); }
+        0%, 12%, 88%, 100% { background-color:var(--bims-whatsapp-color); transform:scale(1) rotate(0deg); }
+        36%, 64% { background-color:transparent; transform:scale(.72) rotate(90deg); }
     }
     @keyframes bims-whatsapp-sync-to-logo {
         0%, 12%, 88%, 100% { opacity:0; transform:rotate(-90deg) scale(.72); }
