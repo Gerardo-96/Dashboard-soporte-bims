@@ -1469,30 +1469,38 @@ if not st.user.is_logged_in:
         header[data-testid="stHeader"] { background: transparent !important; }
         [data-testid="stSidebar"] { display: none !important; }
         .stAppDeployButton, #MainMenu, footer { display: none !important; }
-        /* Centrado vertical sobre el área real de contenido de Streamlit */
-        .stAppViewContainer,
-        .stAppViewContainer .main {
+        /* La pantalla de acceso ocupa el viewport y centra el contenido verticalmente. */
+        .stApp,
+        [data-testid="stAppViewContainer"] {
             min-height: 100vh !important;
+            height: 100vh !important;
         }
-        .stAppViewContainer .main {
+        [data-testid="stAppViewContainer"] > .main,
+        [data-testid="stAppViewContainer"] > section[data-testid="stMain"],
+        section.main {
+            min-height: 100vh !important;
+            height: 100vh !important;
             display: flex !important;
-            align-items: stretch !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
-        .stAppViewContainer .main [data-testid="stMainBlockContainer"],
-        .stAppViewContainer .main div[data-testid="stAppViewBlockContainer"] {
+        [data-testid="stMainBlockContainer"],
+        [data-testid="stAppViewBlockContainer"],
+        section.main > div.block-container {
             width: 100% !important;
+            max-width: none !important;
             min-height: 100vh !important;
+            height: 100vh !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
+            padding: 0 1rem !important;
+            margin: 0 auto !important;
         }
-        .stAppViewContainer .main [data-testid="stMainBlockContainer"] > div,
-        .stAppViewContainer .main div[data-testid="stAppViewBlockContainer"] > div {
+        [data-testid="stMainBlockContainer"] > div,
+        [data-testid="stAppViewBlockContainer"] > div,
+        section.main > div.block-container > div {
             width: 100% !important;
         }
         .st-key-bims_login_panel {
@@ -1567,7 +1575,7 @@ if not st.user.is_logged_in:
         with st.container(key="bims_login_panel"):
             st.markdown("""
             <div class="bims-google-login-logo">BIMS</div>
-            <div class="bims-google-login-title">Dashboard de Soporte <span class="bims-title-accent">BIMS</span></div>
+            <div class="bims-google-login-title">Dashboard de Soporte</div>
             <div class="bims-google-login-subtitle">
                 Accede de forma segura con tu cuenta de Google
             </div>
