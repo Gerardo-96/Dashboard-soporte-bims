@@ -4194,7 +4194,7 @@ with st.container(key="bims_dashboard_header"):
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
         with col_estado_bot:
-            st.html(f'<div class="bims-header-bot-status" style="display:flex; justify-content:center; align-items:center; min-height:50px; box-sizing:border-box; transform:translateX(-48px);">{estado_bot_html}</div>')
+            st.html(f'<div class="bims-header-bot-status" style="display:flex; justify-content:center; align-items:center; min-height:50px; box-sizing:border-box; transform:translateX(-32px);">{estado_bot_html}</div>')
 
     with col_header_user:
         avatar_url = st.session_state.get("user_picture", "")
