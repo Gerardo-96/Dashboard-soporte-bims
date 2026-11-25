@@ -1503,13 +1503,23 @@ if not st.user.is_logged_in:
         section.main > div.block-container > div {
             width: 100% !important;
         }
+        /* Centra la tarjeta directamente respecto del viewport.
+           No depende de la altura ni del alineamiento de los wrappers de Streamlit. */
         .st-key-bims_login_panel {
-            width: 100%; max-width: 410px; margin: auto;
+            position: fixed !important;
+            top: 50vh !important;
+            left: 50vw !important;
+            transform: translate(-50%, -50%) !important;
+            width: calc(100vw - 2rem) !important;
+            max-width: 410px !important;
+            margin: 0 !important;
             padding: 28px 30px 22px;
+            box-sizing: border-box !important;
             background: linear-gradient(155deg, rgba(30,41,59,.97), rgba(12,22,39,.98));
             border: 1px solid rgba(100, 116, 139, .38); border-radius: 20px;
             box-shadow: 0 28px 70px rgba(0,0,0,.38);
             text-align: center;
+            z-index: 9999 !important;
         }
         .st-key-bims_login_panel [data-testid="stMarkdown"] {
             text-align: center;
