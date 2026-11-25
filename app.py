@@ -4113,16 +4113,16 @@ with st.container(key="bims_dashboard_header"):
     /* Estado de conexión: giro simple por transform, sin sombras ni filtros. */
     .bims-whatsapp-sync-icon {
         display:inline-flex; align-items:center; justify-content:center;
-        width:22px; height:22px; flex:0 0 22px;
+        width:13px; height:13px; flex:0 0 13px;
         color:var(--bims-whatsapp-color);
-        font-family:Arial, sans-serif; font-size:25px; font-weight:500;
+        font-family:Arial, sans-serif; font-size:16px; font-weight:500;
         line-height:1;
     }
     .bims-whatsapp-sync-icon.is-online {
         animation:bims-sync-rotate 1.6s linear infinite;
     }
     .bims-whatsapp-sync-icon.is-offline {
-        font-size:27px; font-weight:400; animation:none;
+        font-size:17px; font-weight:400; animation:none;
     }
     @keyframes bims-sync-rotate {
         from { transform:rotate(0deg); }
@@ -4142,8 +4142,8 @@ with st.container(key="bims_dashboard_header"):
     color_bot = "#34d399" if bot_online else "#f87171"
     texto_estado_bot = "WhatsApp conectado" if bot_online else "WhatsApp desconectado"
     indicador_bot_html = f"""
-        <span class="bims-whatsapp-sync-icon {'is-online' if bot_online else 'is-offline'}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">{'⟳' if bot_online else '×'}</span>
         <span class="bims-whatsapp-state-icon" aria-hidden="true" style="--bims-whatsapp-color:{color_bot};"></span>
+        <span class="bims-whatsapp-sync-icon {'is-online' if bot_online else 'is-offline'}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">{'⟳' if bot_online else '×'}</span>
     """
 
     estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:7px;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
