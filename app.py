@@ -4091,7 +4091,7 @@ with st.container(key="bims_dashboard_header"):
     /* Agrupa calendario y estado de WhatsApp sin repartir el espacio sobrante entre columnas. */
     .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-btn_abrir_guardias_header_calendar) {
         display:flex !important; flex-wrap:nowrap !important; justify-content:flex-end !important;
-        align-items:center !important; gap:6px !important;
+        align-items:center !important; gap:2px !important;
     }
     .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-btn_abrir_guardias_header_calendar) > div[data-testid="column"] {
         flex:0 0 auto !important; width:auto !important; min-width:0 !important;
@@ -4110,17 +4110,23 @@ with st.container(key="bims_dashboard_header"):
         -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
         mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
     }
-    /* El logotipo permanece estático; solo palpita el pequeño punto de estado. */
-    .bims-whatsapp-status-dot {
-        display:inline-block; width:7px; height:7px; flex:0 0 7px;
-        border-radius:50%; background:var(--bims-whatsapp-color);
+    /* Estado de conexión: giro simple por transform, sin sombras ni filtros. */
+    .bims-whatsapp-sync-icon {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:22px; height:22px; flex:0 0 22px;
+        color:var(--bims-whatsapp-color);
+        font-family:Arial, sans-serif; font-size:25px; font-weight:500;
+        line-height:1;
     }
-    .bims-whatsapp-status-dot.is-online {
-        animation:bims-status-pulse 1.8s ease-in-out infinite;
+    .bims-whatsapp-sync-icon.is-online {
+        animation:bims-sync-rotate 1.6s linear infinite;
     }
-    @keyframes bims-status-pulse {
-        0%, 100% { opacity:.65; transform:scale(.85); }
-        50% { opacity:1; transform:scale(1.15); }
+    .bims-whatsapp-sync-icon.is-offline {
+        font-size:27px; font-weight:400; animation:none;
+    }
+    @keyframes bims-sync-rotate {
+        from { transform:rotate(0deg); }
+        to { transform:rotate(360deg); }
     }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
     .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; }
@@ -4136,8 +4142,8 @@ with st.container(key="bims_dashboard_header"):
     color_bot = "#34d399" if bot_online else "#f87171"
     texto_estado_bot = "WhatsApp conectado" if bot_online else "WhatsApp desconectado"
     indicador_bot_html = f"""
-        <span class="bims-whatsapp-status-dot {'is-online' if bot_online else 'is-offline'}" style="--bims-whatsapp-color:{color_bot};"></span>
-        <span class="bims-whatsapp-state-icon" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};"></span>
+        <span class="bims-whatsapp-sync-icon {'is-online' if bot_online else 'is-offline'}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">{'⟳' if bot_online else '×'}</span>
+        <span class="bims-whatsapp-state-icon" aria-hidden="true" style="--bims-whatsapp-color:{color_bot};"></span>
     """
 
     estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:7px;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
@@ -4156,12 +4162,12 @@ with st.container(key="bims_dashboard_header"):
     """
 
     col_header_info, col_header_bot, col_header_user = st.columns(
-        [20, 2.4, 1.0], gap="small", vertical_alignment="center"
+        [20, 1.35, 1.0], gap="small", vertical_alignment="center"
     )
     with col_header_info:
         st.html(titulo_header_html)
     with col_header_bot:
-        col_guardia_alerta, col_estado_bot = st.columns([0.8, 0.45], gap="small", vertical_alignment="center")
+        col_guardia_alerta, col_estado_bot = st.columns([1, 1], gap="small", vertical_alignment="center")
         with col_guardia_alerta:
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
