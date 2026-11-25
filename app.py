@@ -1138,33 +1138,42 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         .st-key-bims_dashboard_header .bims-header-bot-status {
             display: none !important;
         }
-        /* En móvil, el título y el perfil permanecen en una misma fila.
-           La columna intermedia del estado del bot se oculta: su indicador
-           ya se muestra junto al título para evitar una fila vacía. */
-        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type {
+        /* La fila principal se identifica por contener el menú de perfil.
+           Se conservan las tres columnas reales: título, calendario/estado y perfil. */
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) {
             display: flex !important;
             flex-wrap: nowrap !important;
             align-items: center !important;
-            column-gap: .35rem !important;
-            row-gap: 0 !important;
+            gap: .35rem !important;
             width: 100% !important;
         }
-        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(1) {
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(1) {
             flex: 1 1 auto !important;
             width: auto !important;
             max-width: none !important;
             min-width: 0 !important;
         }
-        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(2) {
-            display: none !important;
+        /* La columna central contiene el calendario: no debe ocultarse. */
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(2) {
+            display: flex !important;
+            flex: 0 0 auto !important;
+            width: auto !important;
+            max-width: max-content !important;
+            min-width: 0 !important;
         }
-        .st-key-bims_dashboard_header > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] [data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(3) {
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(3) {
             display: flex !important;
             flex: 0 0 42px !important;
             width: 42px !important;
             max-width: 42px !important;
             min-width: 42px !important;
             justify-content: flex-end !important;
+        }
+        /* Compactar únicamente las dos columnas internas del calendario/estado. */
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(2) [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+            flex: 0 0 auto !important;
+            width: auto !important;
+            min-width: 0 !important;
         }
         .st-key-bims_dashboard_header h1 {
             font-size: clamp(.95rem, 4vw, 1.15rem) !important;
