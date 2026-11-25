@@ -4126,8 +4126,8 @@ with st.container(key="bims_dashboard_header"):
     .bims-whatsapp-state-icon::after {
         opacity:0;
         transform:rotate(-90deg) scale(.72);
-        -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 8a8 8 0 0 1 14 0'/%3E%3Cpath d='M16 5l3 3-3 3'/%3E%3Cpath d='M19 16a8 8 0 0 1-14 0'/%3E%3Cpath d='M8 13l-3 3 3 3'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
-        mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 8a8 8 0 0 1 14 0'/%3E%3Cpath d='M16 5l3 3-3 3'/%3E%3Cpath d='M19 16a8 8 0 0 1-14 0'/%3E%3Cpath d='M8 13l-3 3 3 3'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+        -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4 12a8 8 0 0 1 13.7-5.7L20 9'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M20 12a8 8 0 0 1-13.7 5.7L4 15'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+        mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4 12a8 8 0 0 1 13.7-5.7L20 9'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M20 12a8 8 0 0 1-13.7 5.7L4 15'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
     }
     .bims-whatsapp-state-icon.is-online::before {
         animation:bims-whatsapp-logo-to-sync 4.8s ease-in-out infinite;
@@ -4194,7 +4194,7 @@ with st.container(key="bims_dashboard_header"):
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
         with col_estado_bot:
-            st.html(f'<div class="bims-header-bot-status" style="display:flex; justify-content:center; align-items:center; min-height:50px; box-sizing:border-box;">{estado_bot_html}</div>')
+            st.html(f'<div class="bims-header-bot-status" style="display:flex; justify-content:center; align-items:center; min-height:50px; box-sizing:border-box; transform:translateX(-28px);">{estado_bot_html}</div>')
 
     with col_header_user:
         avatar_url = st.session_state.get("user_picture", "")
