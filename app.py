@@ -1510,7 +1510,7 @@ if not st.user.is_logged_in:
             width: fit-content; min-width: 112px; margin: 0 auto 12px;
             padding: 5px 14px; border-radius: 10px;
             color: #f8fafc; font-size: 1.55rem; font-weight: 800;
-            letter-spacing: .16em; line-height: 1.2;
+            letter-spacing: .015em; line-height: 1.2;
             background: linear-gradient(110deg, #5eead4, #38bdf8);
             -webkit-background-clip: text; background-clip: text;
             -webkit-text-fill-color: transparent;
