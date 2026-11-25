@@ -4297,9 +4297,22 @@ st.iframe("""
 
             if (!headerInner) return;
 
-            // Priorizar siempre la lista recién renderizada dentro de la navegación
-            // principal. No buscar pestañas globalmente: Administración tiene las suyas.
-            let tabList = doc.querySelector(mainNavigationSelector);
+            // Identificar la navegación principal por sus tres pestañas permanentes.
+            // El contenedor principal también contiene los paneles de cada pestaña;
+            // por eso una búsqueda simple puede encontrar las subpestañas de Administración.
+            function esNavegacionPrincipal(lista) {
+                if (!lista) return false;
+                const etiquetas = Array.from(lista.querySelectorAll('[role="tab"]'))
+                    .map(tab => (tab.textContent || '').replace(/\\s+/g, ' ').trim());
+                return [
+                    'Control Operativo & SLA',
+                    'Distribución de Carga',
+                    'Resumen de Chats & Agentes'
+                ].every(etiqueta => etiquetas.some(texto => texto.includes(etiqueta)));
+            }
+
+            const listasCandidatas = doc.querySelectorAll(mainNavigationSelector);
+            let tabList = Array.from(listasCandidatas).find(esNavegacionPrincipal) || null;
 
             // Si no hay una lista nueva, conservar la que ya está alojada en la cabecera.
             if (!tabList) {
