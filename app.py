@@ -4126,8 +4126,8 @@ with st.container(key="bims_dashboard_header"):
     .bims-whatsapp-state-icon::after {
         opacity:0;
         transform:rotate(-90deg) scale(.72);
-        -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4.8 9A8 8 0 0 1 18.6 6L20 12'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M19.2 15A8 8 0 0 1 5.4 18L4 12'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
-        mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4.8 9A8 8 0 0 1 18.6 6L20 12'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M19.2 15A8 8 0 0 1 5.4 18L4 12'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+        -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M20 12a8 8 0 0 0-14.9-4L4 9'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M4 12a8 8 0 0 0 14.9 4L20 15'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+        mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M20 12a8 8 0 0 0-14.9-4L4 9'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M4 12a8 8 0 0 0 14.9 4L20 15'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
     }
     .bims-whatsapp-state-icon.is-online::before {
         animation:bims-whatsapp-logo-to-sync 4.8s ease-in-out infinite;
