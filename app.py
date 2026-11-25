@@ -4046,9 +4046,8 @@ with st.container(key="bims_dashboard_header"):
     st.html("""
     <style>
     .st-key-bims_user_menu button {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        position: relative !important;
+        display: block !important;
         min-width: 42px !important;
         width: 42px !important;
         min-height: 42px !important;
@@ -4061,35 +4060,32 @@ with st.container(key="bims_dashboard_header"):
         background: rgba(30, 41, 59, .72) !important;
         box-shadow: 0 3px 12px rgba(0, 0, 0, .18) !important;
     }
-    .st-key-bims_user_menu button > div {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 100% !important;
-        height: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
+    .st-key-bims_user_menu button > div,
     .st-key-bims_user_menu button p {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        position: static !important;
+        display: block !important;
         width: 100% !important;
         height: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
+        line-height: 0 !important;
     }
     .st-key-bims_user_menu button img {
+        position: absolute !important;
+        inset: 0 !important;
         display: block !important;
-        flex: 0 0 38px !important;
-        width: 38px !important;
-        min-width: 38px !important;
-        height: 38px !important;
-        max-height: 38px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        height: 100% !important;
+        max-height: none !important;
         margin: 0 !important;
         padding: 0 !important;
         border-radius: 50% !important;
         object-fit: cover !important;
+        object-position: center !important;
     }
     /* Oculta el icono desplegable que Streamlit agrega al botón del popover.
        Streamlit puede renderizarlo como SVG o como icono Material según la versión. */
