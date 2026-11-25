@@ -4098,19 +4098,19 @@ with st.container(key="bims_dashboard_header"):
         border:2px solid currentColor; border-radius:5px; box-sizing:border-box;
     }
     .bims-bot-head::before {
-        content:""; position:absolute; width:2px; height:4px; left:6px; top:-6px;
-        background:currentColor; border-radius:2px;
+        content:""; position:absolute; width:2px; height:4px; left:50%; top:-6px;
+        transform:translateX(-50%); background:currentColor; border-radius:2px;
     }
     .bims-bot-head::after {
-        content:""; position:absolute; width:4px; height:4px; left:5px; top:4px;
+        content:""; position:absolute; width:3px; height:3px; left:4px; top:4px;
         background:currentColor; border-radius:50%;
         box-shadow:7px 0 0 currentColor;
     }
     .bims-bot-mouth {
-        position:absolute; left:6px; bottom:2px; width:5px; height:2px;
-        background:currentColor; border-radius:2px;
+        position:absolute; left:50%; bottom:2px; width:5px; height:2px;
+        transform:translateX(-50%); background:currentColor; border-radius:2px;
     }
-    .bims-bot-online .bims-bot-mouth { width:7px; left:5px; height:3px; border-radius:0 0 6px 6px; }
+    .bims-bot-online .bims-bot-mouth { width:7px; height:3px; border-radius:0 0 6px 6px; }
     .bims-bot-ear {
         position:absolute; top:11px; width:3px; height:6px; background:currentColor; border-radius:2px;
     }
