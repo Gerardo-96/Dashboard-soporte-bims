@@ -1363,72 +1363,39 @@ def obtener_alertas_compartidas():
     return res.data or []
 
 # ==========================================
-# AUTENTICACIÓN PERSISTENTE ROBUSTA (LOCALSTORAGE + QUERY PARAMS)
+# AUTENTICACIÓN GOOGLE (OIDC) + AUTORIZACIÓN SUPABASE
 # ==========================================
+# La identidad la valida Google; el acceso al dashboard lo decide
+# usuarios_autorizados. La consulta de estado activo no utiliza caché.
 if "user_authenticated" not in st.session_state:
     st.session_state["user_authenticated"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
 
-@st.cache_data(ttl=600, show_spinner=False)
-def validar_token_url_rapido(token_limpio):
+# Elimina el antiguo bearer token de la URL si alguien llega desde un enlace viejo.
+try:
+    if "session_token" in st.query_params:
+        del st.query_params["session_token"]
+except Exception:
+    pass
+
+
+def validar_usuario_autorizado_google(email):
+    """Devuelve el usuario activo de Supabase; falla cerrado ante errores."""
     try:
-        res = supabase.table("usuarios_autorizados")\
-            .select("email, nombre")\
-            .eq("email", token_limpio)\
-            .eq("activo", True)\
-            .limit(1)\
+        resultado = (
+            supabase.table("usuarios_autorizados")
+            .select("email, nombre")
+            .eq("email", email.strip().lower())
+            .eq("activo", True)
+            .limit(1)
             .execute()
-        return res.data[0] if (res.data and len(res.data) > 0) else None
-    except Exception:
-        return None
+        )
+        return (resultado.data[0] if resultado.data else None), None
+    except Exception as error:
+        print(f"Error validando autorización Google en Supabase: {error}")
+        return None, error
 
-token_url = st.query_params.get("session_token", None)
-if token_url and not st.session_state["user_authenticated"]:
-    t_clean = str(token_url).strip().lower()
-    user_info = validar_token_url_rapido(t_clean)
-    if user_info:
-        st.session_state["user_authenticated"] = True
-        st.session_state["user_email"] = user_info.get("email")
-        st.session_state["user_name"] = user_info.get("nombre")
-
-# 2. Script JS de auto-restauración vía LocalStorage seguro (sin recarga infinita)
-st.html("""
-<script>
-    (function() {
-        try {
-            const storedUser = localStorage.getItem('bims_user_session');
-            const urlParams = new URLSearchParams(window.location.search);
-            
-            // Solo auto-restaura si hay un usuario válido y no venimos de un logout explícito
-            if (storedUser && !urlParams.has('session_token') && !sessionStorage.getItem('bims_just_logged_out')) {
-                urlParams.set('session_token', storedUser);
-                window.location.search = urlParams.toString();
-            }
-        } catch(e) {}
-    })();
-</script>
-""", unsafe_allow_javascript=True)
-
-# Estado Global de Sincronización libre de restricciones de st.session_state para Hilos
-@st.cache_resource
-def obtener_estado_sync_global():
-    return {"status": "idle", "processed": 0, "log": "", "error": None, "cache_invalidation_pending": False}
-
-GLOBAL_SYNC_STATE = obtener_estado_sync_global()
-
-def verificar_credenciales_supabase(email_val, pass_val):
-    """Consulta la tabla 'usuarios_autorizados' en Supabase para validar el ingreso."""
-    try:
-        res = supabase.table("usuarios_autorizados")\
-            .select("*")\
-            .eq("email", email_val.strip().lower())\
-            .eq("password", pass_val.strip())\
-            .eq("activo", True)\
-            .execute()
-        return len(res.data) > 0, res.data[0] if res.data else None
-    except Exception:
-        return False, None
 
 @st.cache_data(ttl=300)
 def obtener_permisos_usuario(identificador_usuario):
@@ -1472,268 +1439,131 @@ def obtener_id_usuario_actual(email_usuario):
         return None
 
 # ==========================================
-# PANTALLA DE LOGIN CON MODAL INSTANTÁNEO (ANTI-DEFORMACIÓN AL DAR ENTER)
+# PANTALLA DE ACCESO CON GOOGLE
 # ==========================================
-if not st.session_state["user_authenticated"]:
-    st.html("""
+if not st.user.is_logged_in:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+
+    st.markdown("""
     <style>
-        .stApp { 
-            background-color: #0b1120 !important; 
-            color: #f8fafc; 
-        }
-
-        header[data-testid="stHeader"] {
-            background-color: #0b1120 !important;
-        }
-
-        [data-testid="stSidebar"] {
-            display: none !important;
-        }
-
-        .stAppDeployButton, 
-        header[data-testid="stHeader"] [data-testid="stToolbarActions"],
-        #MainMenu, 
-        footer {
-            display: none !important;
-            visibility: hidden !important;
-        }
-
-        /* Centrado natural superior */
+        .stApp { background-color: #0b1120 !important; color: #f8fafc; }
+        header[data-testid="stHeader"] { background-color: #0b1120 !important; }
+        [data-testid="stSidebar"] { display: none !important; }
+        .stAppDeployButton, #MainMenu, footer { display: none !important; }
         div[data-testid="stAppViewBlockContainer"] {
             padding-top: 4.5rem !important;
             padding-bottom: 2rem !important;
         }
-
-        /* Formulario con dimensiones y posición física fija */
-        div[data-testid="stForm"] {
-            width: 100% !important;
-            max-width: 440px !important;
-            margin: 0 auto !important;
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
-            border: 1px solid #334155 !important;
-            border-radius: 16px !important;
-            padding: 28px 30px 32px 30px !important;
-            box-shadow: 0 20px 30px -8px rgba(0, 0, 0, 0.6) !important;
-        }
-
-        .login-logo-circle {
-            width: 56px;
-            height: 56px;
-            margin: 0 auto 12px auto;
-            border-radius: 50%;
-            background: rgba(56, 189, 248, 0.12);
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.7rem;
-        }
-
-        .login-title-txt {
-            color: #f8fafc;
-            font-size: 1.4rem;
-            font-weight: 700;
+        .bims-google-login-card {
+            max-width: 440px; margin: 0 auto; padding: 30px;
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid #334155; border-radius: 16px;
+            box-shadow: 0 20px 30px -8px rgba(0,0,0,.6);
             text-align: center;
-            letter-spacing: -0.3px;
-            margin-bottom: 4px;
         }
-
-        .login-sub-txt {
-            color: #94a3b8;
-            font-size: 0.85rem;
-            text-align: center;
-            margin-bottom: 22px;
+        .bims-google-login-logo {
+            width: 56px; height: 56px; margin: 0 auto 12px;
+            border-radius: 50%; background: rgba(56,189,248,.12);
+            border: 1px solid rgba(56,189,248,.3);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.7rem; font-weight: 700; color: #f8fafc;
         }
-
-        div[data-testid="stTextInput"] input {
-            background-color: #0b1120 !important;
-            color: #f8fafc !important;
-            border: 1px solid #334155 !important;
-            border-radius: 8px !important;
-            padding: 10px 14px !important;
+        .bims-google-login-title {
+            color: #f8fafc; font-size: 1.4rem; font-weight: 700;
+            letter-spacing: -.3px; margin-bottom: 5px;
         }
-
-        div[data-testid="stTextInput"] input:focus {
-            border-color: #38bdf8 !important;
-            box-shadow: 0 0 0 1px #38bdf8 !important;
+        .bims-google-login-subtitle {
+            color: #94a3b8; font-size: .88rem; margin-bottom: 18px;
         }
-
-        div[data-testid="stInputInstructions"] {
-            display: none !important;
+        div.stButton > button[kind="primary"], div.stButton > button {
+            border-radius: 9px; min-height: 44px; font-weight: 650;
         }
-
-        .stButton>button { 
-            background: #0284c7 !important; 
-            color: white !important; 
-            font-weight: 700 !important; 
-            border-radius: 8px !important; 
-            border: none !important;
-            height: 44px !important;
-            margin-top: 12px !important;
-            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35) !important;
-            transition: all 0.2s ease !important;
-        }
-
-        .stButton>button:hover {
-            background: #0369a1 !important;
-            transform: translateY(-1px);
-        }
-
     </style>
-
-    """)
-
-    # El listener global se ejecuta en un iframe same-origin para poder
-    # escuchar los botones reales de Streamlit y superponer el modal al documento.
-    st.iframe("""
-<script>
-    (function() {
-        const doc = window.parent.document;
-        if (doc.__bimsLoginListenerInstalled) return;
-        doc.__bimsLoginListenerInstalled = true;
-
-        function showLoginOverlay() {
-            let overlay = doc.getElementById('bims-login-loading-overlay');
-            if (!overlay) {
-                overlay = doc.createElement('div');
-                overlay.id = 'bims-login-loading-overlay';
-                overlay.innerHTML = `
-                    <div class="bims-login-load-box">
-                        <div class="bims-login-spinner"></div>
-                        <div class="bims-login-title">Iniciando sesión...</div>
-                        <div class="bims-login-subtitle">Validando tus credenciales</div>
-                    </div>`;
-                doc.body.appendChild(overlay);
-            }
-            overlay.style.setProperty('display', 'flex', 'important');
-            overlay.style.setProperty('z-index', '2147483647', 'important');
-        }
-
-        doc.addEventListener('click', function(event) {
-            const button = event.target.closest('button');
-            if (button && button.innerText && button.innerText.trim().includes('Iniciar Sesión')) {
-                showLoginOverlay();
-            }
-        }, true);
-        doc.addEventListener('submit', function(event) {
-            if (event.target.closest('[data-testid="stForm"]')) showLoginOverlay();
-        }, true);
-
-        const styleId = 'bims-login-overlay-style';
-        if (!doc.getElementById(styleId)) {
-            const style = doc.createElement('style');
-            style.id = styleId;
-            style.textContent = `
-                #bims-login-loading-overlay { position:fixed; inset:0; z-index:2147483647; display:none;
-                    align-items:center; justify-content:center; background:rgba(11,17,32,.94);
-                    backdrop-filter:blur(9px); font-family:Arial,sans-serif; }
-                #bims-login-loading-overlay .bims-login-load-box { display:flex; flex-direction:column;
-                    align-items:center; gap:13px; padding:30px 38px; border-radius:18px;
-                    background:linear-gradient(145deg,#1e293b,#0f172a); border:1px solid #334155;
-                    box-shadow:0 20px 45px rgba(0,0,0,.45); text-align:center; }
-                #bims-login-loading-overlay .bims-login-spinner { width:38px;height:38px;border-radius:50%;
-                    border:3px solid rgba(56,189,248,.2);border-top-color:#38bdf8;
-                    animation:bimsLoginSpin .75s linear infinite; }
-                #bims-login-loading-overlay .bims-login-title {color:#f8fafc;font-weight:700;font-size:17px;}
-                #bims-login-loading-overlay .bims-login-subtitle {color:#94a3b8;font-size:13px;}
-                @keyframes bimsLoginSpin {to{transform:rotate(360deg);}}
-            `;
-            doc.head.appendChild(style);
-        }
-    })();
-    </script>
-    """, width=1, height=1)
+    """, unsafe_allow_html=True)
 
     col_izq, col_centro, col_der = st.columns([1, 1.15, 1])
-
     with col_centro:
-        with st.form("form_login_global", clear_on_submit=False):
-            st.markdown("""
-            <div class="login-logo-circle">B</div>
-            <div class="login-title-txt">Dashboard Soporte BIMS</div>
-            <div class="login-sub-txt">Ingresa tus credenciales autorizadas</div>
-            """, unsafe_allow_html=True)
-
-            input_user_email = st.text_input("Correo Electrónico", placeholder="usuario@bims.com")
-            input_user_pass = st.text_input("Contraseña", type="password", placeholder="••••••••")
-            
-            btn_login_user = st.form_submit_button("Iniciar Sesión", use_container_width=True)
-
-        login_status = st.empty()
-
-        if btn_login_user:
-            if not input_user_email.strip() or not input_user_pass.strip():
-                st.iframe("""
-                <script>
-                    const modal = window.parent.document.getElementById('bims-login-loading-overlay');
-                    if (modal) modal.style.display = 'none';
-                </script>
-                """, width=1, height=1)
-                login_status.warning("Completa tu correo y contraseña.")
-            else:
-                # El spinner nativo de Streamlit se gestiona automáticamente al terminar
-                # la consulta, tanto si las credenciales son correctas como si no.
-                with st.spinner("Validando tus credenciales..."):
-                    valido, datos_user = verificar_credenciales_supabase(
-                        input_user_email,
-                        input_user_pass
-                    )
-
-                if valido:
-                    email_user = datos_user.get("email")
-                    st.session_state["user_authenticated"] = True
-                    st.session_state["user_email"] = email_user
-                    st.session_state["user_name"] = datos_user.get("nombre")
-
-                    st.query_params["session_token"] = email_user
-                    st.html(f"""
-                    <script>
-                        try {{
-                            localStorage.setItem('bims_user_session', {email_user!r});
-                            sessionStorage.removeItem('bims_just_logged_out');
-
-                            // Cada autenticación inicia una nueva sesión visual:
-                            // forzamos el panel cerrado y reiniciamos el instalador
-                            // para que el botón vuelva a enlazarse en el documento actual.
-                            const doc = window.parent.document;
-                            const root = doc.documentElement;
-                            root.classList.remove('bims-sidebar-open');
-                            doc.__bimsSidebarInitialized = false;
-
-                            const sidebarToggle = doc.getElementById('bims-sidebar-toggle');
-                            if (sidebarToggle) {{
-                                sidebarToggle.textContent = '☰';
-                                sidebarToggle.setAttribute('aria-expanded', 'false');
-                            }}
-                        }} catch (e) {{
-                            console.warn('BIMS: no se pudo reiniciar el estado del panel lateral', e);
-                        }}
-                    </script>
-                    """, unsafe_allow_javascript=True)
-
-                    st.rerun()
-                else:
-                    # Si falló la contraseña, ocultamos el overlay para permitir reintentar
-                    st.iframe("""
-                    <script>
-                        const modal = window.parent.document.getElementById('bims-login-loading-overlay');
-                        if (modal) modal.style.display = 'none';
-                    </script>
-                    """, width=1, height=1)
-                    login_status.error("Credenciales incorrectas o usuario inactivo.")
-
-    # Al volver del cierre de sesión, retirar el overlay global cuando el login ya está renderizado.
-    st.iframe("""
-    <script>
-        const doc = window.parent.document;
-        window.setTimeout(() => {
-            const logoutOverlay = doc.getElementById('bims-logout-loading-overlay');
-            if (logoutOverlay) logoutOverlay.remove();
-        }, 700);
-    </script>
-    """, width=1, height=1)
+        st.markdown("""
+        <div class="bims-google-login-card">
+            <div class="bims-google-login-logo">B</div>
+            <div class="bims-google-login-title">Dashboard Soporte BIMS</div>
+            <div class="bims-google-login-subtitle">
+                Accede de forma segura con tu cuenta de Google
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.button(
+            "Continuar con Google",
+            on_click=st.login,
+            use_container_width=True,
+            type="primary",
+            key="btn_google_login"
+        )
+        st.caption(
+            "Solo pueden ingresar cuentas registradas y activas en el sistema."
+        )
     st.stop()
-    
+
+
+# Google ya autenticó la identidad. Ahora verificamos el correo y su autorización.
+claims_google = st.user.to_dict()
+email_google = str(claims_google.get("email") or "").strip().lower()
+email_google_verificado = claims_google.get("email_verified") is True
+
+if not email_google or not email_google_verificado:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.warning(
+        "Google no pudo confirmar un correo electrónico verificado para esta cuenta. "
+        "Selecciona otra cuenta de Google."
+    )
+    st.button(
+        "Elegir otra cuenta",
+        on_click=st.logout,
+        use_container_width=True,
+        key="btn_google_logout_no_verificado"
+    )
+    st.stop()
+
+usuario_autorizado, error_validacion_google = validar_usuario_autorizado_google(
+    email_google
+)
+
+if error_validacion_google is not None:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.error(
+        "No pudimos comprobar tu autorización en este momento. "
+        "Intenta actualizar la página en unos instantes."
+    )
+    st.stop()
+
+if not usuario_autorizado:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.markdown("### Acceso no autorizado")
+    st.error(
+        f"La cuenta **{email_google}** no está registrada o no se encuentra activa "
+        "en el sistema. Si necesitas acceso, solicita la habilitación al administrador."
+    )
+    st.button(
+        "Cerrar sesión",
+        on_click=st.logout,
+        use_container_width=True,
+        key="btn_google_logout_no_autorizado"
+    )
+    st.stop()
+
+# Mantiene los nombres de sesión que utiliza el resto del dashboard.
+st.session_state["user_authenticated"] = True
+st.session_state["user_email"] = usuario_autorizado.get("email", email_google)
+st.session_state["user_name"] = (
+    usuario_autorizado.get("nombre")
+    or claims_google.get("name")
+    or email_google
+)
+
 # ==========================================
 # FUNCIONES AUXILIARES DE TIEMPOS Y REGLAS DE NEGOCIO
 # ==========================================
@@ -4006,90 +3836,12 @@ with st.container(key="bims_sidebar_panel"):
     if st.button("Exportar Reporte a Excel", use_container_width=True):
         modal_exportar_excel()
 
-    # -------------------------------------------------------------------------
-    # MODAL GLOBAL DE CIERRE DE SESIÓN (INSERTADO DIRECTAMENTE EN EL DOCUMENTO)
-    # -------------------------------------------------------------------------
-    st.iframe("""
-    <script>
-    (function() {
-        const doc = window.parent.document;
-        if (doc.__bimsLogoutListenerInstalled) return;
-        doc.__bimsLogoutListenerInstalled = true;
-
-        function showLogoutOverlay() {
-            // Cierra el panel y reinicia su inicialización para que la próxima
-            // sesión autenticada siempre comience con el menú lateral cerrado.
-            doc.documentElement.classList.remove('bims-sidebar-open');
-            doc.__bimsSidebarInitialized = false;
-            const sidebarToggle = doc.getElementById('bims-sidebar-toggle');
-            if (sidebarToggle) {
-                sidebarToggle.textContent = '☰';
-                sidebarToggle.setAttribute('aria-expanded', 'false');
-            }
-
-            let overlay = doc.getElementById('bims-logout-loading-overlay');
-            if (!overlay) {
-                overlay = doc.createElement('div');
-                overlay.id = 'bims-logout-loading-overlay';
-                overlay.innerHTML = `
-                    <div class="bims-logout-card">
-                        <div class="bims-logout-spinner"></div>
-                        <div class="bims-logout-title">Cerrando tu sesión...</div>
-                        <div class="bims-logout-subtitle">Volviendo a la pantalla de acceso</div>
-                    </div>`;
-                doc.body.appendChild(overlay);
-            }
-            overlay.style.setProperty('display', 'flex', 'important');
-            overlay.style.setProperty('z-index', '2147483647', 'important');
-            try {
-                localStorage.removeItem('bims_user_session');
-                sessionStorage.setItem('bims_just_logged_out', 'true');
-            } catch (e) {}
-        }
-
-        const styleId = 'bims-logout-overlay-style';
-        if (!doc.getElementById(styleId)) {
-            const style = doc.createElement('style');
-            style.id = styleId;
-            style.textContent = `
-                #bims-logout-loading-overlay { position:fixed !important; inset:0 !important; width:100vw !important; height:100vh !important;
-                    z-index:2147483647 !important; display:none; align-items:center; justify-content:center; pointer-events:auto;
-                    background:rgba(11,17,32,.96); backdrop-filter:blur(10px); font-family:Arial,sans-serif; }
-                #bims-logout-loading-overlay .bims-logout-card { display:flex; flex-direction:column;
-                    align-items:center; gap:13px; padding:30px 38px; border-radius:18px;
-                    background:linear-gradient(145deg,#1e293b,#0f172a); border:1px solid #334155;
-                    box-shadow:0 20px 45px rgba(0,0,0,.5); text-align:center; }
-                #bims-logout-loading-overlay .bims-logout-spinner { width:38px;height:38px;border-radius:50%;
-                    border:3px solid rgba(56,189,248,.2);border-top-color:#38bdf8;
-                    animation:bimsLogoutSpin .75s linear infinite; }
-                #bims-logout-loading-overlay .bims-logout-title {color:#f8fafc;font-weight:700;font-size:17px;}
-                #bims-logout-loading-overlay .bims-logout-subtitle {color:#94a3b8;font-size:13px;}
-                @keyframes bimsLogoutSpin {to{transform:rotate(360deg);}}
-            `;
-            doc.head.appendChild(style);
-        }
-
-        doc.addEventListener('click', function(event) {
-            const button = event.target.closest('button');
-            if (button && button.innerText && button.innerText.includes('Cerrar Sesión')) {
-                showLogoutOverlay();
-            }
-        }, true);
-    })();
-    </script>
-    """, width=1, height=1)
-
     if st.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
-        # El listener muestra el overlay de inmediato. Esta limpieza adicional
-        # evita que una sesión antigua de localStorage vuelva a autenticarse.
-        st.query_params.clear()
-
         st.session_state["user_authenticated"] = False
         st.session_state["user_email"] = ""
         if "admin_authenticated" in st.session_state:
             st.session_state["admin_authenticated"] = False
-
-        st.rerun()
+        st.logout()
 
 with st.container(key="bims_dashboard_header"):
     # ==========================================
