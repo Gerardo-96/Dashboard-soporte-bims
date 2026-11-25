@@ -102,7 +102,7 @@ def parsear_fecha_utc(fecha_raw):
         return None
 
 def asegurar_conexion_whatsapp():
-    """Valida la conexión con WhatsApp y reconecta/reinicia si detecta caída."""
+    """Valida la conexión con WhatsApp e intenta reconectar si no está abierta."""
     base_url = EVOLUTION_API_URL.rstrip('/')
     url_state = f"{base_url}/instance/connectionState/{INSTANCE_NAME}"
     
@@ -124,14 +124,6 @@ def asegurar_conexion_whatsapp():
     except Exception as e:
         print(f"⚠️ Error al intentar re-conectar: {e}")
 
-    # Intento 2: Si hay Deploy Hook configurado, disparar reinicio automático de la instancia
-    if RENDER_DEPLOY_HOOK_URL:
-        print("🔄 [Auto-Healing] Disparando reinicio automático de Evolution API en Render...")
-        try:
-            requests.post(RENDER_DEPLOY_HOOK_URL, timeout=10)
-        except Exception as e:
-            print(f"❌ Error al disparar Deploy Hook: {e}")
-            
     return False
 
 # ==========================================
