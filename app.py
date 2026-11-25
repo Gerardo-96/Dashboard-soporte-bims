@@ -1356,6 +1356,24 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
+
+def registrar_evento_dashboard(level, event, message, details=None, category="dashboard"):
+    """Guarda eventos relevantes del dashboard sin interrumpir la operación si falla el registro."""
+    try:
+        supabase.table("system_logs").insert({
+            "source": "dashboard",
+            "category": str(category),
+            "level": str(level),
+            "event": str(event),
+            "message": str(message),
+            "details": details or {}
+        }).execute()
+        return True
+    except Exception as exc:
+        print(f"⚠️ No se pudo guardar el evento del dashboard ({event}): {exc}")
+        return False
+
+
 # ==========================================
 # CONSULTA COMPARTIDA DE ALERTAS EN VIVO
 # ==========================================
@@ -2707,6 +2725,18 @@ def renderizar_gestion_motivos_recurrentes(df_base_motivos):
                         supabase.table("catalogo_motivos_recurrentes").upsert(
                             nuevos, on_conflict="ai_title"
                         ).execute()
+                cantidad_reglas = sum(1 for item in nuevos if item.get("origen") == "regla")
+                cantidad_ia = sum(1 for item in nuevos if item.get("origen") == "ia")
+                registrar_evento_dashboard(
+                    "info", "motivos_classification_completed",
+                    "Finalizó la clasificación de títulos recurrentes.",
+                    {
+                        "total_classified": len(nuevos),
+                        "classified_by_rules": cantidad_reglas,
+                        "classified_by_ai": cantidad_ia
+                    },
+                    category="clasificacion"
+                )
                 obtener_catalogo_motivos_recurrentes.clear()
                 st.success(
                     f"Se clasificaron {len(nuevos)} títulos: "
@@ -2715,6 +2745,12 @@ def renderizar_gestion_motivos_recurrentes(df_base_motivos):
                 )
                 st.rerun()
             except Exception as error:
+                registrar_evento_dashboard(
+                    "error", "motivos_classification_failed",
+                    "Falló la clasificación de motivos recurrentes.",
+                    {"error": str(error)},
+                    category="clasificacion"
+                )
                 st.error(f"No se pudo completar la clasificación: {error}")
     else:
         st.success("Todos los títulos del histórico cargado tienen clasificación.")
@@ -8292,6 +8328,7 @@ def renderizar_panel_admin(df_base_motivos=None):
         "📅 Calendario",
         "🧩 Versionado",
         "🔎 Motivos recurrentes",
+        "📋 Logs y notificaciones",
     ])
 
     with admin_tabs[0]:
@@ -8510,6 +8547,17 @@ def renderizar_panel_admin(df_base_motivos=None):
                                 # El hilo marca la invalidación; Streamlit la ejecutará en el hilo principal.
                                 if tot_f > 0:
                                     GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
+                                registrar_evento_dashboard(
+                                    "info", "intercom_sync_completed",
+                                    "Finalizó correctamente la sincronización manual de Intercom.",
+                                    {
+                                        "records_processed": int(tot_f),
+                                        "date_from": str(f_inicio),
+                                        "date_to": str(f_final),
+                                        "filter": "created_at" if solo_creacion else "updated_at"
+                                    },
+                                    category="intercom"
+                                )
                                 GLOBAL_SYNC_STATE["status"] = "completed"
                                 tz_py = timezone(timedelta(hours=-3))
                                 hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
@@ -8517,9 +8565,29 @@ def renderizar_panel_admin(df_base_motivos=None):
 
                                 GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros ({criterio_txt}) para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
                             except Exception as ex_thread:
+                                registrar_evento_dashboard(
+                                    "error", "intercom_sync_failed",
+                                    "Falló la sincronización manual de Intercom.",
+                                    {
+                                        "error": str(ex_thread),
+                                        "date_from": str(f_inicio),
+                                        "date_to": str(f_final)
+                                    },
+                                    category="intercom"
+                                )
                                 GLOBAL_SYNC_STATE["status"] = "error"
                                 GLOBAL_SYNC_STATE["error"] = str(ex_thread)
 
+                        registrar_evento_dashboard(
+                            "info", "intercom_sync_started",
+                            "Se inició una sincronización manual de Intercom.",
+                            {
+                                "date_from": str(f_sync_desde),
+                                "date_to": str(f_sync_hasta),
+                                "filter": "created_at" if chk_por_creacion else "updated_at"
+                            },
+                            category="intercom"
+                        )
                         hilo_sync = threading.Thread(
                             target=tarea_sync_paralela,
                             args=(f_sync_desde, f_sync_hasta, chk_por_creacion),
@@ -8883,6 +8951,131 @@ def renderizar_panel_admin(df_base_motivos=None):
 
     with admin_tabs[7]:
         renderizar_gestion_motivos_recurrentes(df_base_motivos)
+
+    with admin_tabs[8]:
+        st.markdown("#### Historial operativo y técnico")
+        st.caption("Consulta eventos del Dashboard, WhatsApp, Evolution API y resultados de notificaciones almacenados en Supabase.")
+
+        hoy_logs = obtener_fecha_local_hoy()
+        col_logs_1, col_logs_2, col_logs_3 = st.columns([1, 1, 1.2])
+        with col_logs_1:
+            fecha_logs_desde = st.date_input(
+                "Desde", value=hoy_logs - timedelta(days=7),
+                key="logs_fecha_desde"
+            )
+        with col_logs_2:
+            fecha_logs_hasta = st.date_input(
+                "Hasta", value=hoy_logs, key="logs_fecha_hasta"
+            )
+        with col_logs_3:
+            if st.button("↻ Actualizar registros", key="btn_actualizar_logs", use_container_width=True):
+                st.rerun(scope="fragment")
+
+        if fecha_logs_desde > fecha_logs_hasta:
+            st.warning("La fecha inicial no puede ser posterior a la fecha final.")
+        else:
+            tz_logs_py = timezone(timedelta(hours=-3))
+            desde_utc = datetime.combine(
+                fecha_logs_desde, datetime.min.time()
+            ).replace(tzinfo=tz_logs_py).astimezone(timezone.utc).isoformat()
+            hasta_utc = datetime.combine(
+                fecha_logs_hasta, datetime.max.time()
+            ).replace(tzinfo=tz_logs_py).astimezone(timezone.utc).isoformat()
+
+            tab_eventos, tab_notificaciones = st.tabs(["Eventos del sistema", "Notificaciones"])
+
+            with tab_eventos:
+                f_ev1, f_ev2, f_ev3 = st.columns(3)
+                fuente_eventos = f_ev1.selectbox(
+                    "Origen", ["Todos", "notificador_bot", "dashboard"],
+                    key="logs_event_source"
+                )
+                categoria_eventos = f_ev2.selectbox(
+                    "Categoría", ["Todas", "whatsapp", "render", "cron", "intercom", "clasificacion", "dashboard"],
+                    key="logs_event_category"
+                )
+                nivel_eventos = f_ev3.selectbox(
+                    "Nivel", ["Todos", "info", "warning", "error", "critical"],
+                    key="logs_event_level"
+                )
+
+                try:
+                    consulta_eventos = supabase.table("system_logs").select(
+                        "created_at, source, category, level, event, message, details"
+                    ).gte("created_at", desde_utc).lte("created_at", hasta_utc)
+                    if fuente_eventos != "Todos":
+                        consulta_eventos = consulta_eventos.eq("source", fuente_eventos)
+                    if categoria_eventos != "Todas":
+                        consulta_eventos = consulta_eventos.eq("category", categoria_eventos)
+                    if nivel_eventos != "Todos":
+                        consulta_eventos = consulta_eventos.eq("level", nivel_eventos)
+                    res_eventos = consulta_eventos.order("created_at", desc=True).limit(300).execute()
+                    df_eventos = pd.DataFrame(res_eventos.data or [])
+                    st.caption(f"Se muestran hasta 300 eventos. Registros encontrados: {len(df_eventos)}.")
+                    if not df_eventos.empty:
+                        st.dataframe(
+                            df_eventos,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "created_at": st.column_config.DatetimeColumn("Fecha y hora", format="DD/MM/YYYY HH:mm:ss"),
+                                "source": "Origen",
+                                "category": "Categoría",
+                                "level": "Nivel",
+                                "event": "Evento",
+                                "message": "Descripción",
+                                "details": st.column_config.JsonColumn("Detalles")
+                            }
+                        )
+                    else:
+                        st.info("No hay eventos para los filtros seleccionados.")
+                except Exception as error_logs:
+                    st.error(f"No se pudieron consultar los eventos: {error_logs}")
+
+            with tab_notificaciones:
+                f_n1, f_n2 = st.columns(2)
+                canal_notificaciones = f_n1.selectbox(
+                    "Canal", ["Todos", "whatsapp", "email"],
+                    key="logs_notification_channel"
+                )
+                estado_notificaciones = f_n2.selectbox(
+                    "Resultado", ["Todos", "sent", "failed", "skipped", "pending"],
+                    key="logs_notification_status"
+                )
+                try:
+                    consulta_notificaciones = supabase.table("notification_logs").select(
+                        "created_at, channel, notification_type, status, conversation_id, destination_label, provider, provider_status_code, provider_message_id, attempt, error"
+                    ).gte("created_at", desde_utc).lte("created_at", hasta_utc)
+                    if canal_notificaciones != "Todos":
+                        consulta_notificaciones = consulta_notificaciones.eq("channel", canal_notificaciones)
+                    if estado_notificaciones != "Todos":
+                        consulta_notificaciones = consulta_notificaciones.eq("status", estado_notificaciones)
+                    res_notificaciones = consulta_notificaciones.order("created_at", desc=True).limit(300).execute()
+                    df_notificaciones = pd.DataFrame(res_notificaciones.data or [])
+                    st.caption(f"Se muestran hasta 300 notificaciones. Registros encontrados: {len(df_notificaciones)}.")
+                    if not df_notificaciones.empty:
+                        st.dataframe(
+                            df_notificaciones,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "created_at": st.column_config.DatetimeColumn("Fecha y hora", format="DD/MM/YYYY HH:mm:ss"),
+                                "channel": "Canal",
+                                "notification_type": "Tipo",
+                                "status": "Resultado",
+                                "conversation_id": "ID conversación",
+                                "destination_label": "Destino",
+                                "provider": "Proveedor",
+                                "provider_status_code": "HTTP",
+                                "provider_message_id": "ID proveedor",
+                                "attempt": "Intento",
+                                "error": "Error"
+                            }
+                        )
+                    else:
+                        st.info("No hay notificaciones para los filtros seleccionados.")
+                except Exception as error_notif:
+                    st.error(f"No se pudo consultar el historial de notificaciones: {error_notif}")
 
 if tab_admin is not None:
     with tab_admin:
