@@ -4103,26 +4103,40 @@ with st.container(key="bims_dashboard_header"):
     .st-key-btn_abrir_guardias_header_calendar button p {
         font-size:0 !important; line-height:0 !important;
     }
-    /* Logotipo WhatsApp: silueta oficial aplicada como máscara CSS para evitar filtros SVG de Streamlit. */
+    /* Logotipo oficial de WhatsApp con transformación animada al estado de sincronización. */
     .bims-whatsapp-state-icon {
+        position:relative;
         display:inline-block; width:26px; height:26px; flex:0 0 26px;
         background-color:var(--bims-whatsapp-color);
-    }
-    /* Pulso muy tenue solo cuando WhatsApp está conectado; animación CSS de bajo costo. */
-    .bims-whatsapp-state-icon.is-online {
-        transform-origin:center;
-        animation:bims-whatsapp-soft-pulse 2.5s ease-in-out infinite;
-    }
-    @keyframes bims-whatsapp-soft-pulse {
-        0%, 100% { opacity:.88; transform:scale(1); }
-        50% { opacity:1; transform:scale(1.045); }
-    }
-    .bims-whatsapp-state-icon.is-offline {
-        animation:none !important;
-    }
-    /* Máscara oficial del logotipo. */
         -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
         mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+    }
+    .bims-whatsapp-state-icon::after {
+        content:"";
+        position:absolute; inset:0;
+        background-color:var(--bims-whatsapp-color);
+        opacity:0;
+        transform:rotate(-90deg) scale(.72);
+        -webkit-mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
+        mask:url("https://cdn-icons-png.flaticon.com/512/5565/5565980.png") center / contain no-repeat;
+    }
+    .bims-whatsapp-state-icon.is-online {
+        animation:bims-whatsapp-logo-to-sync 4.8s ease-in-out infinite;
+    }
+    .bims-whatsapp-state-icon.is-online::after {
+        animation:bims-whatsapp-sync-to-logo 4.8s ease-in-out infinite;
+    }
+    @keyframes bims-whatsapp-logo-to-sync {
+        0%, 12%, 88%, 100% { opacity:1; transform:scale(1) rotate(0deg); }
+        36%, 64% { opacity:0; transform:scale(.72) rotate(90deg); }
+    }
+    @keyframes bims-whatsapp-sync-to-logo {
+        0%, 12%, 88%, 100% { opacity:0; transform:rotate(-90deg) scale(.72); }
+        36%, 64% { opacity:1; transform:rotate(270deg) scale(1); }
+    }
+    .bims-whatsapp-state-icon.is-offline,
+    .bims-whatsapp-state-icon.is-offline::after {
+        animation:none !important;
     }
     /* Sync de dos flechas, inspirado en el icono de referencia. */
     .bims-whatsapp-sync-icon {
