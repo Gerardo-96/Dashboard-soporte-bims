@@ -4088,6 +4088,14 @@ with st.container(key="bims_dashboard_header"):
         gap: 0 !important;
         justify-content: center !important;
     }
+    /* El calendario se presenta como icono compacto para acercarlo al estado de WhatsApp. */
+    .st-key-btn_abrir_guardias_header_calendar button {
+        width:34px !important; min-width:34px !important; height:34px !important;
+        padding:0 !important; gap:0 !important; justify-content:center !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button p {
+        font-size:0 !important; line-height:0 !important;
+    }
     /* Logotipo WhatsApp: silueta oficial aplicada como máscara CSS para evitar filtros SVG de Streamlit. */
     .bims-whatsapp-state-icon {
         display:inline-block; width:26px; height:26px; flex:0 0 26px;
@@ -4096,14 +4104,13 @@ with st.container(key="bims_dashboard_header"):
         mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
     }
     .bims-whatsapp-state-icon.is-online {
-        animation:bims-wa-pulse 2.2s ease-in-out infinite;
+        transform-origin:center;
+        animation:bims-wa-pulse 1.5s ease-in-out infinite;
+        will-change:transform, opacity, filter;
     }
     @keyframes bims-wa-pulse {
-        0%, 100% { filter:drop-shadow(0 0 0 rgba(52, 211, 153, 0)); }
-        50% { filter:drop-shadow(0 0 5px rgba(52, 211, 153, .7)); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .bims-whatsapp-state-icon.is-online { animation:none; }
+        0%, 100% { transform:scale(.92); opacity:.78; filter:drop-shadow(0 0 1px rgba(52, 211, 153, .25)); }
+        50% { transform:scale(1.18); opacity:1; filter:drop-shadow(0 0 7px rgba(52, 211, 153, .95)); }
     }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
     .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; }
@@ -4143,7 +4150,7 @@ with st.container(key="bims_dashboard_header"):
     with col_header_info:
         st.html(titulo_header_html)
     with col_header_bot:
-        col_guardia_alerta, col_estado_bot = st.columns([1, 1], gap="small", vertical_alignment="center")
+        col_guardia_alerta, col_estado_bot = st.columns([0.8, 0.45], gap="small", vertical_alignment="center")
         with col_guardia_alerta:
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
