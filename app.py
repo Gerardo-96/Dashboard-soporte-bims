@@ -2531,7 +2531,10 @@ def renderizar_editor_reglas_motivos_recurrentes():
                 catalogo_actual = obtener_catalogo_motivos_recurrentes()
                 cambios_regla = []
                 for item in catalogo_actual:
-                    if str(item.get("origen") or "").lower() == "manual":
+                    if (
+                        str(item.get("origen") or "").lower() == "manual"
+                        or bool(item.get("revisado", False))
+                    ):
                         continue
                     nuevo_motivo = motivo_por_reglas_recurrentes(
                         item.get("ai_title"), reglas_todas
