@@ -23,7 +23,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether, PageBreak
     from xml.sax.saxutils import escape
 
     def texto_pdf(valor):
@@ -116,7 +116,7 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
         ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)
     ]))
-    story.extend([tabla, Spacer(1,4*mm), Paragraph("Resumen ejecutivo",styles["WBRSection"])])
+    story.extend([tabla, PageBreak(), Paragraph("Resumen ejecutivo",styles["WBRSection"])])
     texto = resumen_ia or "No se generó un resumen con IA para esta semana."
     for linea in str(texto).splitlines():
         linea=linea.strip()
