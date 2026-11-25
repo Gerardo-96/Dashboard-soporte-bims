@@ -4303,7 +4303,7 @@ st.iframe("""
             function esNavegacionPrincipal(lista) {
                 if (!lista) return false;
                 const etiquetas = Array.from(lista.querySelectorAll('[role="tab"]'))
-                    .map(tab => (tab.textContent || '').replace(/\\s+/g, ' ').trim());
+                    .map(tab => (tab.textContent || '').replace(/\s+/g, ' ').trim());
                 return [
                     'Control Operativo & SLA',
                     'Distribución de Carga',
