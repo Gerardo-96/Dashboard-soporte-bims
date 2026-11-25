@@ -3258,7 +3258,75 @@ if "input_f_hasta" not in st.session_state:
 # ==========================================
 # CARGA ÚNICA GLOBAL DE DATOS (ÓPTIMO EN RAM)
 # ==========================================
-with st.spinner("Cargando conversaciones y preparando los indicadores..."):
+# Animación de bienvenida: se muestra solo durante la carga inicial de esta sesión.
+# No agrega pausas artificiales; permanece visible mientras se consultan/preparan los datos.
+if not st.session_state.get("bims_initial_load_done", False):
+    loading_placeholder = st.empty()
+    loading_placeholder.markdown("""
+    <style>
+        @keyframes bimsLoaderOrbit {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes bimsLoaderPulse {
+            0%, 100% { opacity: .55; transform: scale(.94); }
+            50% { opacity: 1; transform: scale(1.04); }
+        }
+        @keyframes bimsLoaderDot {
+            0%, 80%, 100% { opacity: .25; transform: translateY(0); }
+            40% { opacity: 1; transform: translateY(-4px); }
+        }
+        .bims-loading-screen {
+            position: fixed; inset: 0; z-index: 100000;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(145deg, #080f1d 0%, #0b1120 55%, #101b2d 100%);
+            color: #f8fafc; text-align: center;
+        }
+        .bims-loading-content { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .bims-loading-logo {
+            position: relative; display: flex; align-items: center; justify-content: center;
+            width: 76px; height: 76px; border-radius: 22px;
+            background: rgba(30, 64, 105, .22);
+            border: 1px solid rgba(96, 165, 250, .28);
+            box-shadow: 0 0 45px rgba(30, 96, 160, .18);
+            animation: bimsLoaderPulse 2.2s ease-in-out infinite;
+        }
+        .bims-loading-logo span {
+            font-size: 25px; font-weight: 850; letter-spacing: .015em;
+            background: linear-gradient(110deg, #5eead4, #60a5fa);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .bims-loading-orbit {
+            position: absolute; inset: -7px; border: 2px solid transparent;
+            border-top-color: #5eead4; border-right-color: rgba(96,165,250,.55);
+            border-radius: 28px; animation: bimsLoaderOrbit 1.8s linear infinite;
+        }
+        .bims-loading-caption { color: #cbd5e1; font-size: 14px; font-weight: 550; }
+        .bims-loading-subcaption { color: #64748b; font-size: 12px; }
+        .bims-loading-dots { display: flex; gap: 6px; margin-top: -7px; }
+        .bims-loading-dots i {
+            width: 5px; height: 5px; border-radius: 50%; background: #5eead4;
+            animation: bimsLoaderDot 1.1s ease-in-out infinite;
+        }
+        .bims-loading-dots i:nth-child(2) { animation-delay: .15s; }
+        .bims-loading-dots i:nth-child(3) { animation-delay: .3s; }
+    </style>
+    <div class="bims-loading-screen">
+        <div class="bims-loading-content">
+            <div class="bims-loading-logo">
+                <div class="bims-loading-orbit"></div>
+                <span>BIMS</span>
+            </div>
+            <div class="bims-loading-caption">Preparando tu espacio de trabajo</div>
+            <div class="bims-loading-dots"><i></i><i></i><i></i></div>
+            <div class="bims-loading-subcaption">Cargando conversaciones e indicadores</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    df_all = obtener_datos()
+    loading_placeholder.empty()
+    st.session_state["bims_initial_load_done"] = True
+else:
     df_all = obtener_datos()
 
 if not df_all.empty:
@@ -3995,6 +4063,10 @@ with st.container(key="bims_dashboard_header"):
         border-radius: 50% !important;
         object-fit: cover !important;
     }
+    /* Oculta únicamente el chevron del popover; conserva el avatar y su clic. */
+    .st-key-bims_user_menu button svg {
+        display: none !important;
+    }
     @keyframes bimsPing {
         75%, 100% {
             transform: scale(2.2);
@@ -4108,7 +4180,6 @@ with st.container(key="bims_dashboard_header"):
             key="bims_user_menu"
         ):
             st.markdown(f"**{st.session_state.get('user_name', 'Usuario')}**")
-            st.caption(st.session_state.get("user_email", ""))
             st.divider()
             st.button(
                 "Cerrar sesión",
