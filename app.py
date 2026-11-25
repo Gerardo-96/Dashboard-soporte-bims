@@ -1138,42 +1138,24 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         .st-key-bims_dashboard_header .bims-header-bot-status {
             display: none !important;
         }
-        /* La fila principal se identifica por contener el menú de perfil.
-           Se conservan las tres columnas reales: título, calendario/estado y perfil. */
+        /* En móvil se conserva únicamente el título; calendario y perfil se ocultan. */
         .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) {
             display: flex !important;
             flex-wrap: nowrap !important;
             align-items: center !important;
-            gap: .35rem !important;
             width: 100% !important;
+            gap: 0 !important;
         }
         .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(1) {
-            flex: 1 1 auto !important;
-            width: auto !important;
-            max-width: none !important;
-            min-width: 0 !important;
-        }
-        /* La columna central contiene el calendario: no debe ocultarse. */
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(2) {
             display: flex !important;
-            flex: 0 0 auto !important;
-            width: auto !important;
-            max-width: max-content !important;
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
             min-width: 0 !important;
         }
+        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(2),
         .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(3) {
-            display: flex !important;
-            flex: 0 0 42px !important;
-            width: 42px !important;
-            max-width: 42px !important;
-            min-width: 42px !important;
-            justify-content: flex-end !important;
-        }
-        /* Compactar únicamente las dos columnas internas del calendario/estado. */
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(2) [data-testid="stHorizontalBlock"] > [data-testid="column"] {
-            flex: 0 0 auto !important;
-            width: auto !important;
-            min-width: 0 !important;
+            display: none !important;
         }
         .st-key-bims_dashboard_header h1 {
             font-size: clamp(.95rem, 4vw, 1.15rem) !important;
@@ -1182,9 +1164,15 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             overflow: hidden !important;
             text-overflow: ellipsis !important;
         }
-        .st-key-bims_dashboard_header .bims-mobile-bot-icon .bims-whatsapp-state-icon {
-            width: 17px !important;
-            height: 17px !important;
+        .st-key-bims_dashboard_header .bims-mobile-bot-icon {
+            display: inline-block !important;
+            width: 8px !important;
+            height: 8px !important;
+            min-width: 8px !important;
+            border-radius: 50% !important;
+            margin-left: 7px !important;
+            vertical-align: middle !important;
+            background: currentColor !important;
         }
         .st-key-bims_dashboard_header [role="tablist"] {
             padding-left: 0 !important;
@@ -4200,7 +4188,7 @@ with st.container(key="bims_dashboard_header"):
     <div style="display:flex; align-items:center; min-width:0; min-height:50px;">
         <div style="min-width:0;">
             <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
-                Dashboard Soporte BIMS <span class="bims-mobile-bot-icon">{indicador_bot_html}</span>
+                Dashboard Soporte BIMS <span class="bims-mobile-bot-icon" style="background:{color_bot};" title="{texto_estado_bot}"></span>
             </h1>
             <div style="font-size:0.72rem; color:#94a3b8; margin-top:5px; letter-spacing:0.04em;">
                 PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
