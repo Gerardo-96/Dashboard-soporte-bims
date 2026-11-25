@@ -4090,13 +4090,23 @@ with st.container(key="bims_dashboard_header"):
     }
     /* Indicador de conexión de WhatsApp. */
     .bims-whatsapp-state-icon {
-        display:inline-flex; align-items:center; justify-content:center;
+        position:relative; display:inline-flex; align-items:center; justify-content:center;
         width:26px; height:26px; flex:0 0 26px; color:var(--bims-whatsapp-color);
+        border:2px solid currentColor; border-radius:50%; box-sizing:border-box;
     }
-    .bims-whatsapp-state-icon svg { display:block; width:25px; height:25px; }
+    .bims-whatsapp-state-icon::before {
+        content:"☎"; display:block; font-family:Arial,sans-serif; font-size:15px;
+        line-height:1; font-weight:700; transform:rotate(-12deg); margin-top:-1px;
+    }
+    .bims-whatsapp-state-icon::after {
+        content:""; position:absolute; left:-2px; bottom:-2px; width:7px; height:7px;
+        border-left:2px solid currentColor; border-bottom:2px solid currentColor;
+        background:transparent; transform:skew(-18deg) rotate(-18deg); border-bottom-left-radius:2px;
+    }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
-    .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; }
-    .bims-mobile-bot-icon .bims-whatsapp-state-icon svg { width:19px; height:19px; }
+    .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; border-width:1.5px; }
+    .bims-mobile-bot-icon .bims-whatsapp-state-icon::before { font-size:11px; }
+    .bims-mobile-bot-icon .bims-whatsapp-state-icon::after { width:5px; height:5px; border-width:1.5px; left:-1px; bottom:-1px; }
     </style>
     """)
 
@@ -4109,12 +4119,7 @@ with st.container(key="bims_dashboard_header"):
     color_bot = "#34d399" if bot_online else "#f87171"
     texto_estado_bot = "WhatsApp conectado" if bot_online else "WhatsApp desconectado"
     indicador_bot_html = f"""
-        <span class="bims-whatsapp-state-icon" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <path d="M20.05 3.95A11.3 11.3 0 0 0 2.2 17.58L.8 23.2l5.75-1.36A11.3 11.3 0 0 0 20.05 3.95Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M8.1 7.4c-.25-.55-.52-.56-.76-.57h-.65c-.23 0-.6.09-.91.43-.31.34-1.19 1.16-1.19 2.83s1.22 3.28 1.39 3.51c.17.22 2.35 3.76 5.8 5.12 2.87 1.13 3.45.91 4.07.85.62-.06 2-.82 2.28-1.61.28-.79.28-1.47.2-1.61-.08-.14-.31-.23-.65-.4-.34-.17-2-.99-2.31-1.1-.31-.11-.54-.17-.76.17-.23.34-.88 1.1-1.08 1.33-.2.23-.4.26-.74.09-.34-.17-1.43-.53-2.72-1.69-1.01-.9-1.69-2.01-1.89-2.35-.2-.34-.02-.52.15-.69.15-.15.34-.4.51-.6.17-.2.23-.34.34-.57.11-.23.06-.43-.03-.6-.08-.17-.74-1.84-1.04-2.51Z" fill="currentColor"/>
-            </svg>
-        </span>
+        <span class="bims-whatsapp-state-icon" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};"></span>
     """
 
     estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
@@ -4138,7 +4143,7 @@ with st.container(key="bims_dashboard_header"):
     with col_header_info:
         st.html(titulo_header_html)
     with col_header_bot:
-        col_guardia_alerta, col_estado_bot = st.columns([0.8, 4], gap="small", vertical_alignment="center")
+        col_guardia_alerta, col_estado_bot = st.columns([1, 1], gap="small", vertical_alignment="center")
         with col_guardia_alerta:
             usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
