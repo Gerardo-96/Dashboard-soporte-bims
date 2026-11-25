@@ -4088,10 +4088,40 @@ with st.container(key="bims_dashboard_header"):
         gap: 0 !important;
         justify-content: center !important;
     }
-    .bims-bot-state-icon { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; flex:0 0 22px; }
-    .bims-bot-state-icon svg { display:block; width:100%; height:100%; }
+    /* Robot de estado: dibujo CSS para evitar que el SVG sea filtrado por el renderizador HTML. */
+    .bims-bot-state-icon {
+        position:relative; display:inline-flex; align-items:center; justify-content:center;
+        width:26px; height:26px; flex:0 0 26px; color:var(--bims-bot-color);
+    }
+    .bims-bot-head {
+        position:relative; display:block; width:19px; height:16px; margin-top:5px;
+        border:2px solid currentColor; border-radius:5px; box-sizing:border-box;
+    }
+    .bims-bot-head::before {
+        content:""; position:absolute; width:2px; height:4px; left:6px; top:-6px;
+        background:currentColor; border-radius:2px;
+    }
+    .bims-bot-head::after {
+        content:""; position:absolute; width:4px; height:4px; left:5px; top:4px;
+        background:currentColor; border-radius:50%;
+        box-shadow:7px 0 0 currentColor;
+    }
+    .bims-bot-mouth {
+        position:absolute; left:6px; bottom:2px; width:5px; height:2px;
+        background:currentColor; border-radius:2px;
+    }
+    .bims-bot-online .bims-bot-mouth { width:7px; left:5px; height:3px; border-radius:0 0 6px 6px; }
+    .bims-bot-ear {
+        position:absolute; top:11px; width:3px; height:6px; background:currentColor; border-radius:2px;
+    }
+    .bims-bot-ear-left { left:1px; }
+    .bims-bot-ear-right { right:1px; }
+    .bims-bot-sleep {
+        position:absolute; top:-2px; right:-2px; font-size:9px; line-height:1;
+        font-weight:800; color:currentColor;
+    }
     .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
-    .bims-mobile-bot-icon svg { display:inline-block; width:18px; height:18px; vertical-align:middle; }
+    .bims-mobile-bot-icon .bims-bot-state-icon { width:19px; height:19px; transform:scale(.78); transform-origin:center; }
     </style>
     """)
 
@@ -4102,30 +4132,24 @@ with st.container(key="bims_dashboard_header"):
     )
 
     color_bot = "#34d399" if bot_online else "#f87171"
-    icono_bot_svg = (
-        f'<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-        f'<path d="M12 3V5" stroke="{color_bot}" stroke-width="1.8" stroke-linecap="round"/>'
-        f'<circle cx="12" cy="2.5" r="1.3" fill="{color_bot}"/>'
-        f'<rect x="4" y="6" width="16" height="14" rx="4" stroke="{color_bot}" stroke-width="1.8"/>'
-        + (f'<circle cx="9" cy="12" r="1.35" fill="{color_bot}"/><circle cx="15" cy="12" r="1.35" fill="{color_bot}"/><path d="M9 16C10.5 17.3 13.5 17.3 15 16" stroke="{color_bot}" stroke-width="1.6" stroke-linecap="round"/>'
-           if bot_online else
-           f'<path d="M7.8 12.4H10.2M13.8 12.4H16.2M9 16H15" stroke="{color_bot}" stroke-width="1.7" stroke-linecap="round"/><path d="M17.5 3.5H21L17.5 6.5H21" stroke="{color_bot}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>')
-        + f'<path d="M2 10V16M22 10V16" stroke="{color_bot}" stroke-width="1.8" stroke-linecap="round"/></svg>'
-    )
     texto_estado_bot = "Bot Operativo" if bot_online else "Bot Desconectado"
-    fondo_estado_bot = "rgba(6, 95, 70, 0.25)" if bot_online else "rgba(127, 29, 29, 0.25)"
-    borde_estado_bot = "rgba(5, 150, 105, 0.55)" if bot_online else "rgba(220, 38, 38, 0.55)"
-    estado_bot_html = f"""
-        <span title="{texto_estado_bot}" style="background:{fondo_estado_bot};color:{color_bot};border:1px solid {borde_estado_bot};padding:5px 10px;border-radius:20px;font-size:0.76rem;font-weight:600;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;">
-            <span class="bims-bot-state-icon">{icono_bot_svg}</span>{texto_estado_bot}
+    clase_estado_bot = "bims-bot-online" if bot_online else "bims-bot-offline"
+    indicador_bot_html = f"""
+        <span class="bims-bot-state-icon {clase_estado_bot}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-bot-color:{color_bot};">
+            <span class="bims-bot-ear bims-bot-ear-left"></span>
+            <span class="bims-bot-ear bims-bot-ear-right"></span>
+            <span class="bims-bot-head"><span class="bims-bot-mouth"></span></span>
+            {'' if bot_online else '<span class="bims-bot-sleep">Z</span>'}
         </span>
     """
+
+    estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
 
     titulo_header_html = f"""
     <div style="display:flex; align-items:center; min-width:0; min-height:50px;">
         <div style="min-width:0;">
             <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
-                Dashboard Soporte BIMS <span class="bims-mobile-bot-icon">{icono_bot_svg}</span>
+                Dashboard Soporte BIMS <span class="bims-mobile-bot-icon">{indicador_bot_html}</span>
             </h1>
             <div style="font-size:0.72rem; color:#94a3b8; margin-top:5px; letter-spacing:0.04em;">
                 PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
