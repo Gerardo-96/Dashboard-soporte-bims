@@ -2,6 +2,8 @@ import json
 import os
 import sys
 import time
+import re
+import unicodedata
 from collections import Counter
 
 import requests
@@ -54,15 +56,46 @@ def obtener_catalogo(supabase):
     return {str(fila.get("ai_title") or "").strip(): fila for fila in filas}
 
 
+def obtener_reglas(supabase):
+    """Carga reglas activas ordenadas por prioridad."""
+    respuesta = (
+        supabase.table("reglas_motivos_recurrentes")
+        .select("id,palabras_clave,motivo_recurrente,prioridad,activo")
+        .eq("activo", True)
+        .order("prioridad")
+        .order("id")
+        .execute()
+    )
+    return respuesta.data or []
+
+
+def normalizar_texto_regla(valor):
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", texto.casefold()).strip()
+
+
+def motivo_por_reglas(titulo, reglas):
+    titulo_norm = normalizar_texto_regla(titulo)
+    for regla in reglas:
+        palabras = str(regla.get("palabras_clave") or "").replace(";", ",").split(",")
+        for palabra in palabras:
+            palabra_norm = normalizar_texto_regla(palabra)
+            if palabra_norm and palabra_norm in titulo_norm:
+                motivo = str(regla.get("motivo_recurrente") or "").strip()
+                if motivo:
+                    return motivo
+    return None
+
+
 def clasificar_lote(titulos, api_key):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     prompt = (
         "Actuá como especialista en taxonomía de incidencias de soporte. "
         "Recibirás títulos breves generados por IA. Agrupá únicamente los que "
         "describan el mismo problema o solicitud; normalizá singular/plural y "
-        "redacciones equivalentes. Conservá diferencias entre productos, documentos "
-        "y acciones: 'Certificación de factura' y 'Certificación de facturas' pueden "
-        "compartir categoría, pero 'Certificación de ventas' debe quedar diferenciada. "
+        "redacciones equivalentes. Los títulos relacionados con certificación, "
+        "certificar, certificados o SIFEN deben agruparse como 'Certificación de comprobantes'. "
         "'Anulación de factura' no debe confundirse con 'Cambio de factura'. "
         "Usá categorías breves y claras. Si el título es ambiguo, mantenelo como "
         "categoría independiente. No inventes contexto. Respondé exclusivamente "
@@ -182,6 +215,8 @@ def main():
     # Cargar el catálogo una sola vez; actualizarlo en memoria tras cada inserción.
     # Así evitamos volver a descargar miles de filas de Supabase en cada lote.
     catalogo = obtener_catalogo(supabase)
+    reglas = obtener_reglas(supabase)
+    print(f"Reglas automáticas activas: {len(reglas)}")
     total_clasificados = 0
     numero_lote = 0
 
@@ -203,7 +238,22 @@ def main():
             f"({len(pendientes)} pendientes antes del lote)."
         )
 
-        nuevos = clasificar_lote(lote, gemini_key)
+        nuevos = []
+        pendientes_ia = []
+        for titulo in lote:
+            motivo_regla = motivo_por_reglas(titulo, reglas)
+            if motivo_regla:
+                nuevos.append({
+                    "ai_title": titulo,
+                    "motivo_recurrente": motivo_regla,
+                    "origen": "regla",
+                    "revisado": False,
+                })
+            else:
+                pendientes_ia.append(titulo)
+
+        if pendientes_ia:
+            nuevos.extend(clasificar_lote(pendientes_ia, gemini_key))
 
         # Insertar, no hacer upsert: así una corrección manual preexistente
         # nunca se reemplaza accidentalmente por una nueva propuesta de IA.
