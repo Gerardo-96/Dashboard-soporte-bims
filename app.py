@@ -4664,11 +4664,89 @@ with tab_operativo:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # EVOLUCIÓN HISTÓRICA DE CSAT (SEMANAL DESDE Q ANTERIOR)
+    # EVOLUCIÓN DE CSAT: HISTÓRICO SEMANAL O DETALLE DIARIO DE LA SEMANA ACTUAL
     q_act_evo = (now_date.month - 1) // 3 + 1
     q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
-    st.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;"><span class="bims-title-desktop">Evolución semanal del CSAT — desde el trimestre anterior</span><span class="bims-title-mobile">Evolución semanal del CSAT</span></h3></div>', unsafe_allow_html=True)
-    if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
+    col_titulo_csat, col_switch_csat = st.columns([5.5, 1.5], vertical_alignment="center")
+    with col_titulo_csat:
+        titulo_csat_evo = st.empty()
+    with col_switch_csat:
+        vista_diaria_csat = st.toggle("Vista diaria", value=False, key="bims_csat_daily_view", help="Alternar entre la evolución histórica y el CSAT diario de esta semana.")
+    if vista_diaria_csat:
+        titulo_csat_evo.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;">CSAT diario — semana en curso</h3></div>', unsafe_allow_html=True)
+    else:
+        titulo_csat_evo.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;"><span class="bims-title-desktop">Evolución semanal del CSAT — desde el trimestre anterior</span><span class="bims-title-mobile">Evolución semanal del CSAT</span></h3></div>', unsafe_allow_html=True)
+
+    if vista_diaria_csat:
+        if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
+            inicio_semana_csat = now_date - timedelta(days=now_date.weekday())
+            df_csat_diario = df_csat_global[
+                (df_csat_global["fecha_calificacion_solo"] >= inicio_semana_csat) &
+                (df_csat_global["fecha_calificacion_solo"] <= now_date)
+            ].copy()
+            if not df_csat_diario.empty:
+                df_csat_diario["Dia"] = df_csat_diario["fecha_calificacion_solo"].apply(
+                    lambda f: f"{['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][f.weekday()]} {f.strftime('%d/%m')}"
+                )
+                res_csat_diario = []
+                for dia, grp in df_csat_diario.groupby("fecha_calificacion_solo"):
+                    total_dia = len(grp)
+                    positivas_dia = int((grp["rating_num"] >= 4).sum())
+                    res_csat_diario.append({
+                        "Fecha": dia,
+                        "Día": grp["Dia"].iloc[0],
+                        "CSAT %": round((positivas_dia / total_dia) * 100, 1) if total_dia else None,
+                        "Encuestas": total_dia
+                    })
+                df_evo_csat_diario = pd.DataFrame(res_csat_diario).sort_values("Fecha")
+                colores_diarios = [
+                    "#10b981" if v >= 90.0 else "#f59e0b"
+                    for v in df_evo_csat_diario["CSAT %"]
+                ]
+                fig_csat_diario = go.Figure()
+                fig_csat_diario.add_trace(go.Scatter(
+                    x=df_evo_csat_diario["Día"],
+                    y=df_evo_csat_diario["CSAT %"],
+                    mode="lines+markers+text",
+                    name="CSAT (%)",
+                    text=[f"<b>{v:.1f}%</b>" for v in df_evo_csat_diario["CSAT %"]],
+                    textposition="top center",
+                    textfont=dict(color="#f8fafc", size=11),
+                    marker=dict(size=9, color=colores_diarios, line=dict(color="#0f172a", width=2)),
+                    customdata=df_evo_csat_diario[["Encuestas"]].to_numpy(),
+                    hovertemplate="<b>%{x}</b><br>CSAT: <b>%{y:.1f}%</b><br>Total encuestas: %{customdata[0]}<extra></extra>",
+                    line=dict(color="#38bdf8", width=3, shape="spline", smoothing=0.6),
+                    fill="tozeroy",
+                    fillgradient=dict(type="vertical", colorscale=[
+                        [0.0, "rgba(56, 189, 248, 0.0)"],
+                        [1.0, "rgba(56, 189, 248, 0.22)"]
+                    ])
+                ))
+                fig_csat_diario.add_hline(
+                    y=90, line=dict(color="#34d399", width=1.5, dash="dot"),
+                    annotation_text="<b>Meta 90%</b>", annotation_position="top left",
+                    annotation_font=dict(color="#34d399", size=11),
+                    annotation_bgcolor="rgba(11, 17, 32, 0.85)"
+                )
+                min_csat_diario = max(0, min(85, float(df_evo_csat_diario["CSAT %"].min()) - 8))
+                fig_csat_diario.update_layout(
+                    xaxis=dict(title=None, showgrid=False, zeroline=False, tickfont=dict(color="#94a3b8", size=11)),
+                    yaxis=dict(title=None, range=[min_csat_diario, 104], showgrid=False, showticklabels=False, zeroline=False, showline=False, ticksuffix="%"),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#cbd5e1"), margin=dict(t=12, b=35, l=12, r=12),
+                    height=380, showlegend=False
+                )
+                st.plotly_chart(
+                    fig_csat_diario, use_container_width=True,
+                    key="bims_csat_daily_evolution_chart",
+                    config={"displayModeBar": False, "scrollZoom": False}
+                )
+            else:
+                st.info("Todavía no hay evaluaciones registradas esta semana.")
+        else:
+            st.info("Sin registros en la base de datos.")
+    else:
+        if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
         anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
         mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
         fecha_inicio_q_ant_evo = date(anio_inicio_q, mes_inicio_q, 1)
