@@ -4669,15 +4669,15 @@ with tab_operativo:
         # EVOLUCIÓN DE CSAT: HISTÓRICO SEMANAL O DETALLE DIARIO DE LA SEMANA ACTUAL
         q_act_evo = (now_date.month - 1) // 3 + 1
         q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
-            st.markdown("""<style>
+        st.markdown("""<style>
         .st-key-bims_csat_switch_wrap [data-testid='stVerticalBlock'] { align-items: flex-end !important; }
         .st-key-bims_csat_switch_wrap [data-testid='stElementContainer'] { width: auto !important; align-self: flex-end !important; }
         </style>""", unsafe_allow_html=True)
-    col_titulo_csat, col_switch_csat = st.columns([5.5, 1.5], vertical_alignment="center")
+        col_titulo_csat, col_switch_csat = st.columns([5.5, 1.5], vertical_alignment="center")
         with col_titulo_csat:
             titulo_csat_evo = st.empty()
         with col_switch_csat:
-                with st.container(key="bims_csat_switch_wrap"):
+            with st.container(key="bims_csat_switch_wrap"):
                 vista_diaria_csat = st.toggle("Vista diaria", value=False, key="bims_csat_daily_view", help="Alternar entre la evolución histórica y el CSAT diario de esta semana.")
         if vista_diaria_csat:
             titulo_csat_evo.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;">CSAT diario — semana en curso</h3></div>', unsafe_allow_html=True)
