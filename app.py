@@ -4262,14 +4262,21 @@ with st.container(key="bims_main_navigation"):
     tabs_creadas = st.tabs(titulos_tabs)
 
 # Integra únicamente la navegación principal de Streamlit dentro de la cabecera fija.
-# Se conserva el nodo original para mantener los eventos y el estado de las pestañas.
-# Ejecuta el traslado desde un iframe same-origin, igual que el control lateral BIMS.
-# El observador permanece activo para recuperar la navegación si Streamlit reconstruye el DOM.
+# Mantiene un único observador y sustituye la lista anterior cuando Streamlit la reconstruye.
 st.iframe("""
 <script>
 (function () {
     try {
-        const doc = window.parent.document;
+        const parentWindow = window.parent;
+        const doc = parentWindow.document;
+        const controllerKey = '__bimsMainNavigationController';
+        const previousController = parentWindow[controllerKey];
+
+        // Cada rerun reemplaza el observador anterior en lugar de acumular otro.
+        if (previousController && previousController.observer) {
+            previousController.observer.disconnect();
+        }
+
         const headerSelector = '.st-key-bims_dashboard_header';
         const mainNavigationSelector = '.st-key-bims_main_navigation .stTabs [role="tablist"]';
         const placeholderId = 'bims-fixed-tabs-placeholder';
@@ -4278,9 +4285,7 @@ st.iframe("""
             const header = doc.querySelector(headerSelector);
             const headerInner = header && header.querySelector('[data-testid="stVerticalBlock"]');
 
-            // Marcar el bloque real del informe WBR. El ancla está dentro del
-            // fragmento Streamlit; usar su VerticalBlock evita depender de que
-            // el tab-panel sea ancestro directo en todas las versiones.
+            // Mantener el ajuste móvil del bloque del informe WBR.
             const wbrAnchor = doc.querySelector('.bims-wbr-scope-anchor');
             if (wbrAnchor) {
                 const wbrRoot = wbrAnchor.closest('[data-testid="stVerticalBlock"]');
@@ -4290,25 +4295,39 @@ st.iframe("""
                 }
             }
 
-            // Recuperar primero el nodo ya identificado. Si Streamlit lo reconstruye,
-            // buscarlo exclusivamente dentro del contenedor de navegación principal.
-            // Nunca buscar el primer .stTabs global: Administración tiene sus propias tabs.
-            let tabList = doc.getElementById('bims-main-tablist');
-            if (tabList && tabList.dataset.bimsMainTablist !== 'true') {
-                tabList = null;
-            }
+            if (!headerInner) return;
+
+            // Priorizar siempre la lista recién renderizada dentro de la navegación
+            // principal. No buscar pestañas globalmente: Administración tiene las suyas.
+            let tabList = doc.querySelector(mainNavigationSelector);
+
+            // Si no hay una lista nueva, conservar la que ya está alojada en la cabecera.
             if (!tabList) {
-                const mainTabList = doc.querySelector(mainNavigationSelector);
-                if (mainTabList) {
-                    mainTabList.id = 'bims-main-tablist';
-                    mainTabList.dataset.bimsMainTablist = 'true';
-                    tabList = mainTabList;
+                const currentTabList = doc.getElementById('bims-main-tablist');
+                if (
+                    currentTabList &&
+                    currentTabList.dataset.bimsMainTablist === 'true' &&
+                    headerInner.contains(currentTabList)
+                ) {
+                    tabList = currentTabList;
                 }
             }
-            if (!headerInner || !tabList) return;
+
+            if (!tabList) return;
+
+            // Si Streamlit creó una lista nueva, retirar la anterior del encabezado.
+            const previousTabList = doc.getElementById('bims-main-tablist');
+            if (previousTabList && previousTabList !== tabList) {
+                previousTabList.remove();
+            }
+
+            tabList.id = 'bims-main-tablist';
+            tabList.dataset.bimsMainTablist = 'true';
 
             const tabsWrapper = tabList.closest('.stTabs');
-            if (tabsWrapper) tabsWrapper.id = 'bims-main-tabs-wrapper';
+            if (tabsWrapper) {
+                tabsWrapper.id = 'bims-main-tabs-wrapper';
+            }
 
             let placeholder = doc.getElementById(placeholderId);
             if (!placeholder) {
@@ -4325,7 +4344,9 @@ st.iframe("""
         }
 
         integrarNavegacion();
-        const observer = new MutationObserver(integrarNavegacion);
+
+        const observer = new parentWindow.MutationObserver(integrarNavegacion);
+        parentWindow[controllerKey] = { observer: observer };
         observer.observe(doc.body, { childList: true, subtree: true });
     } catch (error) {
         console.error('BIMS: no se pudo integrar la navegación fija', error);
