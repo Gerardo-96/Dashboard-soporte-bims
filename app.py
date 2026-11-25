@@ -3908,6 +3908,24 @@ with st.container(key="bims_dashboard_header"):
     # Estilos CSS de pulso sutil tipo "radar"
     st.html("""
     <style>
+    .st-key-bims_user_menu button {
+        min-width: 42px !important;
+        width: 42px !important;
+        min-height: 42px !important;
+        height: 42px !important;
+        padding: 4px !important;
+        border-radius: 50% !important;
+        border: 1px solid rgba(148, 163, 184, .35) !important;
+        background: rgba(30, 41, 59, .72) !important;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, .18) !important;
+    }
+    .st-key-bims_user_menu button img {
+        width: 32px !important;
+        height: 32px !important;
+        max-height: 32px !important;
+        border-radius: 50% !important;
+        object-fit: cover !important;
+    }
     @keyframes bimsPing {
         75%, 100% {
             transform: scale(2.2);
