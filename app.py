@@ -1460,62 +1460,79 @@ if not st.user.is_logged_in:
 
     st.markdown("""
     <style>
-        .stApp { background-color: #0b1120 !important; color: #f8fafc; }
-        header[data-testid="stHeader"] { background-color: #0b1120 !important; }
+        .stApp {
+            background:
+                radial-gradient(ellipse at 50% 18%, rgba(30, 64, 105, .34), transparent 48%),
+                linear-gradient(145deg, #080f1d 0%, #0b1120 55%, #101b2d 100%) !important;
+            color: #f8fafc;
+        }
+        header[data-testid="stHeader"] { background: transparent !important; }
         [data-testid="stSidebar"] { display: none !important; }
         .stAppDeployButton, #MainMenu, footer { display: none !important; }
         div[data-testid="stAppViewBlockContainer"] {
-            padding-top: 4.5rem !important;
+            padding-top: clamp(3rem, 10vh, 7rem) !important;
             padding-bottom: 2rem !important;
         }
         .bims-google-login-card {
-            max-width: 440px; margin: 0 auto; padding: 30px;
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-            border: 1px solid #334155; border-radius: 16px;
-            box-shadow: 0 20px 30px -8px rgba(0,0,0,.6);
+            max-width: 460px; margin: 0 auto; padding: 38px 34px 30px;
+            background: linear-gradient(155deg, rgba(30,41,59,.97), rgba(12,22,39,.98));
+            border: 1px solid rgba(100, 116, 139, .38); border-radius: 20px;
+            box-shadow: 0 28px 70px rgba(0,0,0,.38);
             text-align: center;
         }
         .bims-google-login-logo {
-            width: 56px; height: 56px; margin: 0 auto 12px;
-            border-radius: 50%; background: rgba(56,189,248,.12);
-            border: 1px solid rgba(56,189,248,.3);
+            width: 62px; height: 62px; margin: 0 auto 18px;
+            border-radius: 18px; background: linear-gradient(145deg, #0f766e, #0e7490);
+            border: 1px solid rgba(94,234,212,.28);
             display: flex; align-items: center; justify-content: center;
-            font-size: 1.7rem; font-weight: 700; color: #f8fafc;
+            font-size: 1.8rem; font-weight: 800; color: #f8fafc;
+            box-shadow: 0 8px 24px rgba(13,148,136,.2);
         }
         .bims-google-login-title {
-            color: #f8fafc; font-size: 1.4rem; font-weight: 700;
-            letter-spacing: -.3px; margin-bottom: 5px;
+            color: #f8fafc; font-size: 1.45rem; font-weight: 750;
+            letter-spacing: -.035em; margin-bottom: 8px;
         }
         .bims-google-login-subtitle {
-            color: #94a3b8; font-size: .88rem; margin-bottom: 18px;
+            color: #a8b5c7; font-size: .91rem; line-height: 1.55;
+            margin: 0 auto 22px; max-width: 320px;
         }
-        div.stButton > button[kind="primary"], div.stButton > button {
-            border-radius: 9px; min-height: 44px; font-weight: 650;
+        .st-key-btn_google_login { max-width: 392px; margin: -1px auto 0; }
+        .st-key-btn_google_login button {
+            border-radius: 11px !important; min-height: 48px !important;
+            font-weight: 650 !important; border: 1px solid rgba(148,163,184,.24) !important;
+            box-shadow: 0 8px 22px rgba(0,0,0,.2) !important;
+        }
+        .bims-login-footnote {
+            color: #8291a6; text-align: center; font-size: .78rem;
+            max-width: 390px; margin: 12px auto 0; line-height: 1.5;
         }
     </style>
     """, unsafe_allow_html=True)
 
     col_izq, col_centro, col_der = st.columns([1, 1.15, 1])
     with col_centro:
-        st.markdown("""
-        <div class="bims-google-login-card">
-            <div class="bims-google-login-logo">B</div>
-            <div class="bims-google-login-title">Dashboard Soporte BIMS</div>
-            <div class="bims-google-login-subtitle">
-                Accede de forma segura con tu cuenta de Google
+        with st.container(key="bims_login_panel"):
+            st.markdown("""
+            <div class="bims-google-login-card">
+                <div class="bims-google-login-logo">B</div>
+                <div class="bims-google-login-title">Dashboard Soporte BIMS</div>
+                <div class="bims-google-login-subtitle">
+                    Accede de forma segura con tu cuenta de Google
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.button(
-            "Continuar con Google",
-            on_click=st.login,
-            use_container_width=True,
-            type="primary",
-            key="btn_google_login"
-        )
-        st.caption(
-            "Solo pueden ingresar cuentas registradas y activas en el sistema."
-        )
+            """, unsafe_allow_html=True)
+            st.button(
+                "Continuar con Google",
+                on_click=st.login,
+                use_container_width=True,
+                type="primary",
+                key="btn_google_login"
+            )
+            st.markdown(
+                '<div class="bims-login-footnote">El acceso está reservado a cuentas '
+                'registradas y habilitadas por el administrador.</div>',
+                unsafe_allow_html=True
+            )
     st.stop()
 
 
@@ -1576,6 +1593,18 @@ st.session_state["user_name"] = (
     or claims_google.get("name")
     or email_google
 )
+picture_google = str(claims_google.get("picture") or "").strip()
+st.session_state["user_picture"] = (
+    picture_google if picture_google.startswith("https://") else ""
+)
+
+
+def cerrar_sesion_google():
+    """Cierra la sesión OIDC y limpia los datos de identidad locales."""
+    for clave in ("user_authenticated", "user_email", "user_name", "user_picture"):
+        st.session_state[clave] = False if clave == "user_authenticated" else ""
+    st.logout()
+
 
 # ==========================================
 # FUNCIONES AUXILIARES DE TIEMPOS Y REGLAS DE NEGOCIO
@@ -3160,7 +3189,8 @@ if "input_f_hasta" not in st.session_state:
 # ==========================================
 # CARGA ÚNICA GLOBAL DE DATOS (ÓPTIMO EN RAM)
 # ==========================================
-df_all = obtener_datos()
+with st.spinner("Cargando conversaciones y preparando los indicadores..."):
+    df_all = obtener_datos()
 
 if not df_all.empty:
     canal_all_lower = df_all["canal"].fillna("").astype(str).str.lower() if "canal" in df_all.columns else pd.Series("", index=df_all.index)
@@ -3846,10 +3876,12 @@ with st.container(key="bims_sidebar_panel"):
     if st.button("Exportar Reporte a Excel", use_container_width=True):
         modal_exportar_excel()
 
-    if st.button("Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
-        st.session_state["user_authenticated"] = False
-        st.session_state["user_email"] = ""
-        st.logout()
+    st.button(
+        "Cerrar Sesión",
+        use_container_width=True,
+        key="btn_logout_sidebar",
+        on_click=cerrar_sesion_google
+    )
 
 with st.container(key="bims_dashboard_header"):
     # ==========================================
@@ -3967,7 +3999,9 @@ with st.container(key="bims_dashboard_header"):
     </div>
     """
 
-    col_header_info, col_header_bot = st.columns([20, 3.2], vertical_alignment="center")
+    col_header_info, col_header_bot, col_header_user = st.columns(
+        [20, 3.2, 0.9], vertical_alignment="center"
+    )
     with col_header_info:
         st.html(titulo_header_html)
     with col_header_bot:
@@ -3977,6 +4011,24 @@ with st.container(key="bims_dashboard_header"):
             render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
         with col_estado_bot:
             st.html(f'<div class="bims-header-bot-status" style="display:flex; justify-content:flex-end; align-items:center; min-height:50px; box-sizing:border-box;">{estado_bot_html}</div>')
+
+    with col_header_user:
+        avatar_url = st.session_state.get("user_picture", "")
+        etiqueta_avatar = f"![Perfil]({avatar_url})" if avatar_url.startswith("https://") else "👤"
+        with st.popover(
+            etiqueta_avatar,
+            help="Cuenta de usuario",
+            key="bims_user_menu"
+        ):
+            st.markdown(f"**{st.session_state.get('user_name', 'Usuario')}**")
+            st.caption(st.session_state.get("user_email", ""))
+            st.divider()
+            st.button(
+                "Cerrar sesión",
+                use_container_width=True,
+                key="btn_logout_user_menu",
+                on_click=cerrar_sesion_google
+            )
 
 
 st.markdown('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
@@ -8293,18 +8345,4 @@ with tab_faq:
         """)
 
 
-# Retirar el overlay de inicio solo después de que el contenido autenticado haya sido construido.
-if st.session_state.get("user_authenticated"):
-    st.iframe("""
-    <script>
-    (function() {
-        try {
-            const doc = window.parent.document;
-            window.setTimeout(function() {
-                const loginOverlay = doc.getElementById('bims-login-loading-overlay');
-                if (loginOverlay) loginOverlay.remove();
-            }, 900);
-        } catch (e) {}
-    })();
-    </script>
-    """, width=1, height=1)
+# El indicador de carga inicial se gestiona con st.spinner alrededor de la consulta global.
