@@ -1469,13 +1469,31 @@ if not st.user.is_logged_in:
         header[data-testid="stHeader"] { background: transparent !important; }
         [data-testid="stSidebar"] { display: none !important; }
         .stAppDeployButton, #MainMenu, footer { display: none !important; }
-        div[data-testid="stAppViewBlockContainer"] {
+        /* Centrado vertical sobre el área real de contenido de Streamlit */
+        .stAppViewContainer,
+        .stAppViewContainer .main {
+            min-height: 100vh !important;
+        }
+        .stAppViewContainer .main {
+            display: flex !important;
+            align-items: stretch !important;
+        }
+        .stAppViewContainer .main [data-testid="stMainBlockContainer"],
+        .stAppViewContainer .main div[data-testid="stAppViewBlockContainer"] {
+            width: 100% !important;
             min-height: 100vh !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
-            padding: 1.25rem 1rem !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        .stAppViewContainer .main [data-testid="stMainBlockContainer"] > div,
+        .stAppViewContainer .main div[data-testid="stAppViewBlockContainer"] > div {
+            width: 100% !important;
         }
         .st-key-bims_login_panel {
             width: 100%; max-width: 410px; margin: auto;
@@ -1500,6 +1518,12 @@ if not st.user.is_logged_in:
         .bims-google-login-title {
             color: #f8fafc; font-size: 1.32rem; font-weight: 730;
             letter-spacing: -.035em; margin-bottom: 6px;
+        }
+        .bims-title-accent {
+            background: linear-gradient(110deg, #5eead4, #38bdf8);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800; letter-spacing: .015em;
         }
         .bims-google-login-subtitle {
             color: #a8b5c7; font-size: .88rem; line-height: 1.5;
@@ -1543,7 +1567,7 @@ if not st.user.is_logged_in:
         with st.container(key="bims_login_panel"):
             st.markdown("""
             <div class="bims-google-login-logo">BIMS</div>
-            <div class="bims-google-login-title">Dashboard Soporte BIMS</div>
+            <div class="bims-google-login-title">Dashboard de Soporte <span class="bims-title-accent">BIMS</span></div>
             <div class="bims-google-login-subtitle">
                 Accede de forma segura con tu cuenta de Google
             </div>
