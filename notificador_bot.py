@@ -378,7 +378,7 @@ def procesar_alertas_y_reportes():
     
     if jid_grupo and hs_grupo_th > 0:
         res_abiertos = supabase.table("conversaciones")\
-            .select("id, created_at, canal, tenant, agente_asignado, etiquetas, nombre_contacto, estado, ultimo_multiplo_notificado, ai_title")\
+            .select("id, created_at, canal, tenant, agente_asignado, etiquetas, nombre_contacto, estado, fecha_cierre, ultimo_multiplo_notificado, ai_title")\
             .not_.in_("estado", ESTADOS_CERRADOS)\
             .neq("canal", "Correo electrónico")\
             .execute()
@@ -397,6 +397,11 @@ def procesar_alertas_y_reportes():
         ]
 
         for c in chats_recuperados:
+            # Omitir conversaciones con fecha de cierre, aunque estado siga figurando como Abierto.
+            if c.get("fecha_cierre") is not None:
+                print(f"⏭️ [OMITIDO CON FECHA DE CIERRE] Chat {c.get('id')} | Fecha: {c.get('fecha_cierre')}")
+                continue
+
             canal_lower = str(c.get("canal") or "").strip().lower()
             etiquetas_lower = str(c.get("etiquetas") or "").lower()
             
