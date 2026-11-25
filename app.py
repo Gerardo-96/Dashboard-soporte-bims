@@ -4063,9 +4063,23 @@ with st.container(key="bims_dashboard_header"):
         border-radius: 50% !important;
         object-fit: cover !important;
     }
-    /* Oculta únicamente el chevron del popover; conserva el avatar y su clic. */
-    .st-key-bims_user_menu button svg {
+    /* Oculta el icono desplegable que Streamlit agrega al botón del popover.
+       Streamlit puede renderizarlo como SVG o como icono Material según la versión. */
+    .st-key-bims_user_menu button svg,
+    .st-key-bims_user_menu button [data-testid="stIconMaterial"],
+    .st-key-bims_user_menu button [data-testid="stPopoverIcon"],
+    .st-key-bims_user_menu button .material-symbols-rounded,
+    .st-key-bims_user_menu button .material-icons,
+    .st-key-bims_user_menu button .material-icons-round {
         display: none !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-bims_user_menu button {
+        gap: 0 !important;
+        justify-content: center !important;
     }
     @keyframes bimsPing {
         75%, 100% {
