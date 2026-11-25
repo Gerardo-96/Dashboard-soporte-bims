@@ -4022,7 +4022,7 @@ with st.container(key="bims_dashboard_header"):
     # INDICADOR DE ESTADO EN VIVO (CABECERA)
     # ==========================================
     # ==========================================
-    @st.cache_data(ttl=15, show_spinner=False)
+    @st.cache_data(ttl=120, show_spinner=False)
     def obtener_estado_bot_salud():
         try:
             url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
