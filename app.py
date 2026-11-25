@@ -1473,11 +1473,15 @@ if not st.user.is_logged_in:
             padding-top: clamp(3rem, 10vh, 7rem) !important;
             padding-bottom: 2rem !important;
         }
-        .bims-google-login-card {
-            max-width: 460px; margin: 0 auto; padding: 38px 34px 30px;
+        .st-key-bims_login_panel {
+            width: 100%; max-width: 460px; margin: 0 auto;
+            padding: 38px 34px 26px;
             background: linear-gradient(155deg, rgba(30,41,59,.97), rgba(12,22,39,.98));
             border: 1px solid rgba(100, 116, 139, .38); border-radius: 20px;
             box-shadow: 0 28px 70px rgba(0,0,0,.38);
+            text-align: center;
+        }
+        .st-key-bims_login_panel [data-testid="stMarkdown"] {
             text-align: center;
         }
         .bims-google-login-logo {
@@ -1496,11 +1500,31 @@ if not st.user.is_logged_in:
             color: #a8b5c7; font-size: .91rem; line-height: 1.55;
             margin: 0 auto 22px; max-width: 320px;
         }
-        .st-key-btn_google_login { max-width: 392px; margin: -1px auto 0; }
+        .st-key-btn_google_login { max-width: 392px; margin: 8px auto 0; }
         .st-key-btn_google_login button {
-            border-radius: 11px !important; min-height: 48px !important;
-            font-weight: 650 !important; border: 1px solid rgba(148,163,184,.24) !important;
-            box-shadow: 0 8px 22px rgba(0,0,0,.2) !important;
+            position: relative !important;
+            display: flex !important; align-items: center !important;
+            justify-content: center !important;
+            border-radius: 11px !important; min-height: 50px !important;
+            padding: 0 48px !important;
+            font-weight: 650 !important; font-size: .94rem !important;
+            color: #1f2937 !important; background: #ffffff !important;
+            border: 1px solid #d7dde5 !important;
+            box-shadow: 0 5px 14px rgba(0,0,0,.16) !important;
+            transition: background .16s ease, box-shadow .16s ease, transform .16s ease !important;
+        }
+        .st-key-btn_google_login button:hover {
+            background: #f8fafc !important;
+            border-color: #c5ced9 !important;
+            box-shadow: 0 8px 20px rgba(0,0,0,.22) !important;
+            transform: translateY(-1px);
+        }
+        .st-key-btn_google_login button::before {
+            content: ""; position: absolute; left: 17px; top: 50%;
+            width: 21px; height: 21px; transform: translateY(-50%);
+            background-repeat: no-repeat; background-position: center;
+            background-size: contain;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.73 7.18l7.63 5.91c4.45-4.11 7.14-10.17 7.14-17.56z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.54 2.56 10.78l7.97-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.9-5.89l-7.63-5.91c-2.12 1.42-4.84 2.26-8.27 2.26-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/svg%3E");
         }
         .bims-login-footnote {
             color: #8291a6; text-align: center; font-size: .78rem;
@@ -1509,23 +1533,21 @@ if not st.user.is_logged_in:
     </style>
     """, unsafe_allow_html=True)
 
-    col_izq, col_centro, col_der = st.columns([1, 1.15, 1])
+    col_izq, col_centro, col_der = st.columns([1, 1, 1])
     with col_centro:
         with st.container(key="bims_login_panel"):
             st.markdown("""
-            <div class="bims-google-login-card">
-                <div class="bims-google-login-logo">B</div>
-                <div class="bims-google-login-title">Dashboard Soporte BIMS</div>
-                <div class="bims-google-login-subtitle">
-                    Accede de forma segura con tu cuenta de Google
-                </div>
+            <div class="bims-google-login-logo">B</div>
+            <div class="bims-google-login-title">Dashboard Soporte BIMS</div>
+            <div class="bims-google-login-subtitle">
+                Accede de forma segura con tu cuenta de Google
             </div>
             """, unsafe_allow_html=True)
             st.button(
                 "Continuar con Google",
                 on_click=st.login,
                 use_container_width=True,
-                type="primary",
+                type="secondary",
                 key="btn_google_login"
             )
             st.markdown(
