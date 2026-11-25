@@ -4146,7 +4146,7 @@ with st.container(key="bims_dashboard_header"):
         <span class="bims-whatsapp-sync-icon {'is-online' if bot_online else 'is-offline'}" title="{texto_estado_bot}" role="img" aria-label="{texto_estado_bot}" style="--bims-whatsapp-color:{color_bot};">{'⟳' if bot_online else '×'}</span>
     """
 
-    estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:7px;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
+    estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:0;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
 
     titulo_header_html = f"""
     <div style="display:flex; align-items:center; min-width:0; min-height:50px;">
