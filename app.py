@@ -175,27 +175,39 @@ def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
                 plot_bgcolor="#0b1120",
                 font=dict(color="#E2E8F0", size=15, family="Arial"),
                 title_font=dict(color="#F8FAFC", size=19, family="Arial"),
-                legend=dict(font=dict(color="#FFFFFF", size=32, family="Arial Black")),
+                legend=dict(font=dict(color="#FFFFFF", size=32, family="Arial")),
                 xaxis=dict(
-                    tickfont=dict(color="#F8FAFC", size=14, family="Arial"),
-                    title_font=dict(color="#CBD5E1", size=14, family="Arial"),
+                    tickfont=dict(color="#F8FAFC", size=24, family="Arial"),
+                    title_font=dict(color="#CBD5E1", size=18, family="Arial"),
+                    automargin=True,
                     gridcolor="#243247", zerolinecolor="#334155",
                     linecolor="#475569"
                 ),
                 yaxis=dict(
-                    tickfont=dict(color="#F8FAFC", size=14, family="Arial"),
-                    title_font=dict(color="#CBD5E1", size=14, family="Arial"),
+                    tickfont=dict(color="#F8FAFC", size=24, family="Arial"),
+                    title_font=dict(color="#CBD5E1", size=18, family="Arial"),
+                    automargin=True,
                     gridcolor="#243247", zerolinecolor="#334155",
                     linecolor="#475569"
                 )
             )
+            # Las etiquetas de dona necesitan más espacio exterior para evitar recortes.
+            if any(getattr(traza, "type", "") == "pie" for traza in figura_pdf.data):
+                figura_pdf.update_layout(
+                    margin=dict(l=150, r=150, t=110, b=110),
+                    uniformtext=dict(minsize=18, mode="hide")
+                )
             for traza in figura_pdf.data:
                 if getattr(traza, "showlegend", None) is not False:
                     traza.name = str(getattr(traza, "name", "") or "")
-                if hasattr(traza, "textfont"):
-                    traza.textfont = dict(color="#FFFFFF", size=48, family="Arial Black")
-                if hasattr(traza, "insidetextfont"):
-                    traza.insidetextfont = dict(color="#FFFFFF", size=46, family="Arial Black")
+                if getattr(traza, "type", "") == "pie":
+                    traza.textfont = dict(color="#FFFFFF", size=24, family="Arial")
+                    traza.textposition = "outside"
+                    traza.automargin = True
+                if hasattr(traza, "textfont") and getattr(traza, "type", "") != "pie":
+                    traza.textfont = dict(color="#FFFFFF", size=48, family="Arial")
+                if hasattr(traza, "insidetextfont") and getattr(traza, "type", "") != "pie":
+                    traza.insidetextfont = dict(color="#FFFFFF", size=46, family="Arial")
         except Exception as exc:
             raise RuntimeError("No se pudo preparar un gráfico para el PDF. Detalle: " + str(exc))
         try:
