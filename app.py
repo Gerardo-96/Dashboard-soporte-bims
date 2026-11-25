@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import unicodedata
 import io
 import requests
 import time as time_lib
@@ -2329,7 +2330,244 @@ def obtener_catalogo_motivos_recurrentes():
         if len(lote) < 1000:
             break
         inicio += 1000
+
     return todos
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def obtener_reglas_motivos_recurrentes():
+    """Lee las reglas configurables de clasificación por palabras clave."""
+    res = (
+        supabase.table("reglas_motivos_recurrentes")
+        .select("id, palabras_clave, motivo_recurrente, prioridad, activo, updated_at")
+        .order("prioridad")
+        .order("id")
+        .execute()
+    )
+    return res.data or []
+
+
+def normalizar_texto_regla(valor):
+    """Normaliza tildes, mayúsculas y signos para comparar palabras clave."""
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(caracter for caracter in texto if not unicodedata.combining(caracter))
+    return re.sub(r"[^a-z0-9]+", " ", texto.casefold()).strip()
+
+
+def motivo_por_reglas_recurrentes(titulo, reglas):
+    """Devuelve la primera categoría cuya regla activa coincide por prioridad."""
+    titulo_norm = normalizar_texto_regla(titulo)
+    if not titulo_norm:
+        return None
+    reglas_ordenadas = sorted(
+        reglas or [],
+        key=lambda regla: (int(regla.get("prioridad") or 100), int(regla.get("id") or 0))
+    )
+    for regla in reglas_ordenadas:
+        if not regla.get("activo", True):
+            continue
+        palabras = re.split(r"[,;\\n]", str(regla.get("palabras_clave") or ""))
+        for palabra in palabras:
+            palabra_norm = normalizar_texto_regla(palabra)
+            if palabra_norm and palabra_norm in titulo_norm:
+                motivo = str(regla.get("motivo_recurrente") or "").strip()
+                if motivo:
+                    return motivo
+    return None
+
+
+def renderizar_editor_reglas_motivos_recurrentes():
+    """Administra las reglas sin necesidad de editar el código."""
+    st.markdown("---")
+    st.markdown("##### Reglas automáticas por palabras clave")
+    st.caption(
+        "Las reglas activas se evalúan antes de Gemini. Si coinciden varias, "
+        "se aplica primero la de menor prioridad numérica. Las palabras se "
+        "comparan sin distinguir mayúsculas ni tildes."
+    )
+    try:
+        reglas_todas = obtener_reglas_motivos_recurrentes()
+    except Exception as error:
+        st.warning(
+            "Todavía no se puede cargar la tabla de reglas. Ejecutá primero el "
+            "script SQL sql/reglas_motivos_recurrentes.sql en Supabase. "
+            f"Detalle: {error}"
+        )
+        return []
+
+    with st.container(border=True):
+        with st.form("form_nueva_regla_motivos_recurrentes"):
+            st.markdown("**Agregar regla**")
+            col_pal, col_mot, col_pri = st.columns([3, 2, 1])
+            palabras = col_pal.text_input(
+                "Palabras clave (separadas por coma)",
+                placeholder="certificación, certificar, certificado, SIFEN"
+            )
+            motivo = col_mot.text_input(
+                "Motivo que se asignará",
+                placeholder="Certificación de comprobantes"
+            )
+            prioridad = col_pri.number_input(
+                "Prioridad", min_value=1, max_value=9999, value=10, step=1
+            )
+            activo = st.checkbox("Regla activa", value=True)
+            agregar = st.form_submit_button("Agregar regla", use_container_width=True)
+            if agregar:
+                if not palabras.strip() or not motivo.strip():
+                    st.warning("Completá las palabras clave y el motivo asignado.")
+                else:
+                    try:
+                        supabase.table("reglas_motivos_recurrentes").insert({
+                            "palabras_clave": palabras.strip(),
+                            "motivo_recurrente": motivo.strip(),
+                            "prioridad": int(prioridad),
+                            "activo": bool(activo),
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }).execute()
+                        obtener_reglas_motivos_recurrentes.clear()
+                        st.success("Regla agregada.")
+                        st.rerun()
+                    except Exception as error:
+                        st.error(f"No se pudo agregar la regla: {error}")
+
+        if reglas_todas:
+            df_reglas = pd.DataFrame(reglas_todas)
+            df_reglas = df_reglas[[
+                "id", "palabras_clave", "motivo_recurrente", "prioridad", "activo"
+            ]].copy()
+            df_reglas["prioridad"] = pd.to_numeric(
+                df_reglas["prioridad"], errors="coerce"
+            ).fillna(100).astype(int)
+            df_reglas["activo"] = df_reglas["activo"].fillna(False).astype(bool)
+            editadas = st.data_editor(
+                df_reglas,
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed",
+                key="editor_reglas_motivos_recurrentes",
+                disabled=["id"],
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", width="small"),
+                    "palabras_clave": st.column_config.TextColumn(
+                        "Palabras clave", width="large", required=True
+                    ),
+                    "motivo_recurrente": st.column_config.TextColumn(
+                        "Motivo asignado", width="large", required=True
+                    ),
+                    "prioridad": st.column_config.NumberColumn(
+                        "Prioridad", min_value=1, max_value=9999, step=1
+                    ),
+                    "activo": st.column_config.CheckboxColumn("Activa")
+                }
+            )
+            col_save, col_delete = st.columns([2, 1])
+            if col_save.button(
+                "Guardar cambios de reglas",
+                key="btn_guardar_reglas_motivos",
+                use_container_width=True
+            ):
+                originales = {int(r["id"]): r for r in reglas_todas}
+                guardadas = 0
+                try:
+                    for _, fila in editadas.iterrows():
+                        regla_id = int(fila["id"])
+                        original = originales.get(regla_id, {})
+                        palabras_nuevas = str(fila.get("palabras_clave") or "").strip()
+                        motivo_nuevo = str(fila.get("motivo_recurrente") or "").strip()
+                        prioridad_nueva = int(fila.get("prioridad") or 100)
+                        activo_nuevo = bool(fila.get("activo", False))
+                        if not palabras_nuevas or not motivo_nuevo:
+                            continue
+                        if (
+                            palabras_nuevas != str(original.get("palabras_clave") or "").strip()
+                            or motivo_nuevo != str(original.get("motivo_recurrente") or "").strip()
+                            or prioridad_nueva != int(original.get("prioridad") or 100)
+                            or activo_nuevo != bool(original.get("activo", False))
+                        ):
+                            supabase.table("reglas_motivos_recurrentes").update({
+                                "palabras_clave": palabras_nuevas,
+                                "motivo_recurrente": motivo_nuevo,
+                                "prioridad": prioridad_nueva,
+                                "activo": activo_nuevo,
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            }).eq("id", regla_id).execute()
+                            guardadas += 1
+                    obtener_reglas_motivos_recurrentes.clear()
+                    st.success(f"Se actualizaron {guardadas} reglas.")
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"No se pudieron guardar las reglas: {error}")
+
+            opciones = {
+                f"ID {r['id']}: {r['motivo_recurrente']} — {r['palabras_clave']}": r["id"]
+                for r in reglas_todas
+            }
+            seleccion = st.selectbox(
+                "Regla a eliminar", list(opciones.keys()),
+                key="sel_eliminar_regla_motivos"
+            )
+            if col_delete.button(
+                "Eliminar regla",
+                key="btn_eliminar_regla_motivos",
+                use_container_width=True
+            ):
+                try:
+                    supabase.table("reglas_motivos_recurrentes").delete().eq(
+                        "id", opciones[seleccion]
+                    ).execute()
+                    obtener_reglas_motivos_recurrentes.clear()
+                    st.success("Regla eliminada.")
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"No se pudo eliminar la regla: {error}")
+        else:
+            st.info("Todavía no hay reglas configuradas.")
+
+        if reglas_todas and st.button(
+            "Aplicar reglas al catálogo existente",
+            key="btn_aplicar_reglas_catalogo_existente"
+        ):
+            try:
+                catalogo_actual = obtener_catalogo_motivos_recurrentes()
+                cambios_regla = []
+                for item in catalogo_actual:
+                    if str(item.get("origen") or "").lower() == "manual":
+                        continue
+                    nuevo_motivo = motivo_por_reglas_recurrentes(
+                        item.get("ai_title"), reglas_todas
+                    )
+                    if nuevo_motivo and nuevo_motivo != str(
+                        item.get("motivo_recurrente") or ""
+                    ).strip():
+                        cambios_regla.append({
+                            "ai_title": item["ai_title"],
+                            "motivo_recurrente": nuevo_motivo,
+                            "origen": "regla",
+                            "revisado": False,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        })
+                if cambios_regla:
+                    supabase.table("catalogo_motivos_recurrentes").upsert(
+                        cambios_regla, on_conflict="ai_title"
+                    ).execute()
+                    obtener_catalogo_motivos_recurrentes.clear()
+                    st.success(
+                        f"Se aplicaron reglas a {len(cambios_regla)} títulos existentes. "
+                        "Las correcciones manuales se conservaron."
+                    )
+                    st.rerun()
+                else:
+                    st.info("No se encontraron títulos que requieran cambios.")
+            except Exception as error:
+                st.error(f"No se pudieron aplicar las reglas: {error}")
+
+    try:
+        return [
+            regla for regla in obtener_reglas_motivos_recurrentes()
+            if regla.get("activo", True)
+        ]
+    except Exception:
+        return []
 
 
 def clasificar_titulos_recurrentes_ia(titulos):
@@ -2353,9 +2591,8 @@ def clasificar_titulos_recurrentes_ia(titulos):
             "Actuá como especialista en taxonomía de incidencias de soporte. "
             "Recibirás títulos breves generados por IA. Agrupá únicamente los que "
             "describan el mismo problema o solicitud; normalizá singular/plural y "
-            "redacciones equivalentes. Conservá diferencias entre productos, documentos "
-            "y acciones: 'Certificación de factura' y 'Certificación de facturas' pueden "
-            "compartir categoría, pero 'Certificación de ventas' debe quedar diferenciada. "
+            "redacciones equivalentes. Los títulos relacionados con certificación, "
+            "certificar, certificados o SIFEN deben agruparse como 'Certificación de comprobantes'. "
             "'Anulación de factura' no debe confundirse con 'Cambio de factura'. "
             "Usá categorías breves y claras. Si el título es ambiguo, mantenelo como "
             "categoría independiente. No inventes contexto. Respondé exclusivamente "
@@ -2411,6 +2648,7 @@ def renderizar_gestion_motivos_recurrentes(df_base_motivos):
         "Se utiliza exclusivamente AI title. No se consultan ni almacenan mensajes, "
         "transcripciones o datos personales de las conversaciones."
     )
+    reglas_activas = renderizar_editor_reglas_motivos_recurrentes()
     if df_base_motivos is None or df_base_motivos.empty or "ai_title" not in df_base_motivos.columns:
         st.info("No hay títulos AI disponibles en el histórico cargado.")
         return
@@ -2444,12 +2682,34 @@ def renderizar_gestion_motivos_recurrentes(df_base_motivos):
         ):
             try:
                 with st.spinner(f"Clasificando {min(40, len(pendientes))} títulos..."):
-                    nuevos = clasificar_titulos_recurrentes_ia(pendientes[:40])
-                    supabase.table("catalogo_motivos_recurrentes").upsert(
-                        nuevos, on_conflict="ai_title"
-                    ).execute()
+                    lote = pendientes[:40]
+                    nuevos = []
+                    pendientes_ia = []
+                    for titulo in lote:
+                        motivo_regla = motivo_por_reglas_recurrentes(
+                            titulo, reglas_activas
+                        )
+                        if motivo_regla:
+                            nuevos.append({
+                                "ai_title": titulo,
+                                "motivo_recurrente": motivo_regla,
+                                "origen": "regla",
+                                "revisado": False
+                            })
+                        else:
+                            pendientes_ia.append(titulo)
+                    if pendientes_ia:
+                        nuevos.extend(clasificar_titulos_recurrentes_ia(pendientes_ia))
+                    if nuevos:
+                        supabase.table("catalogo_motivos_recurrentes").upsert(
+                            nuevos, on_conflict="ai_title"
+                        ).execute()
                 obtener_catalogo_motivos_recurrentes.clear()
-                st.success(f"Se clasificaron {len(nuevos)} títulos.")
+                st.success(
+                    f"Se clasificaron {len(nuevos)} títulos: "
+                    f"{sum(1 for item in nuevos if item.get('origen') == 'regla')} por reglas "
+                    f"y {sum(1 for item in nuevos if item.get('origen') == 'ia')} con IA."
+                )
                 st.rerun()
             except Exception as error:
                 st.error(f"No se pudo completar la clasificación: {error}")
