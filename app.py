@@ -16,6 +16,21 @@ from supabase import create_client, Client
 from guardias import render_widget_guardia
 import extra_streamlit_components as stx
 
+@st.cache_resource
+def obtener_estado_sync_global():
+    """Estado compartido del proceso de sincronización entre sesiones."""
+    return {
+        "status": "idle",
+        "processed": 0,
+        "log": "",
+        "error": None,
+        "cache_invalidation_pending": False,
+    }
+
+
+GLOBAL_SYNC_STATE = obtener_estado_sync_global()
+
+
 
 def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
     """Construye un PDF ejecutivo con métricas, resumen y gráficos del WBR."""
@@ -2904,11 +2919,11 @@ st.markdown("""
         }
     }
 
-    /* Elevar directamente la alerta para eliminar el hueco superior de Streamlit. */
+    /* Mantener la alerta por debajo de la cabecera fija, sin superposición. */
     div[data-testid="stExpander"]:has(.alerta-ancla-activa) {
         position: relative !important;
-        top: -24px !important;
-        margin-block-end: -24px !important;
+        top: -8px !important;
+        margin-block-end: -8px !important;
     }
 
     /* Fondo oscuro limpio para el contenido interno cuando se despliega */
