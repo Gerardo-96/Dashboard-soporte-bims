@@ -1320,6 +1320,177 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
 </style>
 """, unsafe_allow_html=True)
 
+/* Estilos del panel lateral BIMS cargados antes de consultas y datos. */
+<style>
+    /* El contenedor externo de Streamlit también sale del flujo normal.
+       El panel interior ya es fixed; sin esto, el wrapper puede reservar altura
+       antes del encabezado aunque el panel esté cerrado. */
+    div[data-testid="stElementContainer"]:has(.st-key-bims_sidebar_panel) {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        z-index: 1000000 !important;
+    }
+
+    /* Acabado compacto y consistente del panel de control */
+    .st-key-bims_sidebar_panel {
+        position: fixed !important;
+        inset: 0 auto 0 0 !important;
+        width: 320px !important;
+        max-width: min(88vw, 360px) !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+        padding: 20px 17px 18px !important;
+        margin: 0 !important;
+        background: linear-gradient(180deg, #101a2b 0%, #0b1120 58%) !important;
+        border-right: 1px solid #26364b !important;
+        box-shadow: 18px 0 48px rgba(0,0,0,.34) !important;
+        z-index: 1000000 !important;
+        transform: translate3d(0,0,0);
+        transition: transform .28s cubic-bezier(.22,.8,.25,1) !important;
+    }
+    .bims-sidebar-heading {
+        padding: 1px 2px 13px;
+        margin: 0 0 12px;
+        border-bottom: 1px solid rgba(148,163,184,.18);
+    }
+    .bims-sidebar-heading-title {
+        color: #f1f5f9;
+        font-size: 1.12rem;
+        line-height: 1.3;
+        font-weight: 700;
+        letter-spacing: -.015em;
+    }
+    .bims-sidebar-heading-subtitle {
+        margin-top: 3px;
+        color: #8fa2ba;
+        font-size: .72rem;
+        letter-spacing: .035em;
+    }
+    .st-key-bims_sidebar_panel [data-testid="stVerticalBlock"] {
+        gap: .62rem;
+    }
+    .st-key-bims_sidebar_panel hr {
+        margin: 7px 0 10px !important;
+        border-color: rgba(148,163,184,.18) !important;
+    }
+    .st-key-bims_sidebar_panel [data-testid="stForm"] {
+        border: 1px solid rgba(100,116,139,.22);
+        border-radius: 11px;
+        padding: 11px 10px 10px;
+        background: rgba(15,23,42,.32);
+    }
+    .st-key-bims_sidebar_panel [data-testid="stForm"] [data-testid="stVerticalBlock"] {
+        gap: .55rem;
+    }
+    .st-key-bims_sidebar_panel button {
+        border-radius: 9px !important;
+    }
+    .st-key-bims_sidebar_panel .db-info-box {
+        margin: 0 !important;
+        padding: 9px 11px !important;
+        border-radius: 9px !important;
+        line-height: 1.55 !important;
+    }
+    /* El panel permanece cerrado por defecto incluso antes de que cargue el JS. */
+    html:not(.bims-sidebar-open) .st-key-bims_sidebar_panel {
+        transform: translate3d(-105%,0,0) !important;
+        box-shadow: none !important;
+        pointer-events: none !important;
+    }
+    html.bims-sidebar-open .st-key-bims_sidebar_panel {
+        transform: translate3d(0,0,0) !important;
+        pointer-events: auto !important;
+    }
+    #bims-sidebar-toggle {
+        position: fixed;
+        top: 12px;
+        left: 270px;
+        width: 38px;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid #3b506b;
+        border-radius: 10px;
+        background: #17263a;
+        color: #e2e8f0;
+        font: inherit;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        z-index: 1000002;
+        box-shadow: 0 5px 18px rgba(0,0,0,.28);
+        transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
+    }
+    #bims-sidebar-toggle:hover { background: #223650; }
+    .st-key-btn_abrir_guardias_header_calendar button,
+    .st-key-btn_abrir_guardias_header_alert button,
+    .st-key-btn_abrir_guardias_header button {
+        min-width: 44px !important;
+        width: 44px !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 9px !important;
+        background: transparent !important;
+        color: #94a3b8 !important;
+        font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif !important;
+        font-size: 1.75rem !important;
+        font-weight: 500 !important;
+        line-height: 1 !important;
+        box-shadow: none !important;
+        transition: color .18s ease, background .18s ease, transform .18s ease !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button p {
+        font-size: 0 !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button span,
+    .st-key-btn_abrir_guardias_header_alert button p,
+    .st-key-btn_abrir_guardias_header_alert button span,
+    .st-key-btn_abrir_guardias_header button p,
+    .st-key-btn_abrir_guardias_header button span {
+        font-size: 1.75rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button:hover {
+        background: rgba(56,189,248,.10) !important;
+        color: #7dd3fc !important;
+        transform: translateY(-1px);
+    }
+    .st-key-btn_abrir_guardias_header_alert button {
+        color: #fbbf24 !important;
+        text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
+    }
+    .st-key-btn_abrir_guardias_header_alert button:hover {
+        background: rgba(251,191,36,.10) !important;
+        color: #fcd34d !important;
+    }
+    html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
+    @media (max-width: 600px) {
+        .st-key-bims_sidebar_panel { width: 88vw !important; }
+        #bims-sidebar-toggle { left: calc(88vw - 52px); }
+        html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .st-key-bims_sidebar_panel, #bims-sidebar-toggle { transition-duration: .01ms !important; }
+    }
+</style>
+
 st.html("""
 <script>
 (function () {
@@ -3706,177 +3877,7 @@ if "bims_hora_inicio" not in st.session_state:
 if "bims_hora_fin" not in st.session_state:
     st.session_state["bims_hora_fin"] = time(18, 0)
 
-st.markdown("""
-<style>
-    /* El contenedor externo de Streamlit también sale del flujo normal.
-       El panel interior ya es fixed; sin esto, el wrapper puede reservar altura
-       antes del encabezado aunque el panel esté cerrado. */
-    div[data-testid="stElementContainer"]:has(.st-key-bims_sidebar_panel) {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 0 !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: visible !important;
-        z-index: 1000000 !important;
-    }
 
-    /* Acabado compacto y consistente del panel de control */
-    .st-key-bims_sidebar_panel {
-        position: fixed !important;
-        inset: 0 auto 0 0 !important;
-        width: 320px !important;
-        max-width: min(88vw, 360px) !important;
-        height: 100vh !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        box-sizing: border-box !important;
-        padding: 20px 17px 18px !important;
-        margin: 0 !important;
-        background: linear-gradient(180deg, #101a2b 0%, #0b1120 58%) !important;
-        border-right: 1px solid #26364b !important;
-        box-shadow: 18px 0 48px rgba(0,0,0,.34) !important;
-        z-index: 1000000 !important;
-        transform: translate3d(0,0,0);
-        transition: transform .28s cubic-bezier(.22,.8,.25,1) !important;
-    }
-    .bims-sidebar-heading {
-        padding: 1px 2px 13px;
-        margin: 0 0 12px;
-        border-bottom: 1px solid rgba(148,163,184,.18);
-    }
-    .bims-sidebar-heading-title {
-        color: #f1f5f9;
-        font-size: 1.12rem;
-        line-height: 1.3;
-        font-weight: 700;
-        letter-spacing: -.015em;
-    }
-    .bims-sidebar-heading-subtitle {
-        margin-top: 3px;
-        color: #8fa2ba;
-        font-size: .72rem;
-        letter-spacing: .035em;
-    }
-    .st-key-bims_sidebar_panel [data-testid="stVerticalBlock"] {
-        gap: .62rem;
-    }
-    .st-key-bims_sidebar_panel hr {
-        margin: 7px 0 10px !important;
-        border-color: rgba(148,163,184,.18) !important;
-    }
-    .st-key-bims_sidebar_panel [data-testid="stForm"] {
-        border: 1px solid rgba(100,116,139,.22);
-        border-radius: 11px;
-        padding: 11px 10px 10px;
-        background: rgba(15,23,42,.32);
-    }
-    .st-key-bims_sidebar_panel [data-testid="stForm"] [data-testid="stVerticalBlock"] {
-        gap: .55rem;
-    }
-    .st-key-bims_sidebar_panel button {
-        border-radius: 9px !important;
-    }
-    .st-key-bims_sidebar_panel .db-info-box {
-        margin: 0 !important;
-        padding: 9px 11px !important;
-        border-radius: 9px !important;
-        line-height: 1.55 !important;
-    }
-    /* El panel permanece cerrado por defecto incluso antes de que cargue el JS. */
-    html:not(.bims-sidebar-open) .st-key-bims_sidebar_panel {
-        transform: translate3d(-105%,0,0) !important;
-        box-shadow: none !important;
-        pointer-events: none !important;
-    }
-    html.bims-sidebar-open .st-key-bims_sidebar_panel {
-        transform: translate3d(0,0,0) !important;
-        pointer-events: auto !important;
-    }
-    #bims-sidebar-toggle {
-        position: fixed;
-        top: 12px;
-        left: 270px;
-        width: 38px;
-        height: 38px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        border: 1px solid #3b506b;
-        border-radius: 10px;
-        background: #17263a;
-        color: #e2e8f0;
-        font: inherit;
-        font-size: 20px;
-        line-height: 1;
-        cursor: pointer;
-        z-index: 1000002;
-        box-shadow: 0 5px 18px rgba(0,0,0,.28);
-        transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
-    }
-    #bims-sidebar-toggle:hover { background: #223650; }
-    .st-key-btn_abrir_guardias_header_calendar button,
-    .st-key-btn_abrir_guardias_header_alert button,
-    .st-key-btn_abrir_guardias_header button {
-        min-width: 44px !important;
-        width: 44px !important;
-        height: 44px !important;
-        min-height: 44px !important;
-        overflow: visible !important;
-        padding: 0 !important;
-        border: 0 !important;
-        border-radius: 9px !important;
-        background: transparent !important;
-        color: #94a3b8 !important;
-        font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif !important;
-        font-size: 1.75rem !important;
-        font-weight: 500 !important;
-        line-height: 1 !important;
-        box-shadow: none !important;
-        transition: color .18s ease, background .18s ease, transform .18s ease !important;
-    }
-    .st-key-btn_abrir_guardias_header_calendar button p {
-        font-size: 0 !important;
-        line-height: 1 !important;
-        margin: 0 !important;
-    }
-    .st-key-btn_abrir_guardias_header_calendar button span,
-    .st-key-btn_abrir_guardias_header_alert button p,
-    .st-key-btn_abrir_guardias_header_alert button span,
-    .st-key-btn_abrir_guardias_header button p,
-    .st-key-btn_abrir_guardias_header button span {
-        font-size: 1.75rem !important;
-        line-height: 1 !important;
-        margin: 0 !important;
-    }
-    .st-key-btn_abrir_guardias_header_calendar button:hover {
-        background: rgba(56,189,248,.10) !important;
-        color: #7dd3fc !important;
-        transform: translateY(-1px);
-    }
-    .st-key-btn_abrir_guardias_header_alert button {
-        color: #fbbf24 !important;
-        text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
-    }
-    .st-key-btn_abrir_guardias_header_alert button:hover {
-        background: rgba(251,191,36,.10) !important;
-        color: #fcd34d !important;
-    }
-    html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
-    @media (max-width: 600px) {
-        .st-key-bims_sidebar_panel { width: 88vw !important; }
-        #bims-sidebar-toggle { left: calc(88vw - 52px); }
-        html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .st-key-bims_sidebar_panel, #bims-sidebar-toggle { transition-duration: .01ms !important; }
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # El iframe actúa como ejecutor same-origin y crea el control directamente
 # en el documento principal, evitando depender del DOM interno de st.html.
