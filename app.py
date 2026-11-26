@@ -2394,6 +2394,7 @@ def motivo_por_reglas_recurrentes(titulo, reglas):
     return None
 
 
+@st.fragment
 def renderizar_editor_reglas_motivos_recurrentes():
     """Administra las reglas sin necesidad de editar el código."""
     st.markdown("---")
@@ -2414,21 +2415,27 @@ def renderizar_editor_reglas_motivos_recurrentes():
         return []
 
     with st.container(border=True):
+        version_form = st.session_state.get("version_form_nueva_regla_motivos", 0)
         with st.form("form_nueva_regla_motivos_recurrentes"):
             st.markdown("**Agregar regla**")
             col_pal, col_mot, col_pri = st.columns([3, 2, 1])
             palabras = col_pal.text_input(
                 "Palabras clave (separadas por coma)",
-                placeholder="certificación, certificar, certificado, SIFEN"
+                placeholder="certificación, certificar, certificado, SIFEN",
+                key=f"reglas_palabras_{version_form}"
             )
             motivo = col_mot.text_input(
                 "Motivo que se asignará",
-                placeholder="Certificación de comprobantes"
+                placeholder="Certificación de comprobantes",
+                key=f"reglas_motivo_{version_form}"
             )
             prioridad = col_pri.number_input(
-                "Prioridad", min_value=1, max_value=9999, value=10, step=1
+                "Prioridad", min_value=1, max_value=9999, value=10, step=1,
+                key=f"reglas_prioridad_{version_form}"
             )
-            activo = st.checkbox("Regla activa", value=True)
+            activo = st.checkbox(
+                "Regla activa", value=True, key=f"reglas_activa_{version_form}"
+            )
             agregar = st.form_submit_button("Agregar regla", use_container_width=True)
             if agregar:
                 if not palabras.strip() or not motivo.strip():
@@ -2443,8 +2450,9 @@ def renderizar_editor_reglas_motivos_recurrentes():
                             "updated_at": datetime.now(timezone.utc).isoformat()
                         }).execute()
                         obtener_reglas_motivos_recurrentes.clear()
+                        st.session_state["version_form_nueva_regla_motivos"] = version_form + 1
                         st.success("Regla agregada.")
-                        st.rerun()
+                        st.rerun(scope="fragment")
                     except Exception as error:
                         st.error(f"No se pudo agregar la regla: {error}")
 
@@ -2512,7 +2520,7 @@ def renderizar_editor_reglas_motivos_recurrentes():
                             guardadas += 1
                     obtener_reglas_motivos_recurrentes.clear()
                     st.success(f"Se actualizaron {guardadas} reglas.")
-                    st.rerun()
+                    st.rerun(scope="fragment")
                 except Exception as error:
                     st.error(f"No se pudieron guardar las reglas: {error}")
 
@@ -2535,7 +2543,7 @@ def renderizar_editor_reglas_motivos_recurrentes():
                     ).execute()
                     obtener_reglas_motivos_recurrentes.clear()
                     st.success("Regla eliminada.")
-                    st.rerun()
+                    st.rerun(scope="fragment")
                 except Exception as error:
                     st.error(f"No se pudo eliminar la regla: {error}")
         else:
@@ -2576,7 +2584,7 @@ def renderizar_editor_reglas_motivos_recurrentes():
                         f"Se aplicaron reglas a {len(cambios_regla)} títulos existentes. "
                         "Las correcciones manuales se conservaron."
                     )
-                    st.rerun()
+                    st.rerun(scope="fragment")
                 else:
                     st.info("No se encontraron títulos que requieran cambios.")
             except Exception as error:
