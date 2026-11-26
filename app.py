@@ -1320,8 +1320,8 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
 </style>
 """, unsafe_allow_html=True)
 
-/* Estilos del panel lateral BIMS cargados antes de consultas y datos. */
 <style>
+    /* Estilos del panel lateral BIMS cargados antes de consultas y datos. */
     /* El contenedor externo de Streamlit también sale del flujo normal.
        El panel interior ya es fixed; sin esto, el wrapper puede reservar altura
        antes del encabezado aunque el panel esté cerrado. */
