@@ -6603,15 +6603,27 @@ def renderizar_informe_wbr(df_base_in, df_correos_in=None):
         ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
         df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
 
-    df_wbr_base["iso_year"] = df_wbr_base["created_at_dt"].dt.isocalendar().year
-    df_wbr_base["iso_week"] = df_wbr_base["created_at_dt"].dt.isocalendar().week
-    df_wbr_base["semana_str"] = df_wbr_base.apply(lambda r: f"Semana {r['iso_week']:02d} ({r['iso_year']})", axis=1)
+    # Las fechas de creación nulas producen <NA> en el calendario ISO.
+    # Conservamos esas filas en df_wbr_base, pero no las usamos para crear semanas.
+    iso_info = df_wbr_base["created_at_dt"].dt.isocalendar()
+    df_wbr_base["iso_year"] = iso_info["year"].astype("Int64")
+    df_wbr_base["iso_week"] = iso_info["week"].astype("Int64")
+    df_wbr_base["semana_str"] = (
+        "Semana "
+        + df_wbr_base["iso_week"].astype("string").str.zfill(2)
+        + " ("
+        + df_wbr_base["iso_year"].astype("string")
+        + ")"
+    )
 
     df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
     df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
 
     semanas_disponibles = (
-        df_wbr_base[["iso_year", "iso_week", "semana_str"]]
+        df_wbr_base.loc[
+            df_wbr_base["iso_year"].notna() & df_wbr_base["iso_week"].notna(),
+            ["iso_year", "iso_week", "semana_str"]
+        ]
         .drop_duplicates()
         .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
         .reset_index(drop=True)
