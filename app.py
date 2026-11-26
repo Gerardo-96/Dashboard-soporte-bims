@@ -2942,22 +2942,27 @@ def obtener_timestamp_sync():
 
 @st.cache_data(ttl=900, show_spinner=False)
 def obtener_datos_hoy():
-    """Descarga por lotes las conversaciones con actividad hoy y todos los chats abiertos."""
+    """Descarga conversaciones creadas, calificadas o cerradas hoy, además de las que siguen abiertas."""
     tz_py = timezone(timedelta(hours=-3))
     hoy_inicio_py = datetime.now(tz_py).replace(hour=0, minute=0, second=0, microsecond=0)
     hoy_inicio_utc = hoy_inicio_py.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
-
-    def consultar_todos_los_lotes(consulta_base):
-        """Ejecuta una consulta paginada para no quedar limitado a las primeras 1.000 filas."""
+    def consultar_todos_los_lotes():
+        """Ejecuta la consulta selectiva por lotes para no quedar limitada a 1.000 filas."""
         todos = []
         inicio = 0
         tamanio_lote = 1000
 
         while True:
             respuesta = (
-                consulta_base()
+                supabase.table("conversaciones")
+                .select(COLUMNAS_DASHBOARD)
+                .or_(
+                    f"created_at.gte.{hoy_inicio_utc},"
+                    f"fecha_calificacion.gte.{hoy_inicio_utc},"
+                    f"fecha_cierre.gte.{hoy_inicio_utc},"
+                    "estado.eq.Abierto"
+                )
                 .order("id")
                 .range(inicio, inicio + tamanio_lote - 1)
                 .execute()
@@ -2974,23 +2979,7 @@ def obtener_datos_hoy():
         return todos
 
     try:
-        # 1. Todas las conversaciones con actividad desde el inicio del día en Paraguay.
-        datos = consultar_todos_los_lotes(
-            lambda: supabase.table("conversaciones")
-                .select(COLUMNAS_DASHBOARD)
-                .gte("updated_at", hoy_inicio_utc)
-        )
-
-        # 2. Todas las conversaciones que continúan abiertas, también paginadas.
-        datos_abiertos = consultar_todos_los_lotes(
-            lambda: supabase.table("conversaciones")
-                .select(COLUMNAS_DASHBOARD)
-                .not_.in_("estado", estados_cerrados)
-        )
-
-        todos_recientes = {r["id"]: r for r in (datos + datos_abiertos)}
-        return list(todos_recientes.values())
-
+        return consultar_todos_los_lotes()
     except Exception as e:
         st.error(f"Error consultando datos frescos en Supabase: {e}")
         return []
