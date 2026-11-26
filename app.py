@@ -1139,30 +1139,13 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         .st-key-bims_dashboard_header .bims-header-bot-status {
             display: none !important;
         }
-        /* En móvil se conserva únicamente el título; calendario y perfil se ocultan. */
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-            width: 100% !important;
-            gap: 0 !important;
-        }
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(1) {
-            display: flex !important;
-            flex: 1 1 auto !important;
-            width: auto !important;
-            max-width: none !important;
-            min-width: 0 !important;
-        }
-        /* En móvil se oculta solo el calendario; el indicador de WhatsApp
-           permanece junto al título y no se elimina la columna completa. */
-        .st-key-bims_dashboard_header .st-key-btn_abrir_guardias_header_calendar {
+        /* En móvil no forzamos el layout de columnas: ocultamos solo
+           los controles que no deben aparecer y dejamos visible el título. */
+        .st-key-bims_dashboard_header .st-key-bims_user_menu,
+        .st-key-bims_dashboard_header [data-testid="column"]:has(.st-key-bims_user_menu) {
             display: none !important;
         }
-        /* El perfil no debe mostrarse en móvil; ocultamos también su columna
-           para que no reserve espacio en la fila del título. */
-        .st-key-bims_dashboard_header [data-testid="column"]:has(.st-key-bims_user_menu),
-        .st-key-bims_dashboard_header .st-key-bims_user_menu {
+        .st-key-bims_dashboard_header .st-key-btn_abrir_guardias_header_calendar {
             display: none !important;
         }
         .st-key-bims_dashboard_header h1 {
@@ -3304,12 +3287,18 @@ st.markdown("""
     }
 
     /* Ocultar botones nativos de desarrollo de Streamlit (Share, GitHub, etc.) */
-    .stAppDeployButton, 
+    .stAppDeployButton,
+    [data-testid="stDecoration"],
+    [data-testid="stStatusWidget"],
     header[data-testid="stHeader"] [data-testid="stToolbarActions"],
-    #MainMenu, 
-    footer {
+    #MainMenu,
+    footer,
+    .viewerBadge_container__1QSob,
+    .styles_viewerBadge__CvC9N {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
 
     .alert-card-critical {
