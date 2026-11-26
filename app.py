@@ -383,7 +383,7 @@ st.markdown("""
         z-index: 1100 !important;
         background: #0b1120 !important;
         /* Reserva espacio para el botón flotante y la navegación inferior. */
-        padding: 5px max(5rem, calc((100vw - 1600px) / 2 + 5rem)) 0 88px !important;
+        padding: 5px max(5rem, calc((100vw - 1600px) / 2 + 5rem)) 0 5rem !important;
         margin: 0 !important;
         min-height: 104px !important;
         border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
@@ -1153,6 +1153,12 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
+        }
+        /* El perfil no debe mostrarse en móvil; ocultamos también su columna
+           para que no reserve espacio en la fila del título. */
+        .st-key-bims_dashboard_header [data-testid="column"]:has(.st-key-bims_user_menu),
+        .st-key-bims_dashboard_header .st-key-bims_user_menu {
+            display: none !important;
         }
         .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(2),
         .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(3) {
