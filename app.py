@@ -2942,27 +2942,51 @@ def obtener_timestamp_sync():
 
 @st.cache_data(ttl=900, show_spinner=False)
 def obtener_datos_hoy():
-    """Descarga conversaciones con actividad hoy (desde 00:00 hs PY) Y todos los chats abiertos."""
+    """Descarga por lotes las conversaciones con actividad hoy y todos los chats abiertos."""
     tz_py = timezone(timedelta(hours=-3))
     hoy_inicio_py = datetime.now(tz_py).replace(hour=0, minute=0, second=0, microsecond=0)
     hoy_inicio_utc = hoy_inicio_py.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    
+
     estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
 
+    def consultar_todos_los_lotes(consulta_base):
+        """Ejecuta una consulta paginada para no quedar limitado a las primeras 1.000 filas."""
+        todos = []
+        inicio = 0
+        tamanio_lote = 1000
+
+        while True:
+            respuesta = (
+                consulta_base()
+                .order("id")
+                .range(inicio, inicio + tamanio_lote - 1)
+                .execute()
+            )
+            lote = respuesta.data or []
+            if not lote:
+                break
+
+            todos.extend(lote)
+            if len(lote) < tamanio_lote:
+                break
+            inicio += tamanio_lote
+
+        return todos
+
     try:
-        # 1. Chats con actividad hoy
-        res_hoy = supabase.table("conversaciones")\
-            .select(COLUMNAS_DASHBOARD)\
-            .gte("updated_at", hoy_inicio_utc)\
-            .execute()
-        datos = res_hoy.data or []
-        
-        # 2. Todos los chats que sigan abiertos en Supabase
-        res_abiertos = supabase.table("conversaciones")\
-            .select(COLUMNAS_DASHBOARD)\
-            .not_.in_("estado", estados_cerrados)\
-            .execute()
-        datos_abiertos = res_abiertos.data or []
+        # 1. Todas las conversaciones con actividad desde el inicio del día en Paraguay.
+        datos = consultar_todos_los_lotes(
+            lambda: supabase.table("conversaciones")
+                .select(COLUMNAS_DASHBOARD)
+                .gte("updated_at", hoy_inicio_utc)
+        )
+
+        # 2. Todas las conversaciones que continúan abiertas, también paginadas.
+        datos_abiertos = consultar_todos_los_lotes(
+            lambda: supabase.table("conversaciones")
+                .select(COLUMNAS_DASHBOARD)
+                .not_.in_("estado", estados_cerrados)
+        )
 
         todos_recientes = {r["id"]: r for r in (datos + datos_abiertos)}
         return list(todos_recientes.values())
