@@ -1149,19 +1149,20 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         }
         .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(1) {
             display: flex !important;
-            flex: 1 1 100% !important;
-            width: 100% !important;
-            max-width: 100% !important;
+            flex: 1 1 auto !important;
+            width: auto !important;
+            max-width: none !important;
             min-width: 0 !important;
+        }
+        /* En móvil se oculta solo el calendario; el indicador de WhatsApp
+           permanece junto al título y no se elimina la columna completa. */
+        .st-key-bims_dashboard_header .st-key-btn_abrir_guardias_header_calendar {
+            display: none !important;
         }
         /* El perfil no debe mostrarse en móvil; ocultamos también su columna
            para que no reserve espacio en la fila del título. */
         .st-key-bims_dashboard_header [data-testid="column"]:has(.st-key-bims_user_menu),
         .st-key-bims_dashboard_header .st-key-bims_user_menu {
-            display: none !important;
-        }
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(2),
-        .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-bims_user_menu) > [data-testid="column"]:nth-child(3) {
             display: none !important;
         }
         .st-key-bims_dashboard_header h1 {
