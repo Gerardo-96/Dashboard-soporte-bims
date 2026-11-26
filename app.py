@@ -1320,6 +1320,7 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
 </style>
 """, unsafe_allow_html=True)
 
+st.markdown("""
 <style>
     /* Estilos del panel lateral BIMS cargados antes de consultas y datos. */
     /* El contenedor externo de Streamlit también sale del flujo normal.
@@ -1490,6 +1491,7 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         .st-key-bims_sidebar_panel, #bims-sidebar-toggle { transition-duration: .01ms !important; }
     }
 </style>
+""", unsafe_allow_html=True)
 
 st.html("""
 <script>
