@@ -2519,10 +2519,20 @@ def renderizar_editor_reglas_motivos_recurrentes():
                             }).eq("id", regla_id).execute()
                             guardadas += 1
                     obtener_reglas_motivos_recurrentes.clear()
-                    st.success(f"Se actualizaron {guardadas} reglas.")
+                    if guardadas:
+                        st.session_state["feedback_reglas_motivos"] = (
+                            "success", f"Se actualizaron {guardadas} reglas."
+                        )
+                    else:
+                        st.session_state["feedback_reglas_motivos"] = (
+                            "info", "No había cambios para guardar."
+                        )
                     st.rerun(scope="fragment")
                 except Exception as error:
-                    st.error(f"No se pudieron guardar las reglas: {error}")
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "error", f"No se pudieron guardar las reglas: {error}"
+                    )
+                    st.rerun(scope="fragment")
 
             opciones = {
                 f"ID {r['id']}: {r['motivo_recurrente']} — {r['palabras_clave']}": r["id"]
@@ -2542,10 +2552,15 @@ def renderizar_editor_reglas_motivos_recurrentes():
                         "id", opciones[seleccion]
                     ).execute()
                     obtener_reglas_motivos_recurrentes.clear()
-                    st.success("Regla eliminada.")
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "success", "La regla se eliminó correctamente."
+                    )
                     st.rerun(scope="fragment")
                 except Exception as error:
-                    st.error(f"No se pudo eliminar la regla: {error}")
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "error", f"No se pudo eliminar la regla: {error}"
+                    )
+                    st.rerun(scope="fragment")
         else:
             st.info("Todavía no hay reglas configuradas.")
 
@@ -2580,15 +2595,32 @@ def renderizar_editor_reglas_motivos_recurrentes():
                         cambios_regla, on_conflict="ai_title"
                     ).execute()
                     obtener_catalogo_motivos_recurrentes.clear()
-                    st.success(
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "success",
                         f"Se aplicaron reglas a {len(cambios_regla)} títulos existentes. "
                         "Las correcciones manuales se conservaron."
                     )
                     st.rerun(scope="fragment")
                 else:
-                    st.info("No se encontraron títulos que requieran cambios.")
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "info", "No se encontraron títulos que requieran cambios."
+                    )
+                    st.rerun(scope="fragment")
             except Exception as error:
-                st.error(f"No se pudieron aplicar las reglas: {error}")
+                st.session_state["feedback_reglas_motivos"] = (
+                    "error", f"No se pudieron aplicar las reglas: {error}"
+                )
+                st.rerun(scope="fragment")
+
+    feedback = st.session_state.pop("feedback_reglas_motivos", None)
+    if feedback:
+        nivel, mensaje = feedback
+        if nivel == "success":
+            st.success(mensaje)
+        elif nivel == "error":
+            st.error(mensaje)
+        else:
+            st.info(mensaje)
 
     try:
         return [
