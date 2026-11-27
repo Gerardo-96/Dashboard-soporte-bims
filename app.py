@@ -1130,7 +1130,16 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         .st-key-bims_dashboard_header {
             padding-left: 64px !important;
             padding-right: .75rem !important;
-            min-height: 104px !important;
+            height: 148px !important;
+            min-height: 148px !important;
+            max-height: 148px !important;
+            overflow: visible !important;
+        }
+        .st-key-bims_dashboard_header > [data-testid="stVerticalBlock"] {
+            position: relative !important;
+            height: 148px !important;
+            min-height: 148px !important;
+            max-height: 148px !important;
         }
         /* En móvil, el robot comunica el estado sin ocupar otra fila. */
         .st-key-bims_dashboard_header .bims-mobile-bot-icon { display:inline-block !important; }
@@ -1163,20 +1172,25 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             border-radius: 50% !important;
             margin-left: 7px !important;
             vertical-align: middle !important;
-            background: currentColor !important;
         }
         .st-key-bims_dashboard_header [role="tablist"] {
+            position: absolute !important;
+            top: 88px !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
             padding-left: 0 !important;
             padding-right: 0 !important;
+            margin: 0 !important;
         }
         .bims-header-spacer {
-            height: 104px !important;
-            min-height: 104px !important;
+            height: 148px !important;
+            min-height: 148px !important;
             line-height: 0 !important;
         }
         div[data-testid="stElementContainer"]:has(.bims-header-spacer) {
-            height: 104px !important;
-            min-height: 104px !important;
+            height: 148px !important;
+            min-height: 148px !important;
             margin: 0 0 -16px 0 !important;
             padding: 0 !important;
             line-height: 0 !important;
@@ -3297,7 +3311,11 @@ st.markdown("""
     .styles_viewerBadge__CvC9N,
     [class*="viewerBadge"],
     [class*="ViewerBadge"],
-    [data-testid*="viewerBadge"] {
+    [data-testid*="viewerBadge"],
+    [data-testid="stAppDeployButton"],
+    [data-testid*="DeployButton"],
+    [data-testid*="deployButton"],
+    [class*="stAppDeployButton"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
