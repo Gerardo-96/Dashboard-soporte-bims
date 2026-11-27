@@ -3294,7 +3294,10 @@ st.markdown("""
     #MainMenu,
     footer,
     .viewerBadge_container__1QSob,
-    .styles_viewerBadge__CvC9N {
+    .styles_viewerBadge__CvC9N,
+    [class*="viewerBadge"],
+    [class*="ViewerBadge"],
+    [data-testid*="viewerBadge"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -4471,14 +4474,8 @@ with st.container(key="bims_dashboard_header"):
         gap: 0 !important;
         justify-content: center !important;
     }
-    /* Agrupa calendario y estado de WhatsApp sin repartir el espacio sobrante entre columnas. */
-    .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-btn_abrir_guardias_header_calendar) {
-        display:flex !important; flex-wrap:nowrap !important; justify-content:flex-end !important;
-        align-items:center !important; gap:2px !important;
-    }
-    .st-key-bims_dashboard_header [data-testid="stHorizontalBlock"]:has(.st-key-btn_abrir_guardias_header_calendar) > div[data-testid="column"] {
-        flex:0 0 auto !important; width:auto !important; min-width:0 !important;
-    }
+    /* El ajuste de columnas se limita al botón; no forzar el layout de la fila principal.
+       El selector anterior :has() también alcanzaba la fila exterior de la cabecera. */
     .st-key-btn_abrir_guardias_header_calendar button {
         width:34px !important; min-width:34px !important; height:34px !important;
         padding:0 !important; gap:0 !important; justify-content:center !important;
