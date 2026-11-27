@@ -1237,10 +1237,11 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
         /* Gráficos y tablas: una columna completa por fila. */
         .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
             display: flex !important;
-            flex: 1 1 100% !important;
+            flex: 0 0 100% !important;
+            flex-basis: 100% !important;
             width: 100% !important;
             max-width: 100% !important;
-            min-width: 0 !important;
+            min-width: 100% !important;
             padding-left: 0 !important;
             padding-right: 0 !important;
             margin: 0 !important;
@@ -1280,7 +1281,9 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
            se conserva el ancho completo para evitar comprimir su contenido. */
         .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:not(:has([data-testid="stPlotlyChart"], [data-testid="stDataFrame"])) > div[data-testid="column"]:has(.metric-card):has(+ div[data-testid="column"] .metric-card),
         .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:not(:has([data-testid="stPlotlyChart"], [data-testid="stDataFrame"])) > div[data-testid="column"]:has(.metric-card) + div[data-testid="column"]:has(.metric-card) {
-            flex: 1 1 calc(50% - 0.375rem) !important;
+            flex: 0 0 calc(50% - 0.375rem) !important;
+            flex-basis: calc(50% - 0.375rem) !important;
+            min-width: 0 !important;
             width: calc(50% - 0.375rem) !important;
             max-width: calc(50% - 0.375rem) !important;
             min-width: 0 !important;
@@ -4735,7 +4738,13 @@ st.iframe("""
             // Mantener el ajuste móvil del bloque del informe WBR.
             const wbrAnchor = doc.querySelector('.bims-wbr-scope-anchor');
             if (wbrAnchor) {
-                const wbrRoot = wbrAnchor.closest('[data-testid="stVerticalBlock"]');
+                // El ancla está dentro del fragmento completo del WBR.
+                // Marcar el fragmento, no el primer stVerticalBlock interno:
+                // este último solo contiene el encabezado y deja fuera las filas
+                // de gráficos que Streamlit distribuye en varias columnas.
+                const wbrRoot = wbrAnchor.closest('.stFragment')
+                    || wbrAnchor.closest('[data-testid="stFragment"]')
+                    || wbrAnchor.closest('[data-testid="stVerticalBlock"]');
                 if (wbrRoot) {
                     wbrRoot.classList.add('bims-wbr-mobile-root');
                     wbrRoot.style.marginTop = '-1.25rem';
