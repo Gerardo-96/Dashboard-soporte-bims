@@ -1275,6 +1275,44 @@ div[data-testid="stHorizontalBlock"]:has(.metric-card) {
             overflow-wrap: anywhere !important;
         }
 
+        /* WBR móvil: las filas compuestas únicamente por tarjetas KPI
+           se presentan en dos columnas. Si hay gráfico o tabla en la fila,
+           se conserva el ancho completo para evitar comprimir su contenido. */
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:not(:has([data-testid="stPlotlyChart"], [data-testid="stDataFrame"])) > div[data-testid="column"]:has(.metric-card):has(+ div[data-testid="column"] .metric-card),
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:not(:has([data-testid="stPlotlyChart"], [data-testid="stDataFrame"])) > div[data-testid="column"]:has(.metric-card) + div[data-testid="column"]:has(.metric-card) {
+            flex: 1 1 calc(50% - 0.375rem) !important;
+            width: calc(50% - 0.375rem) !important;
+            max-width: calc(50% - 0.375rem) !important;
+            min-width: 0 !important;
+        }
+
+        /* Los cuatro KPI ejecutivos se organizan en una cuadrícula 2 x 2,
+           incluso en móviles estrechos, con tipografía y padding compactos. */
+        .bims-wbr-mobile-root .wbr-highlights {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+            width: 100% !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div {
+            min-width: 0 !important;
+            min-height: 96px !important;
+            padding: 10px 11px !important;
+            overflow-wrap: anywhere !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div > div:first-child {
+            font-size: 0.64rem !important;
+            line-height: 1.3 !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div > div:nth-child(2) {
+            font-size: 1.45rem !important;
+            line-height: 1.2 !important;
+            margin: 6px 0 4px !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div > div:nth-child(3) {
+            font-size: 0.68rem !important;
+            line-height: 1.35 !important;
+        }
+
         /* El tablist ya vive en la cabecera: colapsar la reserva original
            y sus wrappers vacíos para que no quede una franja sobre el informe. */
         #bims-main-tabs-wrapper {
