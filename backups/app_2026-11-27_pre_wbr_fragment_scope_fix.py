@@ -1,0 +1,9272 @@
+import os
+import re
+import json
+import unicodedata
+import io
+import requests
+import time as time_lib
+import threading
+from datetime import datetime, timedelta, time, date, timezone
+import numpy as np
+import pandas as pd
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
+from openpyxl.utils import get_column_letter
+from supabase import create_client, Client
+from guardias import render_widget_guardia
+import extra_streamlit_components as stx
+
+@st.cache_resource
+def obtener_estado_sync_global():
+    """Estado compartido del proceso de sincronización entre sesiones."""
+    return {
+        "status": "idle",
+        "processed": 0,
+        "log": "",
+        "error": None,
+        "cache_invalidation_pending": False,
+    }
+
+
+GLOBAL_SYNC_STATE = obtener_estado_sync_global()
+
+
+
+def generar_pdf_wbr(semana, metricas, resumen_ia, graficos, tablas):
+    """Construye un PDF ejecutivo con métricas, resumen y gráficos del WBR."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether, PageBreak
+    from xml.sax.saxutils import escape
+
+    def texto_pdf(valor):
+        return (
+            str(valor).replace("★", "*").replace("✨", "")
+            .replace("≥", ">=").replace("≤", "<=")
+            .replace("→", "->").replace("•", "-")
+        )
+
+    buffer = io.BytesIO()
+    page_size = landscape(A4)
+    doc = SimpleDocTemplate(
+        buffer, pagesize=page_size, rightMargin=16*mm, leftMargin=16*mm,
+        topMargin=15*mm, bottomMargin=16*mm,
+        title=f"Informe WBR - {semana}", author="Dashboard Soporte BIMS"
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="WBRTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=20, leading=24, textColor=colors.HexColor("#F8FAFC"), spaceAfter=4*mm
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRSection", parent=styles["Heading2"], fontName="Helvetica-Bold",
+        fontSize=13, leading=16, textColor=colors.HexColor("#7DD3FC"),
+        spaceBefore=5*mm, spaceAfter=2.5*mm, keepWithNext=1
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRBody", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=9, leading=13, textColor=colors.HexColor("#E2E8F0"), spaceAfter=2*mm
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRSmall", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=7.5, leading=10, textColor=colors.HexColor("#CBD5E1")
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRWeek", parent=styles["Heading2"], fontName="Helvetica-Bold",
+        fontSize=13, leading=16, textColor=colors.HexColor("#CBD5E1"), spaceAfter=2*mm
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRSubheading", parent=styles["Heading3"], fontName="Helvetica-Bold",
+        fontSize=10, leading=13, textColor=colors.HexColor("#7DD3FC"), spaceBefore=2*mm,
+        keepWithNext=1
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRTableHead", parent=styles["BodyText"], fontName="Helvetica-Bold",
+        fontSize=9.5, leading=11.5, textColor=colors.HexColor("#F8FAFC")
+    ))
+    styles.add(ParagraphStyle(
+        name="WBRTableCell", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=8.7, leading=10.5, textColor=colors.HexColor("#E2E8F0")
+    ))
+
+    story = [
+        Paragraph("INFORME EJECUTIVO SEMANAL", styles["WBRTitle"]),
+        Paragraph(escape(texto_pdf(semana)), styles["WBRWeek"]),
+        Paragraph(
+            "Dashboard de Soporte BIMS · Generado "
+            + datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
+            + " (hora de Paraguay)", styles["WBRSmall"]
+        ),
+        Spacer(1, 5*mm),
+        Paragraph("Indicadores principales", styles["WBRSection"])
+    ]
+    # Dos bloques paralelos de Indicador/Resultado para aprovechar el ancho A4.
+    pares_metricas = list(metricas.items())
+    mitad = (len(pares_metricas) + 1) // 2
+    bloque_izq, bloque_der = pares_metricas[:mitad], pares_metricas[mitad:]
+    filas = [[
+        Paragraph("Indicador", styles["WBRTableHead"]),
+        Paragraph("Resultado", styles["WBRTableHead"]),
+        Paragraph("Indicador", styles["WBRTableHead"]),
+        Paragraph("Resultado", styles["WBRTableHead"])
+    ]]
+    for i in range(mitad):
+        izq = bloque_izq[i]
+        der = bloque_der[i] if i < len(bloque_der) else ("", "")
+        filas.append([
+            Paragraph(escape(texto_pdf(izq[0])), styles["WBRTableCell"]),
+            Paragraph(escape(texto_pdf(izq[1])), styles["WBRTableCell"]),
+            Paragraph(escape(texto_pdf(der[0])), styles["WBRTableCell"]),
+            Paragraph(escape(texto_pdf(der[1])), styles["WBRTableCell"])
+        ])
+    ancho = doc.width
+    tabla = Table(filas, colWidths=[ancho*0.29, ancho*0.21, ancho*0.29, ancho*0.21], repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17263B")),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#111C2E"),colors.HexColor("#162337")]),
+        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#334155")),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)
+    ]))
+    story.extend([tabla, PageBreak(), Paragraph("Resumen ejecutivo",styles["WBRSection"])])
+    texto = resumen_ia or "No se generó un resumen con IA para esta semana."
+    for linea in str(texto).splitlines():
+        linea=linea.strip()
+        if not linea:
+            story.append(Spacer(1,2*mm))
+        elif linea.startswith("#"):
+            story.append(Paragraph(escape(texto_pdf(linea.lstrip("# ").strip())),styles["WBRSubheading"]))
+        else:
+            story.append(Paragraph(escape(texto_pdf(linea)),styles["WBRBody"]))
+
+    styles.add(ParagraphStyle(
+        name="WBRChartSummary", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=9, leading=13, textColor=colors.HexColor("#CBD5E1"),
+        leftIndent=3*mm, borderColor=colors.HexColor("#334155"),
+        borderWidth=0.6, borderPadding=7, backColor=colors.HexColor("#111C2E"),
+        spaceBefore=1*mm, spaceAfter=4*mm
+    ))
+
+    def resumen_grafico(figura):
+        """Genera una lectura descriptiva basada únicamente en los datos visibles del gráfico."""
+        partes = []
+        for traza in figura.data:
+            nombre = str(getattr(traza, "name", "") or "Serie")
+            valores_x = getattr(traza, "x", None)
+            valores_y = getattr(traza, "y", None)
+            xs = list(valores_x) if valores_x is not None else []
+            ys = list(valores_y) if valores_y is not None else []
+            pares = []
+            for x, y in zip(xs, ys):
+                try:
+                    if y is not None and np.isfinite(float(y)):
+                        pares.append((str(x), float(y)))
+                except (TypeError, ValueError):
+                    continue
+            if not pares:
+                continue
+            maximo = max(pares, key=lambda p: p[1])
+            minimo = min(pares, key=lambda p: p[1])
+            def fmt(v):
+                return f"{v:,.2f}".rstrip("0").rstrip(".").replace(",", "X").replace(".", ",").replace("X", ".")
+            if len(pares) == 1:
+                partes.append(f"<b>{escape(nombre)}</b>: {escape(maximo[0])} registró {fmt(maximo[1])}.")
+            else:
+                partes.append(
+                    f"<b>{escape(nombre)}</b>: máximo de {fmt(maximo[1])} en {escape(maximo[0])}; "
+                    f"mínimo de {fmt(minimo[1])} en {escape(minimo[0])}."
+                )
+        return " ".join(partes) if partes else "El gráfico presenta la distribución de los datos para el período analizado."
+
+    story.append(Paragraph("Desarrollo completo del WBR",styles["WBRSection"]))
+    for n,(titulo,figura) in enumerate(graficos[:13],1):
+        try:
+            figura_pdf = go.Figure(figura)
+            figura_pdf.update_layout(
+                paper_bgcolor="#0b1120",
+                plot_bgcolor="#0b1120",
+                font=dict(color="#E2E8F0", size=15, family="Arial"),
+                title_font=dict(color="#F8FAFC", size=19, family="Arial"),
+                legend=dict(font=dict(color="#FFFFFF", size=32, family="Arial")),
+                xaxis=dict(
+                    tickfont=dict(color="#F8FAFC", size=24, family="Arial"),
+                    title_font=dict(color="#CBD5E1", size=18, family="Arial"),
+                    automargin=True,
+                    gridcolor="#243247", zerolinecolor="#334155",
+                    linecolor="#475569"
+                ),
+                yaxis=dict(
+                    tickfont=dict(color="#F8FAFC", size=24, family="Arial"),
+                    title_font=dict(color="#CBD5E1", size=18, family="Arial"),
+                    automargin=True,
+                    gridcolor="#243247", zerolinecolor="#334155",
+                    linecolor="#475569"
+                )
+            )
+            # Las etiquetas de dona necesitan más espacio exterior para evitar recortes.
+            if any(getattr(traza, "type", "") == "pie" for traza in figura_pdf.data):
+                figura_pdf.update_layout(
+                    margin=dict(l=170, r=170, t=130, b=130)
+                )
+            for traza in figura_pdf.data:
+                if getattr(traza, "showlegend", None) is not False:
+                    traza.name = str(getattr(traza, "name", "") or "")
+                if getattr(traza, "type", "") == "pie":
+                    traza.textfont = dict(color="#FFFFFF", size=24, family="Arial")
+                    traza.textposition = "outside"
+                    traza.automargin = True
+                if hasattr(traza, "textfont") and getattr(traza, "type", "") != "pie":
+                    traza.textfont = dict(color="#FFFFFF", size=48, family="Arial")
+                if hasattr(traza, "insidetextfont") and getattr(traza, "type", "") != "pie":
+                    traza.insidetextfont = dict(color="#FFFFFF", size=46, family="Arial")
+        except Exception as exc:
+            raise RuntimeError("No se pudo preparar un gráfico para el PDF. Detalle: " + str(exc))
+        try:
+            img_bytes=figura_pdf.to_image(format="png",width=1800,height=1000,scale=1.5)
+        except Exception as exc:
+            raise RuntimeError(
+                "No se pudo convertir un gráfico a imagen. Verificá la instalación "
+                "de Kaleido y Chromium en el despliegue. Detalle: "+str(exc)
+            )
+        img=RLImage(io.BytesIO(img_bytes))
+        # Reservar espacio suficiente para título y lectura del gráfico en la misma página.
+        escala=min(doc.width/float(img.imageWidth),(112*mm)/float(img.imageHeight))
+        img.drawWidth=img.imageWidth*escala
+        img.drawHeight=img.imageHeight*escala
+        lectura = Paragraph(resumen_grafico(figura_pdf), styles["WBRChartSummary"])
+        story.append(KeepTogether([
+            Paragraph(escape(f"{n}. {titulo}"),styles["WBRSection"]),
+            img, Spacer(1,2*mm), lectura
+        ]))
+
+    def footer(canvas,documento):
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#0B1120"))
+        canvas.rect(0,0,page_size[0],page_size[1],fill=1,stroke=0)
+        canvas.setStrokeColor(colors.HexColor("#334155"))
+        canvas.line(16*mm,11*mm,page_size[0]-16*mm,11*mm)
+        canvas.setFont("Helvetica",7)
+        canvas.setFillColor(colors.HexColor("#94A3B8"))
+        canvas.drawString(16*mm,7*mm,"Dashboard de Soporte BIMS · Informe WBR")
+        canvas.drawRightString(page_size[0]-16*mm,7*mm,f"Página {documento.page}")
+        canvas.restoreState()
+
+    doc.build(story,onFirstPage=footer,onLaterPages=footer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+@st.cache_data(ttl=7776000, show_spinner=False)
+def obtener_resumen_wbr_gemini(metricas, semana):
+    """Solicita a Gemini una interpretación ejecutiva usando solo métricas agregadas."""
+    try:
+        api_key=st.secrets.get("GEMINI_API_KEY","")
+    except Exception:
+        api_key=os.environ.get("GEMINI_API_KEY","")
+    if not api_key:
+        api_key=os.environ.get("GEMINI_API_KEY","")
+    if not api_key:
+        raise ValueError("Falta configurar GEMINI_API_KEY en los secretos de Streamlit.")
+
+    modelo="gemini-3.5-flash-lite"
+    url=f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+    prompt=(
+        "Actuá como analista gerencial de operaciones de soporte. Redactá en español "
+        f"un resumen ejecutivo claro y objetivo para {semana}. Usá exclusivamente los "
+        "indicadores agregados siguientes. No recalcules ni inventes datos. No afirmes "
+        "que una variación es positiva o negativa sin considerar su significado operativo. "
+        "Si un valor es cero o no está disponible, indicá la limitación sin especular. "
+        "No menciones personas, clientes ni tickets. Organizá la respuesta en estas "
+        "secciones: PANORAMA GENERAL, RESULTADOS POSITIVOS, PUNTOS DE ATENCIÓN y "
+        "PRIORIDADES SUGERIDAS. No incluyas un título general ni repitas la semana "
+        "en un encabezado; comenzá directamente con PANORAMA GENERAL. "
+        "Máximo 300 palabras. Si no hay evidencia suficiente "
+        "para una sección, indicá que no hay elementos concluyentes. "
+        "INDICADORES (JSON):\n"+json.dumps(metricas,ensure_ascii=False,default=str)
+    )
+    resp=requests.post(
+        url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},
+        json={"contents":[{"parts":[{"text":prompt}]}],
+              "generationConfig":{"temperature":0.25,"maxOutputTokens":1100}},
+        timeout=50
+    )
+    if resp.status_code>=400:
+        try:
+            detalle=resp.json().get("error",{}).get("message","")
+        except Exception:
+            detalle=resp.text[:300]
+        raise RuntimeError(f"Gemini respondió HTTP {resp.status_code}. {detalle}")
+    partes=resp.json().get("candidates",[{}])[0].get("content",{}).get("parts",[])
+    texto="\n".join(str(p.get("text","")).strip() for p in partes if p.get("text")).strip()
+    if not texto:
+        raise RuntimeError("Gemini no devolvió contenido para el resumen.")
+    return texto
+
+
+
+# ==========================================
+# 1. CONFIGURACIÓN ÚNICA DE PÁGINA
+# ==========================================
+st.set_page_config(
+    page_title="Dashboard Soporte BIMS",
+    page_icon="📈",
+    layout="wide"
+)
+
+# Oculta la barra superior nativa y recupera el espacio para el dashboard
+st.markdown("""
+<style>
+    /* El panel BIMS tiene su propio control; no necesitamos la barra nativa. */
+    header[data-testid="stHeader"] {
+        display: none !important;
+        height: 0 !important;
+    }
+
+    /* Streamlit aplica el espacio superior en el contenedor principal, no en el header. */
+    /* Eliminar el espacio reservado por el layout de Streamlit.
+       Se conservan los márgenes laterales para no ensanchar ni deformar el dashboard. */
+    .stApp,
+    div[data-testid="stAppViewContainer"],
+    div[data-testid="stAppViewContainer"] > .main,
+    div[data-testid="stMain"],
+    div[data-testid="stMain"] > div,
+    div[data-testid="stMainBlockContainer"],
+    div[data-testid="stAppViewBlockContainer"],
+    section.main,
+    section.main > div,
+    section.main > div.block-container,
+    .stMainBlockContainer {
+        margin-block-start: 0 !important;
+        padding-block-start: 0 !important;
+    }
+    div[data-testid="stMainBlockContainer"],
+    div[data-testid="stAppViewBlockContainer"],
+    section.main > div.block-container {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    /* La barra nativa está oculta: anulamos también su reserva vertical residual. */
+    div[data-testid="stAppViewContainer"] > section,
+    section[data-testid="stMain"],
+    section.main {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    /* Evita que el primer bloque de contenido vuelva a introducir separación. */
+    div[data-testid="stMainBlockContainer"] > div:first-child,
+    div[data-testid="stAppViewBlockContainer"] > div:first-child,
+    section.main > div.block-container > div:first-child {
+        margin-block-start: 0 !important;
+        padding-block-start: 0 !important;
+    }
+
+    /* Los cuatro bloques iniciales de inyección y el wrapper del sidebar
+       no tienen altura visible. Streamlit igualmente reserva 16px de gap
+       después de cada uno; se neutraliza solo esa separación inicial. */
+    div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"]:nth-child(-n+4),
+    div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] > div[data-testid="stLayoutWrapper"]:has(.st-key-bims_sidebar_panel) {
+        margin-block-end: -16px !important;
+    }
+
+    /* Cabecera fija: el contenido de las pestañas se desplaza por debajo. */
+    .st-key-bims_dashboard_header {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100vw !important;
+        box-sizing: border-box !important;
+        z-index: 1100 !important;
+        background: #0b1120 !important;
+        /* Reserva espacio para el botón flotante y la navegación inferior. */
+        padding: 5px max(5rem, calc((100vw - 1600px) / 2 + 5rem)) 0 5rem !important;
+        margin: 0 !important;
+        min-height: 104px !important;
+        border-bottom: 1px solid rgba(71, 94, 122, .32) !important;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, .12) !important;
+    }
+    .st-key-bims_dashboard_header [data-testid="stVerticalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+    }
+    .bims-header-spacer {
+        height: 104px !important;
+        min-height: 104px !important;
+        pointer-events: none !important;
+    }
+    /* Acerca el primer bloque del dashboard a la cabecera sin invadirla. */
+    div[data-testid="stElementContainer"]:has(.bims-header-spacer) {
+        margin-block-end: -10px !important;
+    }
+
+    /* El panel propio BIMS reemplaza el sidebar nativo de Streamlit. */
+    section[data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"] {
+        display: none !important;
+    }
+
+    [data-testid="stStatusWidget"] {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+
+    [data-testid="stStatusWidget"] * {
+        visibility: hidden !important;
+    }
+
+    /* Los iframes se utilizan únicamente como ejecutores invisibles de JavaScript.
+       Ocultamos su contenedor para evitar que aparezca una pequeña línea o guion
+       en la interfaz, sin alterar los modales que insertan en el documento principal. */
+    /* Oculta también el contenedor Streamlit del iframe ejecutor:
+       ocultar solo el iframe dejaba un bloque vacío antes del dashboard. */
+    div[data-testid="stElementContainer"]:has([data-testid="stIFrame"]),
+    div[data-testid="stElementContainer"]:has(iframe[title="st.iframe"]),
+    [data-testid="stIFrame"],
+    [data-testid="stIFrame"] iframe,
+    iframe[title="st.iframe"] {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        border: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Mantiene una separación mínima sin permitir que el gráfico invada el título CSAT. */
+    div[data-testid="stElementContainer"]:has(.bims-csat-evo-title) {
+        margin-block-end: 0 !important;
+        padding-block-end: 0 !important;
+    }
+
+    /* Alineación homogénea para tarjetas KPI que comparten una fila. */
+div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+        align-items: stretch !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+        display: flex !important;
+        align-items: stretch !important;
+        min-width: 0 !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) [data-testid="stVerticalBlock"] {
+        width: 100% !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+        height: 100% !important;
+        min-height: 128px !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+    }
+
+    /* KPI de horario extendido: mismo lenguaje visual que las demás metric-card. */
+    .bims-wbr-ext-kpi {
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.28) !important;
+        margin: 0 0 20px 0 !important;
+        min-height: 112px !important;
+        box-sizing: border-box !important;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease !important;
+    }
+    .bims-wbr-ext-kpi:hover {
+        transform: translateY(-2px) !important;
+        border-color: rgba(56, 189, 248, 0.48) !important;
+        box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(56, 189, 248, 0.08) !important;
+    }
+
+    .bims-wbr-chart-summary {
+        min-height: 108px !important;
+        height: 108px !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 14px 18px !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+        box-shadow: 0 3px 10px -3px rgba(0, 0, 0, 0.25) !important;
+        text-align: center !important;
+        line-height: 1.5 !important;
+    }
+
+    /* Oculta la barra flotante de Plotly (Modebar) en todos los gráficos */
+    .modebar,
+    .modebar-container {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Oculta el botón de pantalla completa de Streamlit en los gráficos */
+    [data-testid="stFullScreenFrame"] > button {
+        display: none !important;
+    }
+    
+
+    /* =========================================================
+       BIMS EXECUTIVE — segunda etapa: Control Operativo & SLA
+       Estilos acotados a la pestaña mediante su ancla visual.
+       Sin cambios en métricas, cálculos ni comportamiento.
+       ========================================================= */
+    /* Reduce el hueco superior de esta pestaña sin mover la cabecera fija
+       ni modificar el espaciado de las demás pestañas. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) {
+        padding-top: 0 !important;
+    }
+    div[data-testid="stElementContainer"]:has(.bims-operativo-sla-scope) {
+        margin-block-end: -18px !important;
+        padding-block-end: 0 !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card {
+        min-height: 128px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 18px 18px 16px;
+        background: linear-gradient(145deg, #18263a 0%, #121d2e 100%) !important;
+        border: 1px solid #304158 !important;
+        border-radius: 13px !important;
+        box-shadow: 0 5px 16px rgba(0, 0, 0, 0.16) !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card:hover {
+        transform: none !important;
+        border-color: #3b5875 !important;
+        background: #19283c !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #a9b8ca !important;
+        font-size: 0.70rem !important;
+        line-height: 1.35;
+        letter-spacing: 0.075em;
+        font-weight: 700 !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-value {
+        margin-top: 7px;
+        color: #f3f7fc !important;
+        font-size: clamp(1.35rem, 1.8vw, 1.8rem) !important;
+        line-height: 1.15;
+        font-weight: 760 !important;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-sub {
+        margin-top: auto;
+        color: #91a3b8 !important;
+        font-size: 0.73rem !important;
+        line-height: 1.4;
+    }
+
+    /* Secciones y separadores con jerarquía visual consistente. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) h3 {
+        margin-top: 1.25rem;
+        margin-bottom: 0.85rem;
+        color: #e7eef8 !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) hr {
+        border-color: rgba(125, 148, 176, 0.20) !important;
+        margin: 1.5rem 0 !important;
+    }
+
+    /* Tablas: superficie sobria, bordes suaves y esquinas uniformes. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stDataFrame"],
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stTable"] {
+        border: 1px solid #2b3b50 !important;
+        border-radius: 11px !important;
+        background: #121d2e !important;
+        overflow: hidden;
+    }
+
+    /* Expansores de detalle más claros, sin competir con los indicadores. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stExpander"] > details {
+        border: 1px solid #2b3b50 !important;
+        border-radius: 10px !important;
+        background: rgba(21, 31, 48, 0.72) !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) [data-testid="stExpander"] summary {
+        color: #dbe6f3 !important;
+        font-weight: 600 !important;
+    }
+
+    /* La alerta crítica conserva el rojo como señal, sin pulso permanente. */
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details {
+        border: 1px solid rgba(248, 113, 113, 0.72) !important;
+        border-left: 4px solid #ef4444 !important;
+        border-radius: 11px !important;
+        background: linear-gradient(100deg, rgba(91, 35, 28, 0.42), rgba(25, 31, 53, 0.94)) !important;
+        box-shadow: 0 5px 18px rgba(239, 68, 68, 0.09) !important;
+        animation: none !important;
+    }
+
+    div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) div[data-testid="stExpander"]:has(.alerta-ancla-activa) summary {
+        color: #fecaca !important;
+        font-weight: 750 !important;
+    }
+
+    @media (max-width: 1100px) {
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card {
+            min-height: 116px;
+            padding: 15px 14px 13px;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-title {
+            font-size: 0.66rem !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) .metric-card-value {
+            font-size: 1.35rem !important;
+        }
+    }
+
+    /* Reorganiza las filas que contienen tarjetas KPI.
+       No se depende del número exacto de columnas: Streamlit puede variar
+       los wrappers internos entre versiones. Escritorio permanece intacto. */
+    @media (max-width: 1100px) {
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            gap: 0.75rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div {
+            flex: 0 0 calc((100% - 1.5rem) / 3) !important;
+            width: calc((100% - 1.5rem) / 3) !important;
+            max-width: calc((100% - 1.5rem) / 3) !important;
+            min-width: 0 !important;
+        }
+    }
+
+    .bims-csat-evo-title .bims-title-mobile { display: none; }
+
+    @media (max-width: 600px) {
+        .bims-csat-evo-title .bims-title-desktop { display: none; }
+        .bims-csat-evo-title .bims-title-mobile { display: inline; }
+
+        /* En móvil se oculta el acceso de guardias del encabezado:
+           evita que su columna vacía o botón aumente la barra fija. */
+        .st-key-btn_abrir_guardias_header_calendar,
+        .st-key-btn_abrir_guardias_header_alert,
+        .st-key-btn_abrir_guardias_header {
+            display: none !important;
+        }
+        .st-key-bims_dashboard_header {
+            min-height: 104px !important;
+        }
+        /* Dos tarjetas por fila con ancho calculado incluyendo el gap.
+           Evita solapamientos por padding/bordes de los wrappers de Streamlit. */
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            gap: 0.75rem !important;
+            width: 100% !important;
+            margin: 0 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+            flex: 0 0 calc((100% - 0.75rem) / 2) !important;
+            width: calc((100% - 0.75rem) / 2) !important;
+            max-width: calc((100% - 0.75rem) / 2) !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            padding: 0 !important;
+            margin: 0 0 0.25rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card {
+            min-height: 112px !important;
+            height: auto !important;
+            padding: 13px 12px !important;
+            box-sizing: border-box !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-title {
+            font-size: 0.64rem !important;
+            line-height: 1.3 !important;
+            overflow-wrap: anywhere;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-value {
+            font-size: clamp(1.15rem, 5vw, 1.5rem) !important;
+            line-height: 1.15 !important;
+            overflow-wrap: anywhere;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.metric-card) .metric-card-sub {
+            font-size: 0.68rem !important;
+            line-height: 1.3 !important;
+            overflow-wrap: anywhere;
+        }
+
+        /* SLA móvil: selector directo por clase propia de las tarjetas.
+           No depende de wrappers/ancestros de pestañas que pueden variar en Streamlit. */
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            column-gap: 0.55rem !important;
+            row-gap: 0.65rem !important;
+            width: 100% !important;
+            margin-bottom: 1rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] {
+            display: flex !important;
+            flex: 0 0 calc((100% - 1.1rem) / 3) !important;
+            width: calc((100% - 1.1rem) / 3) !important;
+            max-width: calc((100% - 1.1rem) / 3) !important;
+            min-width: 0 !important;
+            align-items: stretch !important;
+            box-sizing: border-box !important;
+            padding: 0 !important;
+            margin: 0 0 0.35rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-card) > div[data-testid="column"] [data-testid="stVerticalBlock"] {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            flex: 1 1 auto !important;
+        }
+        .bims-sla-kpi-card {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            width: 100% !important;
+            min-height: 136px !important;
+            height: 100% !important;
+            margin: 0 0 0.35rem !important;
+            box-sizing: border-box !important;
+        }
+
+        /* WBR: estilos móviles aislados. No heredan el layout de KPI del dashboard.
+           Los bloques de gráficos y tablas se apilan; las filas de tarjetas usan 2 columnas. */
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            gap: 0.7rem !important;
+            width: 100% !important;
+            margin: 0 0 0.45rem !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) div[data-testid="stHorizontalBlock"]:has(.metric-card) > div[data-testid="column"] {
+            flex: 0 0 calc((100% - 0.7rem) / 2) !important;
+            width: calc((100% - 0.7rem) / 2) !important;
+            max-width: calc((100% - 0.7rem) / 2) !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card {
+            width: 100% !important;
+            min-width: 0 !important;
+            min-height: 108px !important;
+            height: auto !important;
+            padding: 13px 11px !important;
+            box-sizing: border-box !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-title {
+            font-size: 0.64rem !important;
+            line-height: 1.3 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-value {
+            font-size: clamp(1.15rem, 5vw, 1.55rem) !important;
+            line-height: 1.15 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .metric-card-sub {
+            font-size: 0.68rem !important;
+            line-height: 1.3 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) .bims-wbr-chart-summary {
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 12px 10px !important;
+            font-size: 0.76rem !important;
+            line-height: 1.45 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) h4,
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) h5 {
+            font-size: 0.98rem !important;
+            line-height: 1.35 !important;
+            overflow-wrap: anywhere !important;
+        }
+        div[data-baseweb="tab-panel"]:has(.bims-wbr-scope-anchor) [data-testid="stDataFrame"] {
+            max-width: 100% !important;
+            overflow-x: auto !important;
+        }
+
+        /* Todos los gráficos quedan estáticos en móvil: sin clics, zoom,
+           selección, hover ni paneo. En escritorio se conserva la interacción. */
+        [data-testid="stPlotlyChart"],
+        [data-testid="stPlotlyChart"] *,
+        .js-plotly-plot,
+        .js-plotly-plot *,
+        .plotly,
+        .plotly * {
+            pointer-events: none !important;
+        }
+
+        /* CSAT: dos columnas equilibradas, con tarjetas de igual altura en móvil. */
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            column-gap: 0.65rem !important;
+            row-gap: 1.15rem !important;
+            margin-bottom: 0.35rem !important;
+            width: 100% !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) > div[data-testid="column"] {
+            display: flex !important;
+            flex: 0 0 calc((100% - 0.65rem) / 2) !important;
+            width: calc((100% - 0.65rem) / 2) !important;
+            max-width: calc((100% - 0.65rem) / 2) !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            align-items: stretch !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) > div[data-testid="column"] [data-testid="stVerticalBlock"] {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 0 !important;
+            flex: 1 1 auto !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-csat-kpi-card) .bims-csat-kpi-card {
+            display: flex !important;
+            flex: 1 1 auto !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 200px !important;
+            max-height: none !important;
+            padding: 15px 13px !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
+            gap: 7px !important;
+        }
+
+        /* Ocultar flechas de desplazamiento del tablist en pantallas táctiles.
+           Las pestañas siguen desplazándose mediante swipe horizontal. */
+        #bims-main-tablist [data-testid*="Scroll"],
+        #bims-main-tablist button:not([role="tab"]),
+        .stTabs [data-testid*="Scroll"],
+        .stTabs [data-testid="stTabScrollButton"],
+        div[data-testid="stTabs"] [data-testid="stTabScrollButton"],
+        #bims-main-tablist button[aria-label*="Scroll"],
+        #bims-main-tablist button[aria-label*="scroll"] {
+            display: none !important;
+            visibility: hidden !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            flex: 0 0 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+        }
+        #bims-main-tablist,
+        .stTabs [data-baseweb="tab-list"],
+        div[data-testid="stTabs"] [data-baseweb="tab-list"] {
+            display: flex !important;
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            gap: 0.65rem !important;
+            justify-content: flex-start !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            scrollbar-width: none !important;
+        }
+        #bims-main-tablist [role="tab"] {
+            flex: 1 0 auto !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: nowrap !important;
+        }
+        /* El tablist principal se trasladó al encabezado fijo.
+           Colapsar su wrapper original evita una franja vacía sobre el contenido. */
+        #bims-main-tabs-wrapper {
+            display: contents !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        #bims-main-tabs-wrapper [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+
+        /* Quitar también los wrappers vacíos que BaseWeb deja para las flechas. */
+        #bims-main-tablist > div:not([role="tab"]),
+        .stTabs [data-baseweb="tab-list"] > div:not([role="tab"]) {
+            display: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            flex: 0 0 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+        }
+        #bims-main-tablist [role="tab"],
+        .stTabs [data-baseweb="tab-list"] [role="tab"] {
+            flex: 0 0 auto !important;
+        }
+    }
+
+    /* WBR: cada columna de gráficos ocupa todo el ancho disponible en móvil.
+       Se fuerzan también los wrappers internos que Streamlit/Plotly dimensionan por separado. */
+    @media (max-width: 600px) {
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) {
+            display: flex !important;
+            flex-direction: column !important;
+            flex-wrap: nowrap !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            gap: 0.8rem !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) div[data-testid="column"]:has(.bims-wbr-stack-anchor) {
+            display: flex !important;
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            align-self: stretch !important;
+            box-sizing: border-box !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) > div[data-testid="column"] > div,
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stVerticalBlock"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stElementContainer"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) [data-testid="stPlotlyChart"],
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) .js-plotly-plot,
+        div[data-testid="stHorizontalBlock"]:has(.bims-wbr-stack-anchor) .plot-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+        }
+    }
+
+    /* SLA: separación real entre filas de tarjetas en pantallas móviles. */
+    @media (max-width: 600px) {
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            column-gap: 0.65rem !important;
+            row-gap: 1.35rem !important;
+            margin-bottom: 0.65rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) > div[data-testid="column"] {
+            margin-bottom: 0.55rem !important;
+            box-sizing: border-box !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) .metric-card {
+            height: auto !important;
+            min-height: 112px !important;
+            box-sizing: border-box !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bims-sla-kpi-anchor) [data-testid="stElementContainer"] {
+            margin-bottom: 0.2rem !important;
+        }
+    }
+
+    /* Sistema visual unificado para gráficos Plotly.
+       Se conserva la altura definida por cada visualización según su contenido. */
+    div[data-testid="stElementContainer"]:has(> div[data-testid="stPlotlyChart"]) {
+        margin-block: 5px 13px !important;
+    }
+    div[data-testid="stPlotlyChart"] {
+        box-sizing: border-box !important;
+        background: var(--bims-surface, #151f30) !important;
+        border: 1px solid var(--bims-border, #2b3a50) !important;
+        border-radius: 12px !important;
+        padding: 5px 7px 2px !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="stPlotlyChart"] .js-plotly-plot,
+    div[data-testid="stPlotlyChart"] .plot-container {
+        border-radius: 8px !important;
+    }
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .gtitle {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.02em !important;
+    }
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .xtick text,
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .ytick text,
+    div[data-testid="stPlotlyChart"] .js-plotly-plot .legend text {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+    }
+
+    @media (max-width: 600px) {
+        div[data-testid="stElementContainer"]:has(> div[data-testid="stPlotlyChart"]) {
+            margin-block: 3px 10px !important;
+        }
+        div[data-testid="stPlotlyChart"] {
+            padding: 3px 2px 1px !important;
+            border-radius: 10px !important;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        div[data-baseweb="tab-panel"]:has(.bims-operativo-sla-scope) * {
+            scroll-behavior: auto !important;
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+
+
+    /* El scroll permanece operativo, pero ninguna zona muestra la barra visual. */
+    html, body,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stAppViewBlockContainer"],
+    .st-key-bims_sidebar_panel,
+    html *, body * {
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+    }
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar,
+    [data-testid="stAppViewContainer"]::-webkit-scrollbar,
+    [data-testid="stMain"]::-webkit-scrollbar,
+    [data-testid="stMainBlockContainer"]::-webkit-scrollbar,
+    [data-testid="stAppViewBlockContainer"]::-webkit-scrollbar,
+    .st-key-bims_sidebar_panel::-webkit-scrollbar,
+    html *::-webkit-scrollbar,
+    body *::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+
+    /* Las pestañas ya están en la cabecera; no reservar espacio en su ubicación original. */
+    #bims-fixed-tabs-placeholder {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-bims_dashboard_header [role="tablist"] {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        z-index: 1201 !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        background: #0b1120 !important;
+        padding: 2px 0 0 !important;
+        margin: 0 !important;
+        border-bottom: 1px solid var(--bims-border) !important;
+        box-shadow: none !important;
+    }
+    .stTabs, div[data-testid="stTabs"] { padding-top: 0 !important; }
+    @media (max-width: 600px) {
+        .st-key-bims_dashboard_header {
+            padding-left: 64px !important;
+            padding-right: .75rem !important;
+            height: 148px !important;
+            min-height: 148px !important;
+            max-height: 148px !important;
+            overflow: visible !important;
+        }
+        .st-key-bims_dashboard_header > [data-testid="stVerticalBlock"] {
+            position: relative !important;
+            height: 148px !important;
+            min-height: 148px !important;
+            max-height: 148px !important;
+        }
+        /* En móvil, el robot comunica el estado sin ocupar otra fila. */
+        .st-key-bims_dashboard_header .bims-mobile-bot-icon { display:inline-block !important; }
+        /* El estado del bot se conserva en escritorio, pero se oculta en móvil
+           para liberar espacio y compactar la cabecera. */
+        .st-key-bims_dashboard_header .bims-header-bot-status {
+            display: none !important;
+        }
+        /* En móvil no forzamos el layout de columnas: ocultamos solo
+           los controles que no deben aparecer y dejamos visible el título. */
+        .st-key-bims_dashboard_header .st-key-bims_user_menu,
+        .st-key-bims_dashboard_header [data-testid="column"]:has(.st-key-bims_user_menu) {
+            display: none !important;
+        }
+        .st-key-bims_dashboard_header .st-key-btn_abrir_guardias_header_calendar {
+            display: none !important;
+        }
+        .st-key-bims_dashboard_header h1 {
+            font-size: clamp(.95rem, 4vw, 1.15rem) !important;
+            line-height: 1.2 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+        .st-key-bims_dashboard_header .bims-mobile-bot-icon {
+            display: inline-block !important;
+            width: 8px !important;
+            height: 8px !important;
+            min-width: 8px !important;
+            border-radius: 50% !important;
+            margin-left: 7px !important;
+            vertical-align: middle !important;
+        }
+        .st-key-bims_dashboard_header [role="tablist"] {
+            position: absolute !important;
+            top: 88px !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            margin: 0 !important;
+        }
+        .bims-header-spacer {
+            height: 148px !important;
+            min-height: 148px !important;
+            line-height: 0 !important;
+        }
+        div[data-testid="stElementContainer"]:has(.bims-header-spacer) {
+            height: 148px !important;
+            min-height: 148px !important;
+            margin: 0 0 -16px 0 !important;
+            padding: 0 !important;
+            line-height: 0 !important;
+        }
+        /* El tabpanel comienza inmediatamente debajo de la cabecera fija. */
+        .stTabs [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        .stTabs [data-baseweb="tab-panel"] > div:first-child,
+        .stTabs [data-baseweb="tab-panel"] [data-testid="stVerticalBlock"]:first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        #bims-fixed-tabs-placeholder {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+        }
+    }
+
+    /* Correcciones estrictamente móviles: WBR y espacio residual de la
+       navegación trasladada al encabezado. Escritorio conserva su diseño. */
+    @media screen and (max-width: 767px) {
+        /* El WBR se marca desde su propio fragmento; no afecta otras pestañas. */
+        .bims-wbr-mobile-root {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+        }
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            gap: 0.75rem !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+        }
+        /* Gráficos y tablas: una columna completa por fila. */
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            display: flex !important;
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+        }
+        /* Cada gráfico, tabla o tarjeta ocupa una fila completa.
+           min-width:0 evita que el ancho mínimo del wrapper desborde el móvil. */
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"] > [data-testid="column"] {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+        }
+        .bims-wbr-mobile-root [data-testid="stElementContainer"],
+        .bims-wbr-mobile-root [data-testid="stVerticalBlock"],
+        .bims-wbr-mobile-root [data-testid="stPlotlyChart"],
+        .bims-wbr-mobile-root [data-testid="stDataFrame"],
+        .bims-wbr-mobile-root .js-plotly-plot,
+        .bims-wbr-mobile-root .plot-container,
+        .bims-wbr-mobile-root .plotly,
+        .bims-wbr-mobile-root iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+        }
+        .bims-wbr-mobile-root .metric-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            overflow-wrap: anywhere !important;
+        }
+
+        /* WBR móvil: las filas compuestas únicamente por tarjetas KPI
+           se presentan en dos columnas. Si hay gráfico o tabla en la fila,
+           se conserva el ancho completo para evitar comprimir su contenido. */
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:not(:has([data-testid="stPlotlyChart"], [data-testid="stDataFrame"])) > div[data-testid="column"]:has(.metric-card):has(+ div[data-testid="column"] .metric-card),
+        .bims-wbr-mobile-root div[data-testid="stHorizontalBlock"]:not(:has([data-testid="stPlotlyChart"], [data-testid="stDataFrame"])) > div[data-testid="column"]:has(.metric-card) + div[data-testid="column"]:has(.metric-card) {
+            flex: 1 1 calc(50% - 0.375rem) !important;
+            width: calc(50% - 0.375rem) !important;
+            max-width: calc(50% - 0.375rem) !important;
+            min-width: 0 !important;
+        }
+
+        /* Los cuatro KPI ejecutivos se organizan en una cuadrícula 2 x 2,
+           incluso en móviles estrechos, con tipografía y padding compactos. */
+        .bims-wbr-mobile-root .wbr-highlights {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+            width: 100% !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div {
+            min-width: 0 !important;
+            min-height: 96px !important;
+            padding: 10px 11px !important;
+            overflow-wrap: anywhere !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div > div:first-child {
+            font-size: 0.64rem !important;
+            line-height: 1.3 !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div > div:nth-child(2) {
+            font-size: 1.45rem !important;
+            line-height: 1.2 !important;
+            margin: 6px 0 4px !important;
+        }
+        .bims-wbr-mobile-root .wbr-highlights > div > div:nth-child(3) {
+            font-size: 0.68rem !important;
+            line-height: 1.35 !important;
+        }
+
+        /* El tablist ya vive en la cabecera: colapsar la reserva original
+           y sus wrappers vacíos para que no quede una franja sobre el informe. */
+        #bims-main-tabs-wrapper {
+            display: contents !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        #bims-main-tabs-wrapper [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        #bims-fixed-tabs-placeholder,
+        div[data-testid="stElementContainer"]:has(> #bims-fixed-tabs-placeholder) {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+        }
+        #bims-main-tablist > div:not([role="tab"]),
+        #bims-main-tablist [data-testid="stTabScrollButton"],
+        #bims-main-tablist [data-baseweb="tab-scroll-button"] {
+            display: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+        }
+        .stTabs [data-baseweb="tab-panel"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        .stTabs [data-baseweb="tab-panel"] > div:first-child,
+        .stTabs [data-baseweb="tab-panel"] [data-testid="stVerticalBlock"]:first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+    }
+
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+    /* Estilos del panel lateral BIMS cargados antes de consultas y datos. */
+    /* El contenedor externo de Streamlit también sale del flujo normal.
+       El panel interior ya es fixed; sin esto, el wrapper puede reservar altura
+       antes del encabezado aunque el panel esté cerrado. */
+    div[data-testid="stElementContainer"]:has(.st-key-bims_sidebar_panel) {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        z-index: 1000000 !important;
+    }
+
+    /* Acabado compacto y consistente del panel de control */
+    .st-key-bims_sidebar_panel {
+        position: fixed !important;
+        inset: 0 auto 0 0 !important;
+        width: 320px !important;
+        max-width: min(88vw, 360px) !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+        padding: 20px 17px 18px !important;
+        margin: 0 !important;
+        background: linear-gradient(180deg, #101a2b 0%, #0b1120 58%) !important;
+        border-right: 1px solid #26364b !important;
+        box-shadow: 18px 0 48px rgba(0,0,0,.34) !important;
+        z-index: 1000000 !important;
+        transform: translate3d(0,0,0);
+        transition: transform .28s cubic-bezier(.22,.8,.25,1) !important;
+    }
+    .bims-sidebar-heading {
+        padding: 1px 2px 13px;
+        margin: 0 0 12px;
+        border-bottom: 1px solid rgba(148,163,184,.18);
+    }
+    .bims-sidebar-heading-title {
+        color: #f1f5f9;
+        font-size: 1.12rem;
+        line-height: 1.3;
+        font-weight: 700;
+        letter-spacing: -.015em;
+    }
+    .bims-sidebar-heading-subtitle {
+        margin-top: 3px;
+        color: #8fa2ba;
+        font-size: .72rem;
+        letter-spacing: .035em;
+    }
+    .st-key-bims_sidebar_panel [data-testid="stVerticalBlock"] {
+        gap: .62rem;
+    }
+    .st-key-bims_sidebar_panel hr {
+        margin: 7px 0 10px !important;
+        border-color: rgba(148,163,184,.18) !important;
+    }
+    .st-key-bims_sidebar_panel [data-testid="stForm"] {
+        border: 1px solid rgba(100,116,139,.22);
+        border-radius: 11px;
+        padding: 11px 10px 10px;
+        background: rgba(15,23,42,.32);
+    }
+    .st-key-bims_sidebar_panel [data-testid="stForm"] [data-testid="stVerticalBlock"] {
+        gap: .55rem;
+    }
+    .st-key-bims_sidebar_panel button {
+        border-radius: 9px !important;
+    }
+    .st-key-bims_sidebar_panel .db-info-box {
+        margin: 0 !important;
+        padding: 9px 11px !important;
+        border-radius: 9px !important;
+        line-height: 1.55 !important;
+    }
+    /* El panel permanece cerrado por defecto incluso antes de que cargue el JS. */
+    html:not(.bims-sidebar-open) .st-key-bims_sidebar_panel {
+        transform: translate3d(-105%,0,0) !important;
+        box-shadow: none !important;
+        pointer-events: none !important;
+    }
+    html.bims-sidebar-open .st-key-bims_sidebar_panel {
+        transform: translate3d(0,0,0) !important;
+        pointer-events: auto !important;
+    }
+    #bims-sidebar-toggle {
+        position: fixed;
+        top: 12px;
+        left: 270px;
+        width: 38px;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid #3b506b;
+        border-radius: 10px;
+        background: #17263a;
+        color: #e2e8f0;
+        font: inherit;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        z-index: 1000002;
+        box-shadow: 0 5px 18px rgba(0,0,0,.28);
+        transition: left .28s cubic-bezier(.22,.8,.25,1), background .18s ease;
+    }
+    #bims-sidebar-toggle:hover { background: #223650; }
+    .st-key-btn_abrir_guardias_header_calendar button,
+    .st-key-btn_abrir_guardias_header_alert button,
+    .st-key-btn_abrir_guardias_header button {
+        min-width: 44px !important;
+        width: 44px !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 9px !important;
+        background: transparent !important;
+        color: #94a3b8 !important;
+        font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif !important;
+        font-size: 1.75rem !important;
+        font-weight: 500 !important;
+        line-height: 1 !important;
+        box-shadow: none !important;
+        transition: color .18s ease, background .18s ease, transform .18s ease !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button p {
+        font-size: 0 !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button span,
+    .st-key-btn_abrir_guardias_header_alert button p,
+    .st-key-btn_abrir_guardias_header_alert button span,
+    .st-key-btn_abrir_guardias_header button p,
+    .st-key-btn_abrir_guardias_header button span {
+        font-size: 1.75rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button:hover {
+        background: rgba(56,189,248,.10) !important;
+        color: #7dd3fc !important;
+        transform: translateY(-1px);
+    }
+    .st-key-btn_abrir_guardias_header_alert button {
+        color: #fbbf24 !important;
+        text-shadow: 0 0 8px rgba(251,191,36,.18) !important;
+    }
+    .st-key-btn_abrir_guardias_header_alert button:hover {
+        background: rgba(251,191,36,.10) !important;
+        color: #fcd34d !important;
+    }
+    html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
+    @media (max-width: 600px) {
+        .st-key-bims_sidebar_panel { width: 88vw !important; }
+        #bims-sidebar-toggle { left: calc(88vw - 52px); }
+        html:not(.bims-sidebar-open) #bims-sidebar-toggle { left: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .st-key-bims_sidebar_panel, #bims-sidebar-toggle { transition-duration: .01ms !important; }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.html("""
+<script>
+(function () {
+    try {
+        const doc = window.parent.document;
+        const diagnostic = doc.getElementById('bims-layout-diagnostic');
+        if (diagnostic) diagnostic.remove();
+    } catch (e) {}
+})();
+</script>
+""", unsafe_allow_javascript=True)
+
+try:
+    from sync_intercom import sincronizar_intercom
+    SYNC_AVAILABLE = True
+except ImportError:
+    SYNC_AVAILABLE = False
+
+INTERCOM_APP_ID = "co9kozj6"
+
+# URL de tu webhook FastAPI de Python desplegado en Render
+NOTIFICADOR_API_URL = os.environ.get("NOTIFICADOR_API_URL", "https://dashboard-soporte-bims-ctcu.onrender.com")
+CRON_SECRET_TOKEN = os.environ.get("CRON_SECRET_TOKEN", "bims_secret_cron_123")
+
+# ==========================
+# CONFIGURACIÓN DE SUPABASE
+# ==========================
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+
+@st.cache_resource
+def init_supabase() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase = init_supabase()
+
+
+def registrar_evento_dashboard(level, event, message, details=None, category="dashboard"):
+    """Guarda eventos relevantes del dashboard sin interrumpir la operación si falla el registro."""
+    try:
+        supabase.table("system_logs").insert({
+            "source": "dashboard",
+            "category": str(category),
+            "level": str(level),
+            "event": str(event),
+            "message": str(message),
+            "details": details or {}
+        }).execute()
+        return True
+    except Exception as exc:
+        print(f"⚠️ No se pudo guardar el evento del dashboard ({event}): {exc}")
+        return False
+
+
+# ==========================================
+# CONSULTA COMPARTIDA DE ALERTAS EN VIVO
+# ==========================================
+@st.cache_data(ttl=10, show_spinner=False)
+def obtener_alertas_compartidas():
+    """Comparte entre sesiones la consulta de alertas durante 10 segundos."""
+    COLUMNAS_ALERTAS = "id, created_at, etiquetas, updated_at, estado, canal, primera_respuesta_min, tenant, nombre_contacto, agente_asignado"
+
+    res = supabase.table("conversaciones")\
+        .select(COLUMNAS_ALERTAS)\
+        .not_.in_("estado", ["cerrado", "closed", "resolved", "resuelto", "snoozed"])\
+        .neq("canal", "Correo electrónico")\
+        .order("created_at", desc=True)\
+        .limit(100)\
+        .execute()
+
+    return res.data or []
+
+# ==========================================
+# AUTENTICACIÓN GOOGLE (OIDC) + AUTORIZACIÓN SUPABASE
+# ==========================================
+# La identidad la valida Google; el acceso al dashboard lo decide
+# usuarios_autorizados. La consulta de estado activo no utiliza caché.
+if "user_authenticated" not in st.session_state:
+    st.session_state["user_authenticated"] = False
+if "user_email" not in st.session_state:
+    st.session_state["user_email"] = ""
+
+# Elimina el antiguo bearer token de la URL si alguien llega desde un enlace viejo.
+try:
+    if "session_token" in st.query_params:
+        del st.query_params["session_token"]
+except Exception:
+    pass
+
+
+def validar_usuario_autorizado_google(email):
+    """Devuelve el usuario activo de Supabase; falla cerrado ante errores."""
+    try:
+        resultado = (
+            supabase.table("usuarios_autorizados")
+            .select("email, nombre")
+            .eq("email", email.strip().lower())
+            .eq("activo", True)
+            .limit(1)
+            .execute()
+        )
+        return (resultado.data[0] if resultado.data else None), None
+    except Exception as error:
+        print(f"Error validando autorización Google en Supabase: {error}")
+        return None, error
+
+
+@st.cache_data(ttl=300)
+def obtener_permisos_usuario(identificador_usuario):
+    """
+    Consulta los permisos exclusivamente por el correo verificado de Google.
+    """
+    if not identificador_usuario:
+        return {"acceso_wbr": False, "acceso_admin": False}
+    try:
+        res = (
+            supabase.table("usuarios_autorizados")
+            .select("acceso_wbr, acceso_admin")
+            .eq("email", identificador_usuario.strip().lower())
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return {
+                "acceso_wbr": bool(res.data[0].get("acceso_wbr", False)),
+                "acceso_admin": bool(res.data[0].get("acceso_admin", False))
+            }
+    except Exception as e:
+        print(f"Error consultando permisos: {e}")
+    return {"acceso_wbr": False, "acceso_admin": False}
+
+@st.cache_data(ttl=600, show_spinner=False)
+def obtener_id_usuario_actual(email_usuario):
+    if not email_usuario:
+        return None
+    try:
+        res = (
+            supabase.table("usuarios_autorizados")
+            .select("id")
+            .eq("email", email_usuario.strip().lower())
+            .limit(1)
+            .execute()
+        )
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        return None
+
+# ==========================================
+# PANTALLA DE ACCESO CON GOOGLE
+# ==========================================
+if not st.user.is_logged_in:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+
+    st.markdown("""
+    <style>
+        .stApp {
+            background:
+                radial-gradient(ellipse at 50% 50%, rgba(30, 64, 105, .34), transparent 48%),
+                linear-gradient(145deg, #080f1d 0%, #0b1120 55%, #101b2d 100%) !important;
+            color: #f8fafc;
+        }
+        header[data-testid="stHeader"] { background: transparent !important; }
+        [data-testid="stSidebar"] { display: none !important; }
+        .stAppDeployButton, #MainMenu, footer { display: none !important; }
+        /* La pantalla de acceso ocupa el viewport y centra el contenido verticalmente. */
+        .stApp,
+        [data-testid="stAppViewContainer"] {
+            min-height: 100vh !important;
+            height: 100vh !important;
+        }
+        [data-testid="stAppViewContainer"] > .main,
+        [data-testid="stAppViewContainer"] > section[data-testid="stMain"],
+        section.main {
+            min-height: 100vh !important;
+            height: 100vh !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        [data-testid="stMainBlockContainer"],
+        [data-testid="stAppViewBlockContainer"],
+        section.main > div.block-container {
+            width: 100% !important;
+            max-width: none !important;
+            min-height: 100vh !important;
+            height: 100vh !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            padding: 0 1rem !important;
+            margin: 0 auto !important;
+        }
+        [data-testid="stMainBlockContainer"] > div,
+        [data-testid="stAppViewBlockContainer"] > div,
+        section.main > div.block-container > div {
+            width: 100% !important;
+        }
+        /* Centra la tarjeta directamente respecto del viewport.
+           No depende de la altura ni del alineamiento de los wrappers de Streamlit. */
+        .st-key-bims_login_panel {
+            position: fixed !important;
+            top: 50vh !important;
+            left: 50vw !important;
+            transform: translate(-50%, -50%) !important;
+            width: calc(100vw - 2rem) !important;
+            max-width: 410px !important;
+            margin: 0 !important;
+            padding: 28px 30px 22px;
+            box-sizing: border-box !important;
+            background: linear-gradient(155deg, rgba(30,41,59,.97), rgba(12,22,39,.98));
+            border: 1px solid rgba(100, 116, 139, .38); border-radius: 20px;
+            box-shadow: 0 28px 70px rgba(0,0,0,.38);
+            text-align: center;
+            z-index: 9999 !important;
+        }
+        .st-key-bims_login_panel [data-testid="stMarkdown"] {
+            text-align: center;
+        }
+        .bims-google-login-logo {
+            width: fit-content; min-width: 112px; margin: 0 auto 12px;
+            padding: 5px 14px; border-radius: 10px;
+            color: #f8fafc; font-size: 1.55rem; font-weight: 800;
+            letter-spacing: .015em; line-height: 1.2;
+            background: linear-gradient(110deg, #5eead4, #38bdf8);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .bims-google-login-title {
+            color: #f8fafc; font-size: 1.32rem; font-weight: 730;
+            letter-spacing: -.035em; margin-bottom: 6px;
+        }
+        .bims-title-accent {
+            background: linear-gradient(110deg, #5eead4, #38bdf8);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800; letter-spacing: .015em;
+        }
+        .bims-google-login-subtitle {
+            color: #a8b5c7; font-size: .88rem; line-height: 1.5;
+            margin: 0 auto 14px; max-width: 320px;
+        }
+        .st-key-btn_google_login { max-width: 278px; margin: 10px auto 0; }
+        .st-key-btn_google_login button {
+            position: relative !important;
+            display: flex !important; align-items: center !important;
+            justify-content: center !important;
+            border-radius: 10px !important; min-height: 44px !important;
+            padding: 0 42px !important;
+            font-weight: 600 !important; font-size: .9rem !important;
+            color: #e5edf7 !important; background: rgba(30,41,59,.58) !important;
+            border: 1px solid rgba(148,163,184,.34) !important;
+            box-shadow: 0 4px 14px rgba(0,0,0,.14) !important;
+            transition: background .16s ease, box-shadow .16s ease, transform .16s ease !important;
+        }
+        .st-key-btn_google_login button:hover {
+            background: rgba(51,65,85,.78) !important;
+            border-color: rgba(148,163,184,.55) !important;
+            box-shadow: 0 7px 18px rgba(0,0,0,.2) !important;
+            transform: translateY(-1px);
+        }
+        .st-key-btn_google_login button::before {
+            content: ""; position: absolute; left: 17px; top: 50%;
+            width: 21px; height: 21px; transform: translateY(-50%);
+            background-repeat: no-repeat; background-position: center;
+            background-size: contain;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.73 7.18l7.63 5.91c4.45-4.11 7.14-10.17 7.14-17.56z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.54 2.56 10.78l7.97-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.9-5.89l-7.63-5.91c-2.12 1.42-4.84 2.26-8.27 2.26-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/svg%3E");
+        }
+        .bims-login-footnote {
+            color: #8291a6; text-align: center; font-size: .75rem;
+            max-width: 310px; margin: 10px auto 0; line-height: 1.45;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col_izq, col_centro, col_der = st.columns([1, 1, 1])
+    with col_centro:
+        with st.container(key="bims_login_panel"):
+            st.markdown("""
+            <div class="bims-google-login-logo">BIMS</div>
+            <div class="bims-google-login-title">Dashboard de Soporte</div>
+            <div class="bims-google-login-subtitle">
+                Accede de forma segura con tu cuenta de Google
+            </div>
+            """, unsafe_allow_html=True)
+            st.button(
+                "Continuar con Google",
+                on_click=st.login,
+                use_container_width=True,
+                type="secondary",
+                key="btn_google_login"
+            )
+            st.markdown(
+                '<div class="bims-login-footnote">El acceso está reservado a cuentas '
+                'registradas y habilitadas por el administrador.</div>',
+                unsafe_allow_html=True
+            )
+    st.stop()
+
+
+# Google ya autenticó la identidad. Ahora verificamos el correo y su autorización.
+claims_google = st.user.to_dict()
+email_google = str(claims_google.get("email") or "").strip().lower()
+email_google_verificado = claims_google.get("email_verified") is True
+
+if not email_google or not email_google_verificado:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.warning(
+        "Google no pudo confirmar un correo electrónico verificado para esta cuenta. "
+        "Selecciona otra cuenta de Google."
+    )
+    st.button(
+        "Elegir otra cuenta",
+        on_click=st.logout,
+        use_container_width=True,
+        key="btn_google_logout_no_verificado"
+    )
+    st.stop()
+
+usuario_autorizado, error_validacion_google = validar_usuario_autorizado_google(
+    email_google
+)
+
+if error_validacion_google is not None:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.error(
+        "No pudimos comprobar tu autorización en este momento. "
+        "Intenta actualizar la página en unos instantes."
+    )
+    st.stop()
+
+if not usuario_autorizado:
+    st.session_state["user_authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.markdown("### Acceso no autorizado")
+    st.error(
+        f"La cuenta **{email_google}** no está registrada o no se encuentra activa "
+        "en el sistema. Si necesitas acceso, solicita la habilitación al administrador."
+    )
+    st.button(
+        "Cerrar sesión",
+        on_click=st.logout,
+        use_container_width=True,
+        key="btn_google_logout_no_autorizado"
+    )
+    st.stop()
+
+# Mantiene los nombres de sesión que utiliza el resto del dashboard.
+st.session_state["user_authenticated"] = True
+st.session_state["user_email"] = usuario_autorizado.get("email", email_google)
+st.session_state["user_name"] = (
+    usuario_autorizado.get("nombre")
+    or claims_google.get("name")
+    or email_google
+)
+picture_google = str(claims_google.get("picture") or "").strip()
+st.session_state["user_picture"] = (
+    picture_google if picture_google.startswith("https://") else ""
+)
+
+
+def cerrar_sesion_google():
+    """Cierra la sesión OIDC y limpia los datos de identidad locales."""
+    for clave in ("user_authenticated", "user_email", "user_name", "user_picture"):
+        st.session_state[clave] = False if clave == "user_authenticated" else ""
+    st.logout()
+
+
+# ==========================================
+# FUNCIONES AUXILIARES DE TIEMPOS Y REGLAS DE NEGOCIO
+# ==========================================
+
+# ==========================================
+
+def icono_estado_svg(estado, size=18):
+    """Devuelve un icono SVG estilo Lucide para estados operativos."""
+    estilos = {
+        "disponible": ("#10b981", '<path d="m9 12 2 2 4-4"/>'),
+        "ausente": ("#f59e0b", '<path d="M12 8v4"/><path d="M12 16h.01"/>'),
+        "desconectado": ("#ef4444", '<path d="m9 9 6 6"/><path d="m15 9-6 6"/>'),
+        "pausado": ("#f59e0b", '<path d="M9 8v8"/><path d="M15 8v8"/>')
+    }
+    color, trazo = estilos.get(str(estado).lower(), estilos["disponible"])
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" '
+        f'stroke-linecap="round" stroke-linejoin="round" '
+        f'style="display:inline-block;vertical-align:-3px;flex:none;">'
+        f'<circle cx="12" cy="12" r="9"/>{trazo}</svg>'
+    )
+
+
+# MAPA EN TIEMPO REAL DE PRESENCIA DE AGENTES
+# ==========================================
+@st.cache_data(ttl=30, show_spinner=False)
+def obtener_mapa_estados_agentes():
+    """Recupera la presencia de cada agente guardada en la tabla estado_agentes."""
+    try:
+        res = supabase.table("estado_agentes").select("nombre, away").execute()
+        return {
+            r["nombre"].strip().lower(): ("Ausente" if r.get("away") else "Disponible")
+            for r in (res.data or [])
+        }
+    except Exception:
+        return {}
+
+# ==========================================
+# CONSULTA GLOBAL CACHEADA DE CARGA (CORREGIDA PARA MAYÚSCULAS/MINÚSCULAS)
+# ==========================================
+@st.cache_data(ttl=30, show_spinner=False)
+def obtener_cargas_agentes_db(hoy_inicio_utc):
+    """
+    Recupera chats abiertos y cerrados hoy manejando variantes de mayúsculas/minúsculas.
+    """
+    estados_cerrados_list = [
+        "cerrado", "closed", "resolved", "resuelto", "snoozed",
+        "Cerrado", "Closed", "Resolved", "Resuelto", "Snoozed"
+    ]
+
+    # 1. Chats abiertos actualmente
+    res_abiertos = supabase.table("conversaciones")\
+        .select("id, agente_asignado, canal, etiquetas, estado, created_at, updated_at, fecha_cierre")\
+        .not_.in_("estado", estados_cerrados_list)\
+        .neq("canal", "Correo electrónico")\
+        .execute()
+
+    # 2. Chats cerrados hoy (donde tanto el cierre como la asignación/creación sean de hoy)
+    res_cerrados_hoy = supabase.table("conversaciones")\
+        .select("id, agente_asignado, canal, etiquetas, estado, created_at, updated_at, fecha_cierre")\
+        .in_("estado", estados_cerrados_list)\
+        .neq("canal", "Correo electrónico")\
+        .gte("fecha_cierre", hoy_inicio_utc)\
+        .gte("created_at", hoy_inicio_utc)\
+        .execute()
+
+    # 3. Respaldo para chats cerrados cuya fecha_cierre sea NULL
+    res_cerrados_respaldo = supabase.table("conversaciones")\
+        .select("id, agente_asignado, canal, etiquetas, estado, created_at, updated_at, fecha_cierre")\
+        .in_("estado", estados_cerrados_list)\
+        .neq("canal", "Correo electrónico")\
+        .is_("fecha_cierre", "null")\
+        .gte("updated_at", hoy_inicio_utc)\
+        .gte("created_at", hoy_inicio_utc)\
+        .execute()
+
+    todos = (res_abiertos.data or []) + (res_cerrados_hoy.data or []) + (res_cerrados_respaldo.data or [])
+    
+    unicos = {r["id"]: r for r in todos}
+    return list(unicos.values())
+
+# ==========================================
+# FRAGMENTO DE CARGA DE AGENTES EN VIVO
+# ==========================================
+@st.fragment(run_every=60)
+def renderizar_panel_carga_asignador():
+    tz_py = timezone(timedelta(hours=-3))
+    now_dt = datetime.now(tz_py)
+
+    # Validar jornada laboral (Lunes a Viernes de 08:00 a 18:00 hs PY)
+    fecha_str = now_dt.strftime("%Y-%m-%d")
+    dia_semana = now_dt.weekday()
+    hora_actual = now_dt.time()
+
+    if (
+        fecha_str in FERIADOS
+        or dia_semana not in [0, 1, 2, 3, 4]
+        or not (time(8, 0, 0) <= hora_actual <= time(18, 0, 0))
+    ):
+        st.markdown(f"""<div style="display:flex;align-items:center;gap:8px;color:#cbd5e1;">{icono_estado_svg("pausado", 18)}<span><strong>Panel pausado fuera de jornada laboral.</strong> Horario operativo: L-V de 08:00 a 18:00 hs (PY). Hora actual: {now_dt.strftime('%H:%M:%S')} hs.</span></div>""", unsafe_allow_html=True)
+        return
+
+    try:
+        hoy_local_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        hoy_inicio_utc = hoy_local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        data_cargas = obtener_cargas_agentes_db(hoy_inicio_utc)
+        mapa_estados = obtener_mapa_estados_agentes()
+
+        # Lista de agentes/entidades a EXCLUIR explícitamente
+        agentes_omitir = [
+            "monica", "mónica", "monica (bot)", "soporte", 
+            "gerardo gaona", "gerardo.gaona@itti.digital", "soporte bims", "laura.almiron@tivahq.com", "laura almirón", "rebeca cartes",
+            "agendamiento", "l2 - martin moreira", "l2 - dario olmedo", "l2 - ivan amarilla", "l2 - gerardo gaona", "l2 - héctor trinidad",
+            "martin moreira", "dario olmedo", "ivan amarilla", "gerardo gaona", "héctor trinidad", "none", "nan", "sin asignar", ""
+        ]
+
+        # 1. Obtener lista maestra de agentes desde la tabla usuarios_autorizados
+        lista_agentes_maestra = set()
+        try:
+            res_u = supabase.table("usuarios_autorizados").select("nombre").eq("activo", True).execute()
+            for u in (res_u.data or []):
+                nombre_u = u.get("nombre", "").strip()
+                if nombre_u and nombre_u.lower() not in agentes_omitir:
+                    lista_agentes_maestra.add(nombre_u)
+        except Exception:
+            pass
+
+        df_c = pd.DataFrame(data_cargas) if data_cargas else pd.DataFrame()
+        
+        # Excluir correos electrónicos, spam y escalamientos L2 de la carga en vivo L1
+        if not df_c.empty:
+            canal_c = df_c["canal"].fillna("").astype(str).str.lower() if "canal" in df_c.columns else pd.Series("", index=df_c.index)
+            tags_c = df_c["etiquetas"].fillna("").astype(str).str.lower() if "etiquetas" in df_c.columns else pd.Series("", index=df_c.index)
+            df_c = df_c[
+                ~canal_c.str.contains("correo|email|mail", regex=True)
+                & ~tags_c.str.contains("correo|spam|l2", regex=True)
+            ].copy()
+
+        # Garantizar presencia de columnas en df_c
+        for col in ["id", "agente_asignado", "estado", "fecha_cierre", "updated_at", "created_at"]:
+            if col not in df_c.columns:
+                df_c[col] = None
+
+        if not df_c.empty:
+            # Fecha de cierre / resolución en hora local
+            df_c["fecha_ref"] = df_c["fecha_cierre"].fillna(df_c["updated_at"])
+            fecha_ref_dt = pd.to_datetime(df_c["fecha_ref"], format="ISO8601", errors="coerce", utc=True)
+            df_c["fecha_ref_py"] = fecha_ref_dt.dt.tz_convert("America/Asuncion")
+            df_c["fecha_solo_py"] = df_c["fecha_ref_py"].dt.date
+
+            # Fecha de creación / asignación en hora local
+            created_dt = pd.to_datetime(df_c["created_at"], format="ISO8601", errors="coerce", utc=True)
+            df_c["created_py"] = created_dt.dt.tz_convert("America/Asuncion")
+            df_c["created_solo_py"] = df_c["created_py"].dt.date
+
+            def limpiar_agente_carga(r):
+                ag_orig = str(r.get("agente_asignado", "")).strip()
+                if ag_orig.lower() in ["soporte bims", "soporte", "sin asignar", "", "none", "nan"]:
+                    ag_tag = extraer_agente_desde_etiquetas_str(r.get("etiquetas"))
+                    if ag_tag:
+                        return ag_tag
+                return ag_orig if ag_orig else "Sin asignar"
+            
+            df_c["agente_clean"] = df_c.apply(limpiar_agente_carga, axis=1)
+            
+            # Incorporar cualquier otro agente humano presente en las conversaciones de hoy
+            for ag in df_c["agente_clean"].unique():
+                if ag.lower() not in agentes_omitir:
+                    lista_agentes_maestra.add(ag)
+
+            estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+            df_c["es_cerrado"] = df_c["estado"].fillna("").astype(str).str.strip().str.lower().isin(estados_cerrados)
+
+            hoy_date_py = now_dt.date()
+
+            # Solo cuenta como cerrado hoy si FUE CERRADO HOY y ADEMÁS FUE ASIGNADO/CREADO HOY
+            df_c["es_cerrado_hoy"] = (
+                df_c["es_cerrado"] 
+                & (df_c["fecha_solo_py"] == hoy_date_py) 
+                & (df_c["created_solo_py"] == hoy_date_py)
+            )
+            df_c["es_abierto_actual"] = ~df_c["es_cerrado"]
+
+        # 2. Agrupamiento por agente humano
+        resumen = []
+        for agente in sorted(list(lista_agentes_maestra)):
+            if agente.lower() in agentes_omitir:
+                continue
+
+            if not df_c.empty and "agente_clean" in df_c.columns:
+                grp = df_c[df_c["agente_clean"] == agente]
+                pendientes = int(grp["es_abierto_actual"].sum()) if not grp.empty else 0
+                cerrados_hoy = int(grp["es_cerrado_hoy"].sum()) if not grp.empty else 0
+            else:
+                pendientes = 0
+                cerrados_hoy = 0
+
+            total_asignados = pendientes + cerrados_hoy
+
+            # Presencia actual con coincidencia flexible por nombre
+            estado_presencia = "Disponible"
+            agente_lower = agente.lower()
+            for k_nombre, v_estado in mapa_estados.items():
+                if k_nombre in agente_lower or agente_lower in k_nombre:
+                    estado_presencia = v_estado
+                    break
+
+            # Indicador circular minimalista de presencia (verde disponible / ámbar ausente).
+            color_presencia = "#fbbf24" if "ausente" in str(estado_presencia).strip().lower() else "#10b981"
+            etiqueta_grafico = agente
+
+            resumen.append({
+                "Estado": estado_presencia,
+                "Color Presencia": color_presencia,
+                "Agente de Soporte": agente,
+                "Agente Grafico": etiqueta_grafico,
+                "Total Asignados Hoy": total_asignados,
+                "Cerrados Hoy": cerrados_hoy,
+                "Pendientes (Abiertos)": pendientes
+            })
+
+        df_resumen = pd.DataFrame(resumen)
+
+        if not df_resumen.empty:
+            df_resumen = df_resumen.sort_values(by="Total Asignados Hoy", ascending=False)
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Chats Pendientes", df_resumen["Pendientes (Abiertos)"].sum())
+            col2.metric("Total Cerrados Hoy", df_resumen["Cerrados Hoy"].sum())
+            col3.metric("Última actualización", now_dt.strftime("%H:%M:%S hs"))
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ==========================================
+            # GRÁFICO DE BARRAS VERTICAL ACUMULADO
+            # ==========================================
+            fig_carga = go.Figure()
+
+            fig_carga.add_trace(go.Bar(
+                x=df_resumen["Agente Grafico"],
+                y=df_resumen["Cerrados Hoy"],
+                name="Cerrados Hoy",
+                marker=dict(
+                    color="#10b981",
+                    cornerradius=8
+                ),
+                text=df_resumen["Cerrados Hoy"].apply(lambda v: str(v) if v > 0 else ""),
+                textposition="inside",
+                insidetextanchor="middle",
+                insidetextfont=dict(color="#ffffff", size=14, family="Arial Black"),
+                constraintext="none",
+                hovertemplate="<b>%{x}</b><br>Cerrados Hoy: %{y}<extra></extra>"
+            ))
+
+            fig_carga.add_trace(go.Bar(
+                x=df_resumen["Agente Grafico"],
+                y=df_resumen["Pendientes (Abiertos)"],
+                name="Abiertos Pendientes",
+                marker=dict(
+                    color="#f97316",
+                    cornerradius=8
+                ),
+                text=df_resumen["Pendientes (Abiertos)"].apply(lambda v: str(v) if v > 0 else ""),
+                textposition="inside",
+                insidetextanchor="middle",
+                insidetextfont=dict(color="#ffffff", size=14, family="Arial Black"),
+                constraintext="none",
+                hovertemplate="<b>%{x}</b><br>Abiertos Pendientes: %{y}<extra></extra>"
+            ))
+
+            for idx, row in df_resumen.iterrows():
+                if row["Total Asignados Hoy"] > 0:
+                    fig_carga.add_annotation(
+                        x=row["Agente Grafico"],
+                        y=row["Total Asignados Hoy"],
+                        text=f"<b>{row['Total Asignados Hoy']}</b>",
+                        showarrow=False,
+                        yshift=14,
+                        font=dict(color="#f8fafc", size=15)
+                    )
+
+                # Punto de presencia alineado debajo del nombre de cada agente.
+                fig_carga.add_annotation(
+                    x=row["Agente Grafico"],
+                    y=-0.17,
+                    xref="x",
+                    yref="paper",
+                    text="●",
+                    showarrow=False,
+                    font=dict(color=row["Color Presencia"], size=14, family="Arial"),
+                    hovertext=str(row["Estado"]),
+                    captureevents=False
+                )
+
+            max_carga_y = max(int(df_resumen["Total Asignados Hoy"].max()), 4)
+
+            fig_carga.update_layout(
+                barmode="stack",
+                title="<b>Distribución y Carga Actual del Equipo (Apilado)</b>",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=12),
+                xaxis=dict(gridcolor="#334155", title=None, automargin=True),
+                yaxis=dict(
+                    gridcolor="#334155",
+                    title="Cantidad de Chats",
+                    showgrid=False,
+                    showticklabels=False,
+                    range=[0, max_carga_y * 1.18]
+                ),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                ),
+                margin=dict(t=60, b=52, l=40, r=40),
+                height=380
+            )
+
+            st.plotly_chart(fig_carga, use_container_width=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            cols_tabla = ["Estado", "Agente de Soporte", "Total Asignados Hoy", "Cerrados Hoy", "Pendientes (Abiertos)"]
+            df_tabla_presencia = df_resumen[cols_tabla].copy()
+            # El estado conserva su valor para aplicar el color correcto; se muestra como punto.
+            tabla_estilizada = (
+                df_tabla_presencia.style
+                .map(
+                    lambda valor: (
+                        "color: #fbbf24; font-size: 18px; font-weight: 700;"
+                        if "ausente" in str(valor).strip().lower()
+                        else "color: #10b981; font-size: 18px; font-weight: 700;"
+                    ),
+                    subset=["Estado"]
+                )
+                .format({"Estado": lambda valor: "●"})
+            )
+
+            st.dataframe(
+                tabla_estilizada,
+                column_config={
+                    "Estado": st.column_config.TextColumn("Presencia", help="Punto verde: disponible. Punto ámbar: ausente.", width="small"),
+                    "Agente de Soporte": st.column_config.TextColumn("Agente", help="Nombre del agente"),
+                    "Total Asignados Hoy": st.column_config.NumberColumn("Total Asignados Hoy", help="Total gestionados durante la jornada"),
+                    "Cerrados Hoy": st.column_config.NumberColumn("Cerrados Hoy", help="Total resueltos durante el día de hoy"),
+                    "Pendientes (Abiertos)": st.column_config.NumberColumn("Abiertos Actuales", help="Chats que tiene asignados pendientes en este momento")
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+        else:
+            st.info("No hay asignaciones registradas para agentes humanos el día de hoy.")
+
+    except Exception as e:
+        st.error(f"Error consultando carga en tiempo real: {e}")
+
+def obtener_fecha_local_hoy():
+    """Retorna la fecha actual exacta en Paraguay (UTC-3)."""
+    tz_py = timezone(timedelta(hours=-3))
+    return datetime.now(tz_py).date()
+
+def obtener_tiempo_transcurrido(fecha_dt):
+    """Calcula el tiempo transcurrido exacto garantizando la conversión a America/Asuncion."""
+    if pd.isna(fecha_dt) or fecha_dt is None:
+        return "Sin registros"
+    
+    # Aseguramos hora actual en Paraguay
+    now_local = pd.Timestamp.now(tz="America/Asuncion")
+    
+    # Parseo seguro de la fecha recibida
+    fecha_dt = pd.to_datetime(fecha_dt, errors="coerce")
+    if fecha_dt.tzinfo is None:
+        fecha_dt = fecha_dt.tz_localize("UTC").tz_convert("America/Asuncion")
+    else:
+        fecha_dt = fecha_dt.tz_convert("America/Asuncion")
+    
+    diff = now_local - fecha_dt
+    secs = int(diff.total_seconds())
+    
+    # Evitamos tiempos negativos por pequeños desajustes de reloj
+    if secs < 0:
+        return "hace un momento"
+    elif secs < 60:
+        return "hace un momento"
+    elif secs < 3600:
+        return f"hace {secs // 60} min"
+    elif secs < 86400:
+        return f"hace {secs // 3600} h"
+    else:
+        return f"hace {secs // 86400} días"
+
+FERIADOS_DEFAULT = [
+    "2026-01-01", "2026-03-02", "2026-04-02", "2026-04-03", "2026-05-01",
+    "2026-05-14", "2026-05-15", "2026-06-12", "2026-06-22", "2026-06-30",
+    "2026-08-15", "2026-09-28", "2026-12-08", "2026-12-25", "2026-12-31"
+]
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_feriados_activos():
+    """Recupera la lista de feriados (se ejecuta máximo 1 vez al día)."""
+    try:
+        res = supabase.table("config_notificaciones").select("feriados").eq("id", 1).execute()
+        if res.data and res.data[0].get("feriados"):
+            return sorted(list(set(res.data[0]["feriados"])))
+    except Exception:
+        pass
+    return sorted(FERIADOS_DEFAULT)
+
+def guardar_feriados_db(lista_feriados):
+    """Actualiza los feriados en Supabase y limpia la caché en memoria."""
+    try:
+        limpios = sorted(list(set(str(d).strip() for d in lista_feriados if str(d).strip())))
+        supabase.table("config_notificaciones").update({"feriados": limpios}).eq("id", 1).execute()
+        obtener_feriados_activos.clear()
+        return True
+    except Exception as e:
+        st.error(f"Error guardando feriados: {e}")
+        return False
+
+FERIADOS = obtener_feriados_activos()
+
+def evaluar_horario_dashboard_dt(dt_series):
+    """Evaluación vectorizada sobre la Serie completa de Datetime de Pandas."""
+    dias_semana = dt_series.dt.dayofweek
+    horas_decimal = dt_series.dt.hour + (dt_series.dt.minute / 60.0)
+    fechas_str = dt_series.dt.strftime("%Y-%m-%d")
+
+    es_feriado = fechas_str.isin(FERIADOS)
+    es_normal_lv = (dias_semana.isin([0, 1, 2, 3, 4])) & (horas_decimal >= 8.0) & (horas_decimal <= 17.5)
+    es_normal_sab = (dias_semana == 5) & (horas_decimal >= 9.0) & (horas_decimal <= 11.75)
+    
+    es_ext_lj = (dias_semana.isin([0, 1, 2, 3])) & ((horas_decimal >= 19.0) | (horas_decimal <= 2.0))
+    es_ext_vs = (dias_semana.isin([4, 5, 6])) & ((horas_decimal >= 18.0) | (horas_decimal <= 3.0))
+
+    condiciones = [
+        es_feriado,
+        es_normal_lv | es_normal_sab,
+        es_ext_lj | es_ext_vs
+    ]
+    elecciones = ["fuera de horario", "normal", "extendido"]
+    return np.select(condiciones, elecciones, default="fuera de horario")
+
+def calcular_minutos_habiles_rapido(dt_inicio, dt_fin):
+    """
+    Calcula minutos de gestión dentro de las franjas operativas reales.
+
+    Importante: los turnos extendidos que cruzan medianoche se construyen como
+    intervalos completos (p. ej. lunes 19:00 -> martes 02:00), evitando contar
+    el tramo 00:00-02:00 como si perteneciera al mismo día calendario.
+    """
+    if pd.isna(dt_inicio) or pd.isna(dt_fin) or dt_fin <= dt_inicio:
+        return np.nan
+
+    tz = "America/Asuncion"
+    total_minutos_habiles = 0.0
+
+    # Incluimos el día anterior porque un ticket iniciado después de medianoche
+    # puede pertenecer a la continuación del turno extendido del día anterior.
+    dia_actual = dt_inicio.date() - timedelta(days=1)
+    dia_fin = dt_fin.date()
+
+    while dia_actual <= dia_fin:
+        fecha_str = dia_actual.strftime("%Y-%m-%d")
+        dia_semana = dia_actual.weekday()
+
+        # Si el día que origina el turno es feriado, no computamos ese turno.
+        if fecha_str in FERIADOS:
+            dia_actual += timedelta(days=1)
+            continue
+
+        intervalos = []
+
+        # Turno normal
+        if dia_semana in [0, 1, 2, 3, 4]:  # L-V
+            intervalos.append((time(8, 0), time(17, 30), False))
+        elif dia_semana == 5:  # Sábado
+            intervalos.append((time(9, 0), time(11, 45), False))
+
+        # Turno extendido: intervalo real que cruza medianoche.
+        if dia_semana in [0, 1, 2]:  # L-M-X: 19:00 -> 02:00 siguiente
+            intervalos.append((time(19, 0), time(2, 0), True))
+        elif dia_semana in [3, 4, 5, 6]:  # J-V-S-D: 18:00 -> 03:00 siguiente
+            intervalos.append((time(18, 0), time(3, 0), True))
+
+        for h_inicio, h_fin, cruza_medianoche in intervalos:
+            inicio_franja = pd.Timestamp.combine(dia_actual, h_inicio).tz_localize(tz)
+            if cruza_medianoche:
+                fin_franja = pd.Timestamp.combine(
+                    dia_actual + timedelta(days=1), h_fin
+                ).tz_localize(tz)
+            else:
+                fin_franja = pd.Timestamp.combine(dia_actual, h_fin).tz_localize(tz)
+
+            start_overlap = max(dt_inicio, inicio_franja)
+            end_overlap = min(dt_fin, fin_franja)
+
+            if start_overlap < end_overlap:
+                total_minutos_habiles += (end_overlap - start_overlap).total_seconds() / 60.0
+
+        dia_actual += timedelta(days=1)
+
+    return round(total_minutos_habiles, 1)
+
+def extraer_agente_desde_etiquetas_str(etiquetas_val):
+    """Extrae el agente priorizando L2: <Nombre> -> Niv-L2 -> Agente: -> Agendamiento."""
+    if pd.isna(etiquetas_val) or not str(etiquetas_val).strip():
+        return None
+    tags = [t.strip() for t in str(etiquetas_val).split(",") if t.strip()]
+    
+    agente_l1 = None
+    agente_l2_especifico = None
+    tiene_nivel_l2 = False
+    es_agendamiento = False
+
+    for t in tags:
+        t_lower = t.lower()
+        if t_lower.startswith("l2:"):
+            partes = t.split(":", 1)
+            if len(partes) > 1 and partes[1].strip():
+                agente_l2_especifico = partes[1].strip()
+        elif t_lower == "niv-l2":
+            tiene_nivel_l2 = True
+        elif t_lower.startswith("agente:"):
+            partes = t.split(":", 1)
+            if len(partes) > 1 and partes[1].strip():
+                agente_l1 = partes[1].strip()
+        elif t_lower == "agendamiento" or "agendamiento" in t_lower:
+            es_agendamiento = True
+
+    if agente_l2_especifico:
+        return agente_l2_especifico
+    if tiene_nivel_l2:
+        return "Gerardo Gaona"
+    if agente_l1:
+        return agente_l1
+    if es_agendamiento:
+        return "Agendamiento"
+    return None
+
+def procesar_fechas_df(df):
+    """Convierte las fechas UTC a hora local (UTC-3) y normaliza métricas VECTORIZADAS."""
+    if df.empty or "created_at" not in df.columns:
+        return df
+
+    created_dt = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
+    local_dt = created_dt.dt.tz_convert("America/Asuncion")
+
+    df["created_at_dt"] = local_dt
+    df["created_at_fmt"] = local_dt.dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+    df["fecha_solo"] = local_dt.dt.date
+    df["hora_solo"] = local_dt.dt.time
+
+    # Procesamiento de updated_at para controlar frescura en sidebar
+    if "updated_at" in df.columns:
+        df["updated_at_dt"] = pd.to_datetime(df["updated_at"], errors="coerce", utc=True).dt.tz_convert("America/Asuncion")
+        df["updated_at_local"] = df["updated_at_dt"]
+    else:
+        df["updated_at_local"] = df["created_at_dt"]
+
+    # Evaluamos la franja de horario vectorizada
+    df["horario_evaluado"] = evaluar_horario_dashboard_dt(df["created_at_dt"])
+
+    # Marca de tiempo para CSAT
+    if "fecha_calificacion" in df.columns:
+        calif_utc = pd.to_datetime(df["fecha_calificacion"], errors="coerce", utc=True)
+        local_calif_dt = calif_utc.dt.tz_convert("America/Asuncion")
+        df["fecha_calificacion_dt"] = local_calif_dt.fillna(df["created_at_dt"])
+    else:
+        df["fecha_calificacion_dt"] = df["created_at_dt"]
+
+    df["fecha_calificacion_fmt"] = df["fecha_calificacion_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+    df["fecha_calificacion_solo"] = df["fecha_calificacion_dt"].dt.date
+
+    # Fechas de Cierre
+    col_cierre = "fecha_primer_cierre" if "fecha_primer_cierre" in df.columns else "fecha_cierre"
+    if col_cierre in df.columns:
+        cierre_dt = pd.to_datetime(df[col_cierre], errors="coerce", utc=True)
+        local_cierre = cierre_dt.dt.tz_convert("America/Asuncion")
+        df["fecha_cierre_dt"] = local_cierre
+        df["fecha_cierre_fmt"] = local_cierre.dt.strftime("%Y-%m-%d %H:%M").fillna("")
+
+    if "primera_respuesta_min" in df.columns:
+        df["primera_respuesta_min"] = pd.to_numeric(df["primera_respuesta_min"], errors="coerce").round(2)
+
+    # CÁLCULO VECTORIZADO DE TIEMPO DE GESTIÓN
+    if "created_at_dt" in df.columns and "fecha_cierre_dt" in df.columns:
+        df["tiempo_resolucion_minutos"] = df.apply(
+            lambda r: calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"])
+            if r.get("horario_evaluado") != "fuera de horario" else np.nan,
+            axis=1
+        )
+
+    if "id" in df.columns:
+        df["id_str"] = df["id"].astype(str).str.strip()
+        df["intercom_url"] = df["id_str"].apply(
+            lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+        )
+
+    # =========================================================================
+    # RESOLUCIÓN DE AGENTE POR ETIQUETAS (DESDE 11/11/2026 15:00 HS O USUARIO ÚNICO)
+    # =========================================================================
+    if "etiquetas" in df.columns and "created_at_dt" in df.columns:
+        dt_corte_15hs = pd.Timestamp("2026-11-11 15:00:00", tz="America/Asuncion")
+        
+        def resolver_agente_hibrido(r):
+            ag_orig = str(r.get("agente_asignado", "")).strip()
+            ag_lower = ag_orig.lower()
+            es_post_corte = pd.notna(r.get("created_at_dt")) and r["created_at_dt"] >= dt_corte_15hs
+            es_cuenta_generica = ag_lower in ["soporte bims", "soporte", "sin asignar", "", "none", "nan"]
+
+            if es_post_corte or es_cuenta_generica:
+                ag_tag = extraer_agente_desde_etiquetas_str(r.get("etiquetas"))
+                if ag_tag:
+                    return ag_tag
+
+            return ag_orig if ag_orig else "Sin asignar"
+
+        df["agente_asignado"] = df.apply(resolver_agente_hibrido, axis=1)
+        
+        # Recalcular exclusión (incluyendo 'soporte bims' como excluido si no tiene etiqueta)
+        ag_clean = df["agente_asignado"].str.lower().fillna("")
+        df["por_agente"] = np.where(
+            ag_clean.isin(["sin asignar", "", "none", "nan", "monica", "mónica", "monica (bot)", "soporte", "soporte bims"]) | ag_clean.str.contains("bot"),
+            "excluido",
+            "no excluido"
+        )
+
+    return df
+
+# ==========================================
+# CATÁLOGO DE MOTIVOS RECURRENTES (AI TITLE)
+# ==========================================
+@st.cache_data(ttl=60, show_spinner=False)
+def obtener_catalogo_motivos_recurrentes():
+    """Lee el catálogo persistente sin modificar conversaciones."""
+    todos = []
+    inicio = 0
+    while True:
+        res = (
+            supabase.table("catalogo_motivos_recurrentes")
+            .select("ai_title, motivo_recurrente, origen, revisado, updated_at")
+            .order("ai_title")
+            .range(inicio, inicio + 999)
+            .execute()
+        )
+        lote = res.data or []
+        if not lote:
+            break
+        todos.extend(lote)
+        if len(lote) < 1000:
+            break
+        inicio += 1000
+
+    return todos
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def obtener_reglas_motivos_recurrentes():
+    """Lee las reglas configurables de clasificación por palabras clave."""
+    res = (
+        supabase.table("reglas_motivos_recurrentes")
+        .select("id, palabras_clave, motivo_recurrente, prioridad, activo, updated_at")
+        .order("prioridad")
+        .order("id")
+        .execute()
+    )
+    return res.data or []
+
+
+def normalizar_texto_regla(valor):
+    """Normaliza tildes, mayúsculas y signos para comparar palabras clave."""
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(caracter for caracter in texto if not unicodedata.combining(caracter))
+    return re.sub(r"[^a-z0-9]+", " ", texto.casefold()).strip()
+
+
+def motivo_por_reglas_recurrentes(titulo, reglas):
+    """Devuelve la primera categoría cuya regla activa coincide por prioridad."""
+    titulo_norm = normalizar_texto_regla(titulo)
+    if not titulo_norm:
+        return None
+    reglas_ordenadas = sorted(
+        reglas or [],
+        key=lambda regla: (int(regla.get("prioridad") or 100), int(regla.get("id") or 0))
+    )
+    for regla in reglas_ordenadas:
+        if not regla.get("activo", True):
+            continue
+        palabras = str(regla.get("palabras_clave") or "").replace(";", ",").split(",")
+        for palabra in palabras:
+            palabra_norm = normalizar_texto_regla(palabra)
+            if palabra_norm and palabra_norm in titulo_norm:
+                motivo = str(regla.get("motivo_recurrente") or "").strip()
+                if motivo:
+                    return motivo
+    return None
+
+
+@st.fragment
+def renderizar_editor_reglas_motivos_recurrentes():
+    """Administra las reglas sin necesidad de editar el código."""
+    st.markdown("---")
+    st.markdown("##### Reglas automáticas por palabras clave")
+    st.caption(
+        "Las reglas activas se evalúan antes de Gemini. Si coinciden varias, "
+        "se aplica primero la de menor prioridad numérica. Las palabras se "
+        "comparan sin distinguir mayúsculas ni tildes."
+    )
+    try:
+        reglas_todas = obtener_reglas_motivos_recurrentes()
+    except Exception as error:
+        st.warning(
+            "Todavía no se puede cargar la tabla de reglas. Ejecutá primero el "
+            "script SQL sql/reglas_motivos_recurrentes.sql en Supabase. "
+            f"Detalle: {error}"
+        )
+        return []
+
+    with st.container(border=True):
+        version_form = st.session_state.get("version_form_nueva_regla_motivos", 0)
+        with st.form("form_nueva_regla_motivos_recurrentes"):
+            st.markdown("**Agregar regla**")
+            col_pal, col_mot, col_pri = st.columns([3, 2, 1])
+            palabras = col_pal.text_input(
+                "Palabras clave (separadas por coma)",
+                placeholder="certificación, certificar, certificado, SIFEN",
+                key=f"reglas_palabras_{version_form}"
+            )
+            motivo = col_mot.text_input(
+                "Motivo que se asignará",
+                placeholder="Certificación de comprobantes",
+                key=f"reglas_motivo_{version_form}"
+            )
+            prioridad = col_pri.number_input(
+                "Prioridad", min_value=1, max_value=9999, value=10, step=1,
+                key=f"reglas_prioridad_{version_form}"
+            )
+            activo = st.checkbox(
+                "Regla activa", value=True, key=f"reglas_activa_{version_form}"
+            )
+            agregar = st.form_submit_button("Agregar regla", use_container_width=True)
+            if agregar:
+                if not palabras.strip() or not motivo.strip():
+                    st.warning("Completá las palabras clave y el motivo asignado.")
+                else:
+                    try:
+                        supabase.table("reglas_motivos_recurrentes").insert({
+                            "palabras_clave": palabras.strip(),
+                            "motivo_recurrente": motivo.strip(),
+                            "prioridad": int(prioridad),
+                            "activo": bool(activo),
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }).execute()
+                        obtener_reglas_motivos_recurrentes.clear()
+                        st.session_state["version_form_nueva_regla_motivos"] = version_form + 1
+                        st.success("Regla agregada.")
+                        st.rerun(scope="fragment")
+                    except Exception as error:
+                        st.error(f"No se pudo agregar la regla: {error}")
+
+        if reglas_todas:
+            df_reglas = pd.DataFrame(reglas_todas)
+            df_reglas = df_reglas[[
+                "id", "palabras_clave", "motivo_recurrente", "prioridad", "activo"
+            ]].copy()
+            df_reglas["prioridad"] = pd.to_numeric(
+                df_reglas["prioridad"], errors="coerce"
+            ).fillna(100).astype(int)
+            df_reglas["activo"] = df_reglas["activo"].fillna(False).astype(bool)
+            editadas = st.data_editor(
+                df_reglas,
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed",
+                key="editor_reglas_motivos_recurrentes",
+                disabled=["id"],
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", width="small"),
+                    "palabras_clave": st.column_config.TextColumn(
+                        "Palabras clave", width="large", required=True
+                    ),
+                    "motivo_recurrente": st.column_config.TextColumn(
+                        "Motivo asignado", width="large", required=True
+                    ),
+                    "prioridad": st.column_config.NumberColumn(
+                        "Prioridad", min_value=1, max_value=9999, step=1
+                    ),
+                    "activo": st.column_config.CheckboxColumn("Activa")
+                }
+            )
+            col_save, col_delete = st.columns([2, 1])
+            if col_save.button(
+                "Guardar cambios de reglas",
+                key="btn_guardar_reglas_motivos",
+                use_container_width=True
+            ):
+                originales = {int(r["id"]): r for r in reglas_todas}
+                guardadas = 0
+                try:
+                    for _, fila in editadas.iterrows():
+                        regla_id = int(fila["id"])
+                        original = originales.get(regla_id, {})
+                        palabras_nuevas = str(fila.get("palabras_clave") or "").strip()
+                        motivo_nuevo = str(fila.get("motivo_recurrente") or "").strip()
+                        prioridad_nueva = int(fila.get("prioridad") or 100)
+                        activo_nuevo = bool(fila.get("activo", False))
+                        if not palabras_nuevas or not motivo_nuevo:
+                            continue
+                        if (
+                            palabras_nuevas != str(original.get("palabras_clave") or "").strip()
+                            or motivo_nuevo != str(original.get("motivo_recurrente") or "").strip()
+                            or prioridad_nueva != int(original.get("prioridad") or 100)
+                            or activo_nuevo != bool(original.get("activo", False))
+                        ):
+                            supabase.table("reglas_motivos_recurrentes").update({
+                                "palabras_clave": palabras_nuevas,
+                                "motivo_recurrente": motivo_nuevo,
+                                "prioridad": prioridad_nueva,
+                                "activo": activo_nuevo,
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            }).eq("id", regla_id).execute()
+                            guardadas += 1
+                    obtener_reglas_motivos_recurrentes.clear()
+                    if guardadas:
+                        st.session_state["feedback_reglas_motivos"] = (
+                            "success", f"Se actualizaron {guardadas} reglas."
+                        )
+                    else:
+                        st.session_state["feedback_reglas_motivos"] = (
+                            "info", "No había cambios para guardar."
+                        )
+                    st.rerun(scope="fragment")
+                except Exception as error:
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "error", f"No se pudieron guardar las reglas: {error}"
+                    )
+                    st.rerun(scope="fragment")
+
+            opciones = {
+                f"ID {r['id']}: {r['motivo_recurrente']} — {r['palabras_clave']}": r["id"]
+                for r in reglas_todas
+            }
+            seleccion = st.selectbox(
+                "Regla a eliminar", list(opciones.keys()),
+                key="sel_eliminar_regla_motivos"
+            )
+            if col_delete.button(
+                "Eliminar regla",
+                key="btn_eliminar_regla_motivos",
+                use_container_width=True
+            ):
+                try:
+                    supabase.table("reglas_motivos_recurrentes").delete().eq(
+                        "id", opciones[seleccion]
+                    ).execute()
+                    obtener_reglas_motivos_recurrentes.clear()
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "success", "La regla se eliminó correctamente."
+                    )
+                    st.rerun(scope="fragment")
+                except Exception as error:
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "error", f"No se pudo eliminar la regla: {error}"
+                    )
+                    st.rerun(scope="fragment")
+        else:
+            st.info("Todavía no hay reglas configuradas.")
+
+        if reglas_todas and st.button(
+            "Aplicar reglas al catálogo existente",
+            key="btn_aplicar_reglas_catalogo_existente"
+        ):
+            try:
+                catalogo_actual = obtener_catalogo_motivos_recurrentes()
+                cambios_regla = []
+                for item in catalogo_actual:
+                    if (
+                        str(item.get("origen") or "").lower() == "manual"
+                        or bool(item.get("revisado", False))
+                    ):
+                        continue
+                    nuevo_motivo = motivo_por_reglas_recurrentes(
+                        item.get("ai_title"), reglas_todas
+                    )
+                    if nuevo_motivo and nuevo_motivo != str(
+                        item.get("motivo_recurrente") or ""
+                    ).strip():
+                        cambios_regla.append({
+                            "ai_title": item["ai_title"],
+                            "motivo_recurrente": nuevo_motivo,
+                            "origen": "regla",
+                            "revisado": False,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        })
+                if cambios_regla:
+                    supabase.table("catalogo_motivos_recurrentes").upsert(
+                        cambios_regla, on_conflict="ai_title"
+                    ).execute()
+                    obtener_catalogo_motivos_recurrentes.clear()
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "success",
+                        f"Se aplicaron reglas a {len(cambios_regla)} títulos existentes. "
+                        "Las correcciones manuales se conservaron."
+                    )
+                    st.rerun(scope="fragment")
+                else:
+                    st.session_state["feedback_reglas_motivos"] = (
+                        "info", "No se encontraron títulos que requieran cambios."
+                    )
+                    st.rerun(scope="fragment")
+            except Exception as error:
+                st.session_state["feedback_reglas_motivos"] = (
+                    "error", f"No se pudieron aplicar las reglas: {error}"
+                )
+                st.rerun(scope="fragment")
+
+    feedback = st.session_state.pop("feedback_reglas_motivos", None)
+    if feedback:
+        nivel, mensaje = feedback
+        if nivel == "success":
+            st.success(mensaje)
+        elif nivel == "error":
+            st.error(mensaje)
+        else:
+            st.info(mensaje)
+
+    try:
+        return [
+            regla for regla in obtener_reglas_motivos_recurrentes()
+            if regla.get("activo", True)
+        ]
+    except Exception:
+        return []
+
+
+def clasificar_titulos_recurrentes_ia(titulos):
+    """Clasifica títulos únicos usando solo ai_title."""
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise ValueError("Falta configurar GEMINI_API_KEY en los secretos de Streamlit.")
+
+    resultados = []
+    modelo = "gemini-3.5-flash-lite"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+
+    for inicio in range(0, len(titulos), 40):
+        lote = titulos[inicio:inicio + 40]
+        prompt = (
+            "Actuá como especialista en taxonomía de incidencias de soporte. "
+            "Recibirás títulos breves generados por IA. Agrupá únicamente los que "
+            "describan el mismo problema o solicitud; normalizá singular/plural y "
+            "redacciones equivalentes. Los títulos relacionados con certificación, "
+            "certificar, certificados o SIFEN deben agruparse como 'Certificación de comprobantes'. "
+            "'Anulación de factura' no debe confundirse con 'Cambio de factura'. "
+            "Usá categorías breves y claras. Si el título es ambiguo, mantenelo como "
+            "categoría independiente. No inventes contexto. Respondé exclusivamente "
+            "JSON válido: {\"items\":[{\"ai_title\":\"título exacto\","
+            "\"motivo_recurrente\":\"categoría\"}]}. Devolvé un elemento por título, "
+            "sin omitir ni alterar el texto original. TÍTULOS: "
+            + json.dumps(lote, ensure_ascii=False)
+        )
+        resp = requests.post(
+            url,
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "responseMimeType": "application/json",
+                    "maxOutputTokens": 5000
+                }
+            },
+            timeout=60
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Gemini respondió HTTP {resp.status_code}: {resp.text[:500]}")
+        payload = resp.json()
+        texto = payload["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if texto.startswith("```"):
+            texto = texto.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(texto)
+        items = parsed.get("items", []) if isinstance(parsed, dict) else []
+        esperados = set(lote)
+        recibidos = set()
+        for item in items:
+            titulo = str(item.get("ai_title", "")).strip()
+            motivo = str(item.get("motivo_recurrente", "")).strip()
+            if titulo in esperados and motivo:
+                resultados.append({
+                    "ai_title": titulo,
+                    "motivo_recurrente": motivo,
+                    "origen": "ia",
+                    "revisado": False
+                })
+                recibidos.add(titulo)
+        faltantes = esperados - recibidos
+        if faltantes:
+            raise ValueError("La IA no clasificó: " + ", ".join(sorted(faltantes)[:8]))
+    return resultados
+
+
+def renderizar_gestion_motivos_recurrentes(df_base_motivos):
+    """Permite clasificar títulos pendientes y corregir equivalencias."""
+    st.markdown("#### Clasificación de motivos recurrentes")
+    st.caption(
+        "Se utiliza exclusivamente AI title. No se consultan ni almacenan mensajes, "
+        "transcripciones o datos personales de las conversaciones."
+    )
+    reglas_activas = renderizar_editor_reglas_motivos_recurrentes()
+    if df_base_motivos is None or df_base_motivos.empty or "ai_title" not in df_base_motivos.columns:
+        st.info("No hay títulos AI disponibles en el histórico cargado.")
+        return
+
+    titulos = df_base_motivos["ai_title"].fillna("").astype(str).str.strip()
+    titulos = titulos[(titulos != "") & (titulos.str.lower() != "no generado") & (titulos.str.lower() != "nan")]
+    frecuencias = titulos.value_counts()
+    disponibles = set(frecuencias.index.tolist())
+
+    try:
+        catalogo = obtener_catalogo_motivos_recurrentes()
+    except Exception as error:
+        st.error(f"No se pudo consultar el catálogo: {error}")
+        return
+
+    mapa = {str(item.get("ai_title", "")).strip(): item for item in catalogo}
+    pendientes = [titulo for titulo in disponibles if titulo not in mapa]
+    pendientes.sort(key=lambda titulo: (-int(frecuencias.get(titulo, 0)), titulo.lower()))
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Títulos únicos", f"{len(disponibles):,}")
+    c2.metric("Clasificados", f"{len(disponibles) - len(pendientes):,}")
+    c3.metric("Pendientes", f"{len(pendientes):,}")
+
+    if pendientes:
+        st.caption("Se procesan hasta 40 títulos por lote. Los ya clasificados no vuelven a enviarse a la IA.")
+        if st.button(
+            f"Clasificar próximos {min(40, len(pendientes))} títulos con IA",
+            key="btn_clasificar_motivos_recurrentes",
+            type="primary"
+        ):
+            try:
+                with st.spinner(f"Clasificando {min(40, len(pendientes))} títulos..."):
+                    lote = pendientes[:40]
+                    nuevos = []
+                    pendientes_ia = []
+                    for titulo in lote:
+                        motivo_regla = motivo_por_reglas_recurrentes(
+                            titulo, reglas_activas
+                        )
+                        if motivo_regla:
+                            nuevos.append({
+                                "ai_title": titulo,
+                                "motivo_recurrente": motivo_regla,
+                                "origen": "regla",
+                                "revisado": False
+                            })
+                        else:
+                            pendientes_ia.append(titulo)
+                    if pendientes_ia:
+                        nuevos.extend(clasificar_titulos_recurrentes_ia(pendientes_ia))
+                    if nuevos:
+                        supabase.table("catalogo_motivos_recurrentes").upsert(
+                            nuevos, on_conflict="ai_title"
+                        ).execute()
+                cantidad_reglas = sum(1 for item in nuevos if item.get("origen") == "regla")
+                cantidad_ia = sum(1 for item in nuevos if item.get("origen") == "ia")
+                registrar_evento_dashboard(
+                    "info", "motivos_classification_completed",
+                    "Finalizó la clasificación de títulos recurrentes.",
+                    {
+                        "total_classified": len(nuevos),
+                        "classified_by_rules": cantidad_reglas,
+                        "classified_by_ai": cantidad_ia
+                    },
+                    category="clasificacion"
+                )
+                obtener_catalogo_motivos_recurrentes.clear()
+                st.success(
+                    f"Se clasificaron {len(nuevos)} títulos: "
+                    f"{sum(1 for item in nuevos if item.get('origen') == 'regla')} por reglas "
+                    f"y {sum(1 for item in nuevos if item.get('origen') == 'ia')} con IA."
+                )
+                st.rerun()
+            except Exception as error:
+                registrar_evento_dashboard(
+                    "error", "motivos_classification_failed",
+                    "Falló la clasificación de motivos recurrentes.",
+                    {"error": str(error)},
+                    category="clasificacion"
+                )
+                st.error(f"No se pudo completar la clasificación: {error}")
+    else:
+        st.success("Todos los títulos del histórico cargado tienen clasificación.")
+
+    if catalogo:
+        st.markdown("---")
+        st.markdown("##### Revisar y corregir equivalencias")
+        st.caption(
+            "Editá el motivo recurrente y marcá las categorías revisadas. "
+            "Las correcciones manuales se conservarán en futuras clasificaciones."
+        )
+        df_editor = pd.DataFrame(catalogo)
+        for columna in ["ai_title", "motivo_recurrente", "revisado", "origen"]:
+            if columna not in df_editor.columns:
+                df_editor[columna] = False if columna == "revisado" else ""
+        df_editor = df_editor[["ai_title", "motivo_recurrente", "revisado", "origen"]].copy()
+        df_editor["revisado"] = df_editor["revisado"].fillna(False).astype(bool)
+        df_editor = df_editor.sort_values(["revisado", "ai_title"], ascending=[True, True]).reset_index(drop=True)
+
+        editado = st.data_editor(
+            df_editor,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            key="editor_catalogo_motivos_recurrentes",
+            disabled=["ai_title", "origen"],
+            column_config={
+                "ai_title": st.column_config.TextColumn("AI title", width="large"),
+                "motivo_recurrente": st.column_config.TextColumn("Motivo recurrente", width="large", required=True),
+                "revisado": st.column_config.CheckboxColumn("Revisado"),
+                "origen": st.column_config.TextColumn("Origen", width="small")
+            }
+        )
+        if st.button("Guardar correcciones del catálogo", key="btn_guardar_catalogo_motivos"):
+            originales = {str(row["ai_title"]): row for row in catalogo}
+            cambios = []
+            for _, row in editado.iterrows():
+                titulo = str(row.get("ai_title", "")).strip()
+                motivo = str(row.get("motivo_recurrente", "")).strip()
+                if not titulo or not motivo:
+                    continue
+                original = originales.get(titulo, {})
+                revisado = bool(row.get("revisado", False))
+                if motivo != str(original.get("motivo_recurrente", "")).strip() or revisado != bool(original.get("revisado", False)):
+                    cambios.append({
+                        "ai_title": titulo,
+                        "motivo_recurrente": motivo,
+                        "origen": "manual" if motivo != str(original.get("motivo_recurrente", "")).strip() else original.get("origen", "ia"),
+                        "revisado": revisado,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    })
+            if cambios:
+                try:
+                    supabase.table("catalogo_motivos_recurrentes").upsert(
+                        cambios, on_conflict="ai_title"
+                    ).execute()
+                    obtener_catalogo_motivos_recurrentes.clear()
+                    st.success(f"Se guardaron {len(cambios)} cambios.")
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"No se pudieron guardar las correcciones: {error}")
+            else:
+                st.info("No hay cambios pendientes para guardar.")
+
+COLUMNAS_DASHBOARD = (
+    "id, created_at, updated_at, estado, agente_asignado, por_agente, canal, "
+    "primera_respuesta_min, tiempo_resolucion_minutos, rating, fecha_calificacion, "
+    "feedback, agente_evaluado, tenant, company, nombre_contacto, "
+    "etiquetas, fecha_cierre, modulo, cliente, tipo_contacto, nivel, motivo_normalizado, "
+    "ticket_relacionado, ai_title, cantidad_respuestas_agente"
+)
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_lista_motivos_csat():
+    """Recupera la lista de motivos activos guardados en Supabase."""
+    try:
+        res = supabase.table("motivos_csat")\
+            .select("nombre")\
+            .eq("activo", True)\
+            .order("nombre")\
+            .execute()
+        motivos = [r["nombre"] for r in (res.data or [])]
+        if "Sin categorizar" in motivos:
+            motivos.remove("Sin categorizar")
+            motivos.insert(0, "Sin categorizar")
+        return motivos if motivos else ["Sin categorizar", "Otro"]
+    except Exception:
+        return ["Sin categorizar", "Lentitud en Respuesta", "Falta de Solución", "Otro"]
+
+def obtener_inicio_trimestre_anterior():
+    """Calcula el primer día del trimestre anterior a la fecha actual."""
+    hoy = obtener_fecha_local_hoy()
+    q_actual = (hoy.month - 1) // 3 + 1
+    
+    if q_actual == 1:
+        anio = hoy.year - 1
+        mes = 10
+    else:
+        anio = hoy.year
+        mes = 3 * (q_actual - 2) + 1
+        
+    return f"{anio}-{mes:02d}-01T00:00:00Z"
+
+
+# ==========================================
+# CACHÉ DE DATOS EN SUPABASE
+# ==========================================
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_datos_historicos_q(fecha_hasta_ayer_str):
+    """Descarga datos históricos desde el Q anterior hasta ayer (se invalida automáticamente al cambiar de día)."""
+    todos_los_datos = []
+    lote = 0
+    tamanio_lote = 1000
+
+    fecha_inicio_q_ant = f"{obtener_inicio_trimestre_anterior()[:10]}T00:00:00Z"
+    fecha_hasta_ayer = f"{fecha_hasta_ayer_str}T03:00:00Z"
+
+    while True:
+        inicio = lote * tamanio_lote
+        fin = inicio + tamanio_lote - 1
+        
+        try:
+            response = supabase.table("conversaciones")\
+                .select(COLUMNAS_DASHBOARD)\
+                .gte("created_at", fecha_inicio_q_ant)\
+                .lt("created_at", fecha_hasta_ayer)\
+                .range(inicio, fin)\
+                .execute()
+            
+            datos = response.data or []
+        except Exception as e:
+            st.error(f"Error consultando histórico Supabase: {e}")
+            break
+        
+        if not datos:
+            break
+            
+        todos_los_datos.extend(datos)
+        if len(datos) < tamanio_lote:
+            break
+        lote += 1
+
+    return todos_los_datos
+
+
+@st.cache_data(ttl=900)
+def obtener_timestamp_sync():
+    return datetime.now(timezone(timedelta(hours=-3)))
+
+@st.cache_data(ttl=900, show_spinner=False)
+def obtener_datos_hoy():
+    """Descarga conversaciones creadas, calificadas o cerradas hoy, además de las que siguen abiertas."""
+    tz_py = timezone(timedelta(hours=-3))
+    hoy_inicio_py = datetime.now(tz_py).replace(hour=0, minute=0, second=0, microsecond=0)
+    hoy_inicio_utc = hoy_inicio_py.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def consultar_todos_los_lotes():
+        """Ejecuta la consulta selectiva por lotes para no quedar limitada a 1.000 filas."""
+        todos = []
+        inicio = 0
+        tamanio_lote = 1000
+
+        while True:
+            respuesta = (
+                supabase.table("conversaciones")
+                .select(COLUMNAS_DASHBOARD)
+                .or_(
+                    f"created_at.gte.{hoy_inicio_utc},"
+                    f"fecha_calificacion.gte.{hoy_inicio_utc},"
+                    f"fecha_cierre.gte.{hoy_inicio_utc},"
+                    "estado.eq.Abierto"
+                )
+                .order("id")
+                .range(inicio, inicio + tamanio_lote - 1)
+                .execute()
+            )
+            lote = respuesta.data or []
+            if not lote:
+                break
+
+            todos.extend(lote)
+            if len(lote) < tamanio_lote:
+                break
+            inicio += tamanio_lote
+
+        return todos
+
+    try:
+        return consultar_todos_los_lotes()
+    except Exception as e:
+        st.error(f"Error consultando datos frescos en Supabase: {e}")
+        return []
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_df_historico_procesado(fecha_corte_hoy_str):
+    """Procesa y cachea el histórico hasta ayer, invalidándose solo cuando cambia la fecha del día."""
+    datos_historicos = obtener_datos_historicos_q(fecha_corte_hoy_str)
+    if not datos_historicos:
+        return pd.DataFrame()
+    df_h = pd.DataFrame(datos_historicos).drop_duplicates(subset=["id"], keep="first").copy()
+    return procesar_fechas_df(df_h)
+
+@st.cache_data(ttl=900, show_spinner=False)
+def obtener_df_hoy_procesado(fecha_corte_hoy_str):
+    """Procesa únicamente las conversaciones de hoy y abiertas."""
+    datos_hoy = obtener_datos_hoy()
+    if not datos_hoy:
+        return pd.DataFrame()
+    df_hoy = pd.DataFrame(datos_hoy).drop_duplicates(subset=["id"], keep="first").copy()
+    return procesar_fechas_df(df_hoy)
+
+def invalidar_cache_datos_conversaciones():
+    """Invalida únicamente las cachés que dependen de conversaciones."""
+    obtener_datos_historicos_q.clear()
+    obtener_datos_hoy.clear()
+    obtener_df_historico_procesado.clear()
+    obtener_df_hoy_procesado.clear()
+
+
+def obtener_datos():
+    """Une el histórico cacheado con los datos frescos de hoy en milisegundos."""
+    hoy_str = str(obtener_fecha_local_hoy())
+    df_hoy = obtener_df_hoy_procesado(hoy_str)
+    df_hist = obtener_df_historico_procesado(hoy_str)
+    
+    if df_hoy.empty and df_hist.empty:
+        return pd.DataFrame()
+        
+    df = pd.concat([df_hoy, df_hist], ignore_index=True)
+    return df.drop_duplicates(subset=["id"], keep="first").copy()
+
+st.markdown("""
+<style>
+    .stApp { background-color: #0b1120; color: #f8fafc; }
+    
+    .block-container {
+        padding-top: 0 !important;
+        padding-block-start: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 1.5rem !important;
+    }
+
+    /* Neutraliza la reserva superior de Streamlit en el contenedor real del contenido. */
+    div[data-testid="stMainBlockContainer"].block-container,
+    section[data-testid="stMain"] .block-container,
+    section.main .block-container {
+        padding-top: 0 !important;
+        padding-block-start: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    header[data-testid="stHeader"] {
+        background-color: #0b1120 !important;
+    }
+
+    [data-testid="stSidebarHeader"] {
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
+        height: 1.8rem !important;
+    }
+    
+    [data-testid="stSidebarUserContent"] {
+        padding-top: 0.2rem !important;
+    }
+
+    div[data-testid="stDateInput"] button {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Metric Cards con mejor jerarquía, borde sutil e iluminación */
+    .metric-card {
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+        color: #f8fafc;
+        padding: 18px 20px;
+        border-radius: 12px;
+        border: 1px solid #334155;
+        box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px -3px rgba(0, 0, 0, 0.45);
+    }
+    .metric-card-title {
+        font-size: 0.74rem;
+        color: #94a3b8;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .metric-card-value {
+        font-size: 1.65rem;
+        font-weight: 800;
+        color: #f8fafc;
+        margin-top: 6px;
+        letter-spacing: -0.5px;
+    }
+    .metric-card-sub {
+        font-size: 0.76rem;
+        color: #38bdf8;
+        margin-top: 4px;
+        font-weight: 500;
+    }
+
+    .db-info-box {
+        background-color: #1e293b; color: #94a3b8; padding: 12px 14px;
+        border-radius: 10px; border: 1px solid #334155; font-size: 0.84rem; margin-bottom: 12px;
+    }
+
+    /* Alerta Crítica con animación de pulso luminoso continuo */
+    @keyframes pulsoCritico {
+        0% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+            border-color: #ef4444;
+        }
+        70% {
+            box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+            border-color: #dc2626;
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            border-color: #ef4444;
+        }
+    }
+
+    /* Ocultar botones nativos de desarrollo de Streamlit (Share, GitHub, etc.) */
+    .stAppDeployButton,
+    [data-testid="stDecoration"],
+    [data-testid="stStatusWidget"],
+    header[data-testid="stHeader"] [data-testid="stToolbarActions"],
+    #MainMenu,
+    footer,
+    .viewerBadge_container__1QSob,
+    .styles_viewerBadge__CvC9N,
+    [class*="viewerBadge"],
+    [class*="ViewerBadge"],
+    [data-testid*="viewerBadge"],
+    [data-testid="stAppDeployButton"],
+    [data-testid*="DeployButton"],
+    [data-testid*="deployButton"],
+    [class*="stAppDeployButton"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    .alert-card-critical {
+        background: linear-gradient(90deg, #451a03 0%, #1e1b4b 100%);
+        color: #fef3c7;
+        padding: 16px 20px;
+        border-radius: 10px;
+        border: 1px solid #ef4444;
+        border-left: 6px solid #ef4444;
+        margin-bottom: 15px;
+        animation: pulsoCritico 2.2s infinite;
+    }
+
+    /* Mejora para distribuir el texto a la izquierda y el contador a la derecha */
+    .alert-card-critical-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        width: 100%;
+    }
+    
+    .admin-card {
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+    }
+    .stButton>button { 
+        background-color: #0284c7; 
+        color: white; 
+        font-weight: bold; 
+        border-radius: 8px; 
+        border: none; 
+        transition: background-color 0.2s ease;
+    }
+    .stButton>button:hover {
+        background-color: #0369a1;
+    }
+
+    /* Estilizar el encabezado del expander para que sea el propio Banner de Alerta */
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) {
+        border: none !important;
+        background: transparent !important;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details {
+        border: 1px solid #ef4444 !important;
+        border-left: 6px solid #ef4444 !important;
+        border-radius: 10px !important;
+        background: linear-gradient(90deg, #451a03 0%, #1e1b4b 100%) !important;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
+        animation: pulsoCritico 2.2s infinite;
+        overflow: hidden;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > summary {
+        padding: 14px 18px !important;
+        color: #fef3c7 !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > summary:hover {
+        background: rgba(239, 68, 68, 0.15) !important;
+        color: #ffffff !important;
+    }
+
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > summary svg {
+        fill: #fca5a5 !important;
+    }
+
+
+    
+    /* =========================================================
+       BIMS EXECUTIVE — sistema visual global (primera etapa)
+       Cambios exclusivamente de presentación.
+       ========================================================= */
+    :root {
+        --bims-bg: #0b1120;
+        --bims-surface: #151f30;
+        --bims-surface-raised: #1b293d;
+        --bims-border: #2b3a50;
+        --bims-border-soft: rgba(148, 163, 184, 0.14);
+        --bims-accent: #38bdf8;
+        --bims-text: #f1f5f9;
+        --bims-muted: #94a3b8;
+        --bims-success: #34d399;
+        --bims-warning: #fbbf24;
+        --bims-danger: #ef4444;
+        --bims-radius: 12px;
+        --bims-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+    }
+
+    .stApp {
+        background: var(--bims-bg) !important;
+        color: var(--bims-text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+                     BlinkMacSystemFont, "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    .block-container {
+        padding-top: 0 !important;
+        padding-block-start: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 2rem !important;
+    }
+
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        color: var(--bims-text);
+        letter-spacing: -0.025em;
+        line-height: 1.25;
+        font-weight: 700;
+    }
+    .stMarkdown h1 { font-size: clamp(1.7rem, 2.2vw, 2.25rem); }
+    .stMarkdown h2 { font-size: clamp(1.3rem, 1.7vw, 1.65rem); }
+    .stMarkdown h3 { font-size: 1.08rem; }
+
+    /* Superficies: menos brillo y más contraste uniforme. */
+    .metric-card,
+    .admin-card,
+    .db-info-box {
+        background: var(--bims-surface) !important;
+        border: 1px solid var(--bims-border) !important;
+        border-radius: var(--bims-radius) !important;
+        box-shadow: var(--bims-shadow);
+    }
+
+    .metric-card {
+        padding: 18px 20px;
+        transition: border-color 160ms ease, background-color 160ms ease;
+    }
+    .metric-card:hover {
+        transform: none;
+        background: var(--bims-surface-raised) !important;
+        border-color: rgba(56, 189, 248, 0.42) !important;
+        box-shadow: var(--bims-shadow);
+    }
+    .metric-card-title {
+        color: var(--bims-muted);
+        font-weight: 650;
+        letter-spacing: 0.065em;
+    }
+    .metric-card-value {
+        color: var(--bims-text);
+        font-weight: 750;
+        letter-spacing: -0.035em;
+    }
+    .metric-card-sub { color: var(--bims-accent); }
+
+    .admin-card { padding: 20px; }
+    .db-info-box {
+        color: var(--bims-muted);
+        line-height: 1.55;
+    }
+
+    /* Navegación más limpia, manteniendo las pestañas y sus permisos. */
+    div[data-testid="stElementContainer"]:has(.stTabs) {
+        margin-top: -8px !important;
+    }
+    .stTabs {
+        margin-top: 0 !important;
+        position: relative !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.35rem;
+        border-bottom: 1px solid var(--bims-border) !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #b7c4d6 !important;
+        font-weight: 550 !important;
+        padding: 0.48rem 0.85rem !important;
+        border-radius: 8px 8px 0 0;
+        transition: color 140ms ease, background-color 140ms ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--bims-text) !important;
+        background: rgba(56, 189, 248, 0.07);
+    }
+    .stTabs [aria-selected="true"] {
+        color: var(--bims-accent) !important;
+        font-weight: 700 !important;
+    }
+
+    /* Controles y botones con estados discretos y consistentes. */
+    .stButton > button,
+    .stDownloadButton > button {
+        border-radius: 9px !important;
+        font-weight: 650 !important;
+        transition: background-color 140ms ease, border-color 140ms ease,
+                    box-shadow 140ms ease;
+    }
+    .stButton > button:focus-visible,
+    .stDownloadButton > button:focus-visible,
+    .stTabs button:focus-visible {
+        outline: 2px solid var(--bims-accent) !important;
+        outline-offset: 2px !important;
+        box-shadow: none !important;
+    }
+
+    /* Tablas con bordes suaves y encabezados diferenciados. */
+    [data-testid="stDataFrame"],
+    [data-testid="stTable"] {
+        border: 1px solid var(--bims-border) !important;
+        border-radius: 10px !important;
+        overflow: hidden;
+    }
+
+    /* Alertas: conservar prioridad sin animación luminosa permanente. */
+    .alert-card-critical {
+        animation: none !important;
+        box-shadow: 0 4px 14px rgba(239, 68, 68, 0.10);
+        background: linear-gradient(100deg, rgba(120, 53, 15, 0.42), rgba(30, 27, 75, 0.72)) !important;
+    }
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details {
+        animation: none !important;
+        box-shadow: 0 4px 14px rgba(239, 68, 68, 0.10) !important;
+    }
+
+    @media (max-width: 900px) {
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            padding: 0.42rem 0.65rem !important;
+            font-size: 0.88rem !important;
+        }
+    }
+
+    /* Mantener la alerta por debajo de la cabecera fija, sin superposición. */
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) {
+        position: relative !important;
+        top: -8px !important;
+        margin-block-end: -8px !important;
+    }
+
+    /* Fondo oscuro limpio para el contenido interno cuando se despliega */
+    div[data-testid="stExpander"]:has(.alerta-ancla-activa) > details > div[data-testid="stExpanderDetails"] {
+        background-color: #0b1120 !important;
+        border-top: 1px solid rgba(239, 68, 68, 0.3) !important;
+        padding: 16px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+AUDIO_ALARM_HTML = """
+<script>
+(function() {
+    try {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        var ctx = new AudioCtx();
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+
+        function emitirBeep(delay, freq, dur) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+
+            gain.gain.setValueAtTime(0.35, ctx.currentTime + delay);
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + delay + dur);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(ctx.currentTime + delay);
+            osc.stop(ctx.currentTime + delay + dur);
+        }
+
+        emitirBeep(0.0, 1046.50, 0.18);
+        emitirBeep(0.25, 1046.50, 0.18);
+        emitirBeep(0.50, 1318.51, 0.30);
+
+    } catch(e) {
+        console.log("Audio no reproducido por politicas del navegador", e);
+    }
+})();
+</script>
+"""
+
+def evaluar_horario_estricto(dt_objeto):
+    if pd.isna(dt_objeto):
+        return False
+    fecha_str = dt_objeto.strftime("%Y-%m-%d")
+    dia_semana = dt_objeto.weekday()
+    hora_actual = dt_objeto.time()
+
+    if fecha_str in FERIADOS or dia_semana == 6:
+        return False
+
+    # Lunes a Viernes: 08:00 a 17:30 hs
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(18, 0, 0):
+        return True
+    # Sábados: 09:00 a 11:45 hs
+    if dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(12, 0, 0):
+        return True
+
+    return False
+
+# ==========================================
+# EVALUACIÓN DE SLA
+# ==========================================
+
+def evaluar_sla_normal_excel(row, threshold_1ra=2.0):
+    dt_obj = row.get("created_at_dt")
+    if pd.isna(dt_obj):
+        return "excluido"
+    
+    fecha_str = dt_obj.strftime("%Y-%m-%d")
+    dia_semana = dt_obj.weekday()
+    hora_actual = dt_obj.time()
+    
+    if fecha_str in FERIADOS:
+        return "excluido por feriado"
+    
+    # Mismo criterio de inclusión que el promedio del Dashboard:
+    # solo se consideran registros marcados como "no excluido".
+    por_agente = str(row.get("por_agente", "")).strip().lower()
+    agente = str(row.get("agente_asignado", "")).strip().lower()
+    agentes_excluidos = ["", "sin asignar", "none", "nan", "monica", "mónica", "monica (bot)", "soporte", "soporte bims"]
+
+    if por_agente != "no excluido" or agente in agentes_excluidos or "bot" in agente:
+        return "excluido por agente"
+        
+    en_horario = False
+    if dia_semana in [0, 1, 2, 3, 4] and time(8, 0, 0) <= hora_actual <= time(17, 30, 0):
+        en_horario = True
+    elif dia_semana == 5 and time(9, 0, 0) <= hora_actual <= time(11, 45, 0):
+        en_horario = True
+        
+    if not en_horario:
+        return "excluido por horario"
+        
+    min_1ra = row.get("primera_respuesta_min")
+    if pd.isna(min_1ra):
+        return "no cumple"
+        
+    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
+
+
+def evaluar_sla_extendido_excel(row, threshold_1ra=2.0):
+    # =================================================================
+    # INTERRUPTOR TEMPORAL: Desactiva el cálculo de SLA Extendido
+    return "excluido por horario" 
+    # =================================================================
+    
+    dt_obj = row.get("created_at_dt")
+    if pd.isna(dt_obj):
+        return "excluido"
+
+    fecha_str = dt_obj.strftime("%Y-%m-%d")
+    dia_semana = dt_obj.weekday()
+    hora_actual = dt_obj.time()
+
+    if fecha_str in FERIADOS:
+        return "excluido por feriado"
+    
+    agente = str(row.get("agente_asignado", "")).strip()
+    if not agente or agente in ["Sin asignar", "None", "nan", "Monica", "Soporte", "soporte", "SOPORTE"]:
+        return "excluido por agente"
+        
+    en_horario = False
+    if dia_semana in [0, 1, 2]:
+        if hora_actual >= time(19, 0, 0) or hora_actual <= time(1, 45, 0):
+            en_horario = True
+    elif dia_semana in [3, 4, 5, 6]:
+        if hora_actual >= time(18, 0, 0) or hora_actual <= time(2, 45, 0):
+            en_horario = True
+            
+    if not en_horario:
+        return "excluido por horario"
+        
+    min_1ra = row.get("primera_respuesta_min")
+    if pd.isna(min_1ra):
+        return "no cumple"
+        
+    return "cumple" if min_1ra <= threshold_1ra else "no cumple"
+
+def evaluar_sla_gestion_excel(row, threshold_gest):
+    # 1. Exclusión por Agente (Monica, Bots o Sin Asignar)
+    agente = str(row.get("agente_asignado", "")).strip().lower()
+    por_agente = str(row.get("por_agente", "")).strip().lower()
+    
+    if por_agente == "excluido" or not agente or agente in ["sin asignar", "none", "nan", "monica", "monica (bot)", "Soporte", "soporte", "SOPORTE"]:
+        return "excluido por filtro"
+
+    # 2. Exclusión por Horario (Usa exactamente la misma franja que el Dashboard: Normal + Extendido)
+    horario_eval = str(row.get("horario_evaluado", "")).strip().lower()
+    if horario_eval == "fuera de horario":
+        return "excluido por filtro"
+
+    # 3. Exclusión por Etiqueta "Sin Respuesta"
+    etiquetas = str(row.get("etiquetas", "")).lower()
+    if "sin respuesta" in etiquetas:
+        return "excluido por filtro"
+
+    # 4. Verificación de Estado (Abierto vs Cerrado)
+    estado_raw = str(row.get("estado", "")).strip().lower()
+    es_cerrado = estado_raw in ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+
+    if not es_cerrado:
+        return "sin cerrar"
+
+    # 5. Evaluación del Tiempo de Gestión
+    min_gest = row.get("tiempo_resolucion_minutos")
+    if pd.isna(min_gest):
+        return "no cumple"
+
+    return "cumple" if min_gest <= threshold_gest else "no cumple"
+
+def calificacion_a_estrellas(x):
+    if pd.isna(x) or str(x).strip() in ["", "None", "nan", "null"]:
+        return ""
+    try:
+        val = int(float(x))
+        return "★" * val if val > 0 else ""
+    except:
+        return ""
+
+# ==========================================
+# GESTIÓN UNIFICADA Y ULTRA RÁPIDA DE CSAT
+# ==========================================
+
+def obtener_df_csat_valido(df_in):
+    """Retorna las conversaciones con calificaciones CSAT válidas en un solo filtro."""
+    if df_in.empty:
+        return pd.DataFrame()
+
+    df_c = df_in.copy()
+    df_c["rating_num"] = pd.to_numeric(df_c["rating"], errors="coerce")
+    df_c = df_c.dropna(subset=["rating_num"])
+
+    if "por_agente" in df_c.columns:
+        df_c = df_c[df_c["por_agente"] == "no excluido"]
+
+    return df_c.drop_duplicates(subset=["id"])
+
+def calcular_csat_rapido(df_csat_preparado):
+    """Calcula CSAT instantáneo sobre DataFrame pre-filtrado retornando (pct, positivas, total)."""
+    if df_csat_preparado.empty:
+        return 0.0, 0, 0
+    ratings = df_csat_preparado["rating_num"]
+    positivas = int((ratings >= 4).sum())
+    total = len(ratings)
+    pct = round((positivas / total) * 100, 1) if total > 0 else 0.0
+    return pct, positivas, total
+
+# ==========================
+# ESTADO DE SESIÓN Y PARÁMETROS
+# ==========================
+if "auto_refresh" not in st.session_state:
+    st.session_state["auto_refresh"] = True
+if "refresh_interval" not in st.session_state:
+    st.session_state["refresh_interval"] = 10
+if "sla_1ra_th" not in st.session_state:
+    st.session_state["sla_1ra_th"] = 2.0
+if "sla_gest_th" not in st.session_state:
+    st.session_state["sla_gest_th"] = 60.0
+if "alerta_nuevo_th" not in st.session_state:
+    st.session_state["alerta_nuevo_th"] = 1.0
+hoy_local = obtener_fecha_local_hoy()
+if "input_f_desde" not in st.session_state:
+    st.session_state["input_f_desde"] = hoy_local
+if "input_f_hasta" not in st.session_state:
+    st.session_state["input_f_hasta"] = hoy_local
+
+# ==========================================
+# CARGA ÚNICA GLOBAL DE DATOS (ÓPTIMO EN RAM)
+# ==========================================
+# Animación de bienvenida: se muestra solo durante la carga inicial de esta sesión.
+# No agrega pausas artificiales; permanece visible mientras se consultan/preparan los datos.
+if not st.session_state.get("bims_initial_load_done", False):
+    loading_placeholder = st.empty()
+    loading_placeholder.markdown("""
+    <style>
+        @keyframes bimsLoaderOrbit {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes bimsLoaderPulse {
+            0%, 100% { opacity: .55; transform: scale(.94); }
+            50% { opacity: 1; transform: scale(1.04); }
+        }
+        @keyframes bimsLoaderDot {
+            0%, 80%, 100% { opacity: .25; transform: translateY(0); }
+            40% { opacity: 1; transform: translateY(-4px); }
+        }
+        .bims-loading-screen {
+            position: fixed; inset: 0; z-index: 100000;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(145deg, #080f1d 0%, #0b1120 55%, #101b2d 100%);
+            color: #f8fafc; text-align: center;
+        }
+        .bims-loading-content { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .bims-loading-logo {
+            position: relative; display: flex; align-items: center; justify-content: center;
+            width: 76px; height: 76px; border-radius: 22px;
+            background: rgba(30, 64, 105, .22);
+            border: 1px solid rgba(96, 165, 250, .28);
+            box-shadow: 0 0 45px rgba(30, 96, 160, .18);
+            animation: bimsLoaderPulse 2.2s ease-in-out infinite;
+        }
+        .bims-loading-logo span {
+            font-size: 25px; font-weight: 850; letter-spacing: .015em;
+            background: linear-gradient(110deg, #5eead4, #60a5fa);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .bims-loading-orbit {
+            position: absolute; inset: -7px; border: 2px solid transparent;
+            border-top-color: #5eead4; border-right-color: rgba(96,165,250,.55);
+            border-radius: 28px; animation: bimsLoaderOrbit 1.8s linear infinite;
+        }
+        .bims-loading-caption { color: #cbd5e1; font-size: 14px; font-weight: 550; }
+        .bims-loading-subcaption { color: #64748b; font-size: 12px; }
+        .bims-loading-dots { display: flex; gap: 6px; margin-top: -7px; }
+        .bims-loading-dots i {
+            width: 5px; height: 5px; border-radius: 50%; background: #5eead4;
+            animation: bimsLoaderDot 1.1s ease-in-out infinite;
+        }
+        .bims-loading-dots i:nth-child(2) { animation-delay: .15s; }
+        .bims-loading-dots i:nth-child(3) { animation-delay: .3s; }
+    </style>
+    <div class="bims-loading-screen">
+        <div class="bims-loading-content">
+            <div class="bims-loading-logo">
+                <div class="bims-loading-orbit"></div>
+                <span>BIMS</span>
+            </div>
+            <div class="bims-loading-caption">Preparando tu espacio de trabajo</div>
+            <div class="bims-loading-dots"><i></i><i></i><i></i></div>
+            <div class="bims-loading-subcaption">Cargando conversaciones e indicadores</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    df_all = obtener_datos()
+    loading_placeholder.empty()
+    st.session_state["bims_initial_load_done"] = True
+else:
+    df_all = obtener_datos()
+
+if not df_all.empty:
+    canal_all_lower = df_all["canal"].fillna("").astype(str).str.lower() if "canal" in df_all.columns else pd.Series("", index=df_all.index)
+    tags_all_lower = df_all["etiquetas"].fillna("").astype(str).str.lower() if "etiquetas" in df_all.columns else pd.Series("", index=df_all.index)
+
+    es_correo_all = canal_all_lower.str.contains("correo|email|mail", regex=True) | tags_all_lower.str.contains("correo", regex=False)
+    es_spam_all = tags_all_lower.str.contains("spam", regex=False)
+
+    # DataFrame reservado exclusivamente para el futuro módulo/gráfico de Correos (sin Spam)
+    df_correos_all = df_all[es_correo_all & ~es_spam_all].copy()
+
+    # DataFrame principal para SLA, Resumen, Exportación y WBR (libre de correos y spam)
+    df_all = df_all[~es_correo_all & ~es_spam_all].copy()
+else:
+    df_correos_all = pd.DataFrame()
+
+# ==========================================
+# PANEL LATERAL PROPIO BIMS
+# Control visual en el navegador: abrir/cerrar sin rerun de Streamlit.
+# ==========================================
+if "bims_filter_hour_enabled" not in st.session_state:
+    st.session_state["bims_filter_hour_enabled"] = False
+if "act_sonido" not in st.session_state:
+    st.session_state["act_sonido"] = True
+if "bims_hora_inicio" not in st.session_state:
+    st.session_state["bims_hora_inicio"] = time(8, 0)
+if "bims_hora_fin" not in st.session_state:
+    st.session_state["bims_hora_fin"] = time(18, 0)
+
+
+
+# El iframe actúa como ejecutor same-origin y crea el control directamente
+# en el documento principal, evitando depender del DOM interno de st.html.
+st.iframe("""
+<script>
+(function() {
+    try {
+        const doc = window.parent.document;
+        const root = doc.documentElement;
+
+        function setPanelClosed(closed) {
+            root.classList.toggle('bims-sidebar-open', !closed);
+            const button = doc.getElementById('bims-sidebar-toggle');
+            if (button) {
+                button.textContent = closed ? '☰' : '‹';
+                button.setAttribute('aria-expanded', String(!closed));
+            }
+        }
+
+        function installButton() {
+            let button = doc.getElementById('bims-sidebar-toggle');
+            if (!button) {
+                button = doc.createElement('button');
+                button.id = 'bims-sidebar-toggle';
+                button.type = 'button';
+                button.setAttribute('aria-label', 'Abrir o cerrar panel lateral');
+                doc.body.appendChild(button);
+            }
+
+            function syncButton() {
+                const open = root.classList.contains('bims-sidebar-open');
+                button.textContent = open ? '‹' : '☰';
+                button.setAttribute('aria-expanded', String(open));
+            }
+
+            // Capturar el clic en fase target-capture para neutralizar handlers
+            // delegados antiguos que quedaron registrados en document durante
+            // versiones anteriores y que podrían invertir el estado por segunda vez.
+            if (button.__bimsClickHandler) {
+                button.removeEventListener('click', button.__bimsClickHandler, true);
+            }
+            button.__bimsClickHandler = function(event) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                root.classList.toggle('bims-sidebar-open');
+                syncButton();
+            };
+            button.__bimsClickBound = true;
+            button.addEventListener('click', button.__bimsClickHandler, true);
+
+            // Cerrar al hacer clic fuera del panel, sin interferir con el botón.
+            if (!doc.__bimsSidebarOutsideClickBound) {
+                doc.__bimsSidebarOutsideClickBound = true;
+                doc.addEventListener('click', function(event) {
+                    if (!root.classList.contains('bims-sidebar-open')) return;
+                    const target = event.target;
+                    const currentButton = doc.getElementById('bims-sidebar-toggle');
+                    const panel = doc.querySelector('.st-key-bims_sidebar_panel');
+                    if ((currentButton && currentButton.contains(target)) ||
+                        (panel && panel.contains(target))) return;
+                    root.classList.remove('bims-sidebar-open');
+                    syncButton();
+                }, true);
+            }
+
+            // No reinicializar el estado en cada rerun de Streamlit.
+            if (!doc.__bimsSidebarInitialized) {
+                doc.__bimsSidebarInitialized = true;
+                root.classList.remove('bims-sidebar-open');
+            }
+            syncButton();
+        }
+        if (doc.body) installButton();
+        else doc.addEventListener('DOMContentLoaded', installButton, { once: true });
+    } catch (error) {
+        console.error('BIMS: no se pudo instalar el control lateral', error);
+    }
+})();
+</script>
+""", width=1, height=1)
+
+with st.container(key="bims_sidebar_panel"):
+    st.markdown("""
+    <div class="bims-sidebar-heading">
+        <div class="bims-sidebar-heading-title">Panel de control</div>
+        <div class="bims-sidebar-heading-subtitle">Filtros y preferencias</div>
+    </div>
+    """, unsafe_allow_html=True)
+    if not df_all.empty and "updated_at_local" in df_all.columns:
+        # Tomamos la fecha máxima real parseada
+        max_updated_dt = df_all["updated_at_local"].dropna().max()
+        tiempo_hace_str = obtener_tiempo_transcurrido(max_updated_dt)
+
+        # Obtiene el timestamp global del servidor (compartido por todos los clientes)
+        ultima_sync_dt = obtener_timestamp_sync()
+        sync_hace_str = obtener_tiempo_transcurrido(ultima_sync_dt)
+
+        st.markdown(f"""
+        <div class="db-info-box">
+            • <b>Última actividad:</b> {tiempo_hace_str}<br>
+            • <b>Última sync:</b> {sync_hace_str}<br>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="db-info-box">
+            <b>Ultima sincronizacion:</b> Sin registros<br>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ==========================================
+    # GESTIÓN MANUAL DE PRESENCIA DEL AGENTE (CON SWITCH Y MODAL SIN PARPADEO)
+    # ==========================================
+    nombre_usuario_sesion = st.session_state.get("user_name", "")
+    email_usuario_sesion = st.session_state.get("user_email", "")
+
+    if nombre_usuario_sesion:
+        @st.fragment
+        def renderizar_selector_presencia_sidebar():
+            st.markdown("### Mi Estado:")
+
+            clave_sesion_away = f"estado_away_{email_usuario_sesion}"
+            clave_notificar = f"notificar_cambio_{email_usuario_sesion}"
+
+            # 1. Consultar a Supabase SOLO la primera vez que carga la sesión
+            if clave_sesion_away not in st.session_state:
+                try:
+                    res_mi_estado = (
+                        supabase.table("estado_agentes")
+                        .select("away")
+                        .ilike("nombre", nombre_usuario_sesion.strip())
+                        .limit(1)
+                        .execute()
+                    )
+                    st.session_state[clave_sesion_away] = (
+                        bool(res_mi_estado.data[0].get("away", False))
+                        if res_mi_estado.data else False
+                    )
+                except Exception:
+                    st.session_state[clave_sesion_away] = False
+
+            esta_disponible = not st.session_state[clave_sesion_away]
+            etiqueta_switch = "Disponible (Activo)" if esta_disponible else "Ausente (Pausado)"
+
+            # 2. Callback instantáneo al alternar el switch
+            def guardar_cambio_presencia():
+                disponible_ahora = st.session_state["switch_mi_presencia"]
+                nuevo_away = not disponible_ahora
+                st.session_state[clave_sesion_away] = nuevo_away
+                st.session_state[clave_notificar] = "Disponible" if disponible_ahora else "Ausente"
+
+                try:
+                    supabase.table("estado_agentes").upsert({
+                        "id": email_usuario_sesion.lower().strip() or nombre_usuario_sesion.lower().strip(),
+                        "nombre": nombre_usuario_sesion.strip(),
+                        "email": email_usuario_sesion.strip(),
+                        "away": nuevo_away,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }, on_conflict="id").execute()
+                    obtener_mapa_estados_agentes.clear()
+                except Exception as ex_st:
+                    st.caption(f"Error guardando estado: {ex_st}")
+
+            st.toggle(
+                label=etiqueta_switch,
+                value=esta_disponible,
+                key="switch_mi_presencia",
+                on_change=guardar_cambio_presencia
+            )
+
+            # 3. Modal visual efímero (se muestra y desaparece solo sin recargar la página)
+            if st.session_state.get(clave_notificar):
+                estado_nuevo = st.session_state.pop(clave_notificar)
+                es_ausente = "Ausente" in estado_nuevo
+                color_borde = "#fbbf24" if es_ausente else "#10b981"
+                icono = icono_estado_svg("ausente" if es_ausente else "disponible", 36)
+                titulo_txt = "Estado: Ausente" if es_ausente else "Estado: Disponible"
+                sub_txt = (
+                    "No recibirás nuevas asignaciones mientras estés ausente."
+                    if es_ausente else
+                    "Estás activo y visible para recibir chats en la bandeja."
+                )
+
+                st.iframe(f"""
+                <script>
+                (function() {{
+                    const doc = window.parent.document;
+                    const prev = doc.getElementById('bims-presencia-modal');
+                    if (prev) prev.remove();
+
+                    const modal = doc.createElement('div');
+                    modal.id = 'bims-presencia-modal';
+                    modal.innerHTML = `
+                        <div style="
+                            position: fixed;
+                            inset: 0;
+                            z-index: 2147483647;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            background: rgba(11, 17, 32, 0.55);
+                            backdrop-filter: blur(4px);
+                            opacity: 1;
+                            transition: opacity 0.35s ease;
+                            font-family: 'Segoe UI', Arial, sans-serif;
+                        " id="bims-presencia-backdrop">
+                            <div style="
+                                background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+                                border: 1px solid #334155;
+                                border-left: 5px solid {color_borde};
+                                border-radius: 14px;
+                                padding: 24px 32px;
+                                box-shadow: 0 20px 45px rgba(0,0,0,0.6);
+                                text-align: center;
+                                max-width: 380px;
+                                transform: scale(1);
+                                transition: transform 0.25s ease;
+                            ">
+                                <div style="margin-bottom: 8px;">{icono}</div>
+                                <div style="color: #f8fafc; font-weight: 700; font-size: 1.15rem; margin-bottom: 6px;">
+                                    {titulo_txt}
+                                </div>
+                                <div style="color: #94a3b8; font-size: 0.88rem; line-height: 1.45;">
+                                    {sub_txt}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    doc.body.appendChild(modal);
+
+                    setTimeout(() => {{
+                        const bd = doc.getElementById('bims-presencia-backdrop');
+                        if (bd) bd.style.opacity = '0';
+                        setTimeout(() => {{
+                            if (modal) modal.remove();
+                        }}, 350);
+                    }}, 1800);
+                }})();
+                </script>
+                """, width=1, height=1)
+
+        renderizar_selector_presencia_sidebar()
+
+        # Separador compacto sin márgenes excesivos
+        st.markdown(
+            '<hr style="margin: 8px 0 12px 0; border: none; border-top: 1px solid #334155;">',
+            unsafe_allow_html=True
+        )
+
+    st.markdown('<h3 style="margin-top: 0; padding-top: 0; font-size: 1.15rem;">Filtros de Consulta</h3>', unsafe_allow_html=True)
+
+    usar_filtro_hora = st.checkbox("Restringir Franja Horaria", key="bims_filter_hour_enabled")
+
+    def marcar_cierre_filtros():
+        # El cierre visual se ejecuta en el documento principal tras el rerun.
+        st.session_state["bims_cerrar_sidebar_filtros"] = True
+
+    def set_fechas_hoy():
+        hoy = obtener_fecha_local_hoy()
+        st.session_state["input_f_desde"] = hoy
+        st.session_state["input_f_hasta"] = hoy
+        marcar_cierre_filtros()
+
+    def set_fechas_semana():
+        hoy = obtener_fecha_local_hoy()
+        inicio_semana = hoy - timedelta(days=hoy.weekday())
+        fin_semana = inicio_semana + timedelta(days=6)
+        st.session_state["input_f_desde"] = inicio_semana
+        st.session_state["input_f_hasta"] = fin_semana
+        marcar_cierre_filtros()
+
+    def set_fechas_mes():
+        hoy = obtener_fecha_local_hoy()
+        inicio_mes = hoy.replace(day=1)
+        if hoy.month == 12:
+            fin_mes = date(hoy.year, 12, 31)
+        else:
+            fin_mes = date(hoy.year, hoy.month + 1, 1) - timedelta(days=1)
+
+        st.session_state["input_f_desde"] = inicio_mes
+        st.session_state["input_f_hasta"] = fin_mes
+        marcar_cierre_filtros()
+
+    col_b_hoy, col_b_sem, col_b_mes = st.columns(3)
+    col_b_hoy.button("Hoy", on_click=set_fechas_hoy, use_container_width=True)
+    col_b_sem.button("Semana", on_click=set_fechas_semana, use_container_width=True)
+    col_b_mes.button("Mes", on_click=set_fechas_mes, use_container_width=True)
+
+    with st.form("form_filtros"):
+        st.caption("Rango de Fechas")
+        f_col1, f_col2 = st.columns(2)
+
+        val_desde = st.session_state.get("input_f_desde", hoy_local)
+        val_hasta = st.session_state.get("input_f_hasta", hoy_local)
+
+        fecha_desde = f_col1.date_input("Desde", value=val_desde, key="input_f_desde")
+        fecha_hasta = f_col2.date_input("Hasta", value=val_hasta, key="input_f_hasta")
+
+        if usar_filtro_hora:
+            st.caption("Franja Horaria")
+            h_col1, h_col2 = st.columns(2)
+            hora_inicio = h_col1.time_input("Inicio", key="bims_hora_inicio")
+            hora_fin = h_col2.time_input("Fin", key="bims_hora_fin")
+        else:
+            hora_inicio, hora_fin = time(8, 0), time(18, 0)
+
+        act_sonido = st.checkbox("Alertas Sonoras", key="act_sonido")
+
+        btn_aplicar = st.form_submit_button(
+            "Aplicar Filtros",
+            use_container_width=True,
+            on_click=marcar_cierre_filtros
+        )
+
+    # Cerrar el panel lateral automáticamente al elegir Hoy/Semana/Mes
+    # o al aplicar el rango manual, sin alterar los filtros seleccionados.
+    if st.session_state.pop("bims_cerrar_sidebar_filtros", False):
+        st.iframe("""
+        <script>
+        (function() {
+            const doc = window.parent.document;
+            const root = doc.documentElement;
+            root.classList.remove('bims-sidebar-open');
+            const button = doc.getElementById('bims-sidebar-toggle');
+            if (button) {
+                button.textContent = '☰';
+                button.setAttribute('aria-expanded', 'false');
+            }
+        })();
+        </script>
+        """, width=1, height=1)
+
+    st.session_state["f_desde_key"] = fecha_desde
+    st.session_state["f_hasta_key"] = fecha_hasta
+
+    def generar_excel_reporte(df_exp, f_desde_val, f_hasta_val, usar_hora, h_ini, h_fin):
+        output = io.BytesIO()
+        horario_texto = f"De {h_ini.strftime('%H:%M')} a {h_fin.strftime('%H:%M')} hs" if usar_hora else "Todo el dia (Sin restriccion)"
+
+        sla_1ra_threshold = st.session_state.get("sla_1ra_th", 2.0)
+        sla_gest_threshold = st.session_state.get("sla_gest_th", 60.0)
+
+        tz_py = timezone(timedelta(hours=-3))
+        now_py_str = datetime.now(tz_py).strftime("%Y-%m-%d %H:%M:%S")
+
+        df_reporte = pd.DataFrame()
+        df_reporte["Conversacion ID"] = df_exp.get("id_str", "")
+        df_reporte["Fecha creacion"] = df_exp.get("created_at_fmt", "")
+        df_reporte["Agente asignado"] = df_exp.get("agente_asignado", "")
+        df_reporte["Tenant"] = df_exp.get("tenant", "Sin datos")
+        df_reporte["Company"] = df_exp.get("company", "Sin datos")
+        df_reporte["Nombre Contacto"] = df_exp.get("nombre_contacto", "Sin nombre")
+        df_reporte["Por Agente"] = df_exp.get("por_agente", "")
+
+        # 1. Evaluamos primero los SLA de 1ra Respuesta
+        sla_norm_series = df_exp.apply(lambda r: evaluar_sla_normal_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+        sla_ext_series = df_exp.apply(lambda r: evaluar_sla_extendido_excel(r, sla_1ra_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+
+        df_reporte["SLA Normal"] = sla_norm_series
+        df_reporte["SLA Extendido"] = sla_ext_series
+
+        # 2. Filtrar Primera Respuesta (min): solo si SLA Normal o Extendido es 'cumple' o 'no cumple'
+        if not df_exp.empty:
+            prim_resp_raw = df_exp.get("primera_respuesta_min", pd.Series(dtype=float))
+            es_valido_1ra = sla_norm_series.isin(["cumple", "no cumple"]) | sla_ext_series.isin(["cumple", "no cumple"])
+            df_reporte["Primera respuesta (min)"] = np.where(es_valido_1ra, prim_resp_raw, np.nan)
+        else:
+            df_reporte["Primera respuesta (min)"] = None
+
+        if "rating" in df_exp and not df_exp.empty:
+            df_reporte["Calificacion"] = df_exp["rating"].apply(calificacion_a_estrellas)
+        else:
+            df_reporte["Calificacion"] = ""
+
+        df_reporte["Motivo Normalizado"] = df_exp.get("motivo_normalizado", "")
+        df_reporte["Ticket Relacionado"] = df_exp.get("ticket_relacionado", "") 
+        df_reporte["Feedback"] = df_exp.get("feedback", "")
+        df_reporte["Agente evaluado"] = df_exp.get("agente_evaluado", "")
+        df_reporte["Fecha cierre (Primer Cierre)"] = df_exp.get("fecha_cierre_fmt", "")
+
+        df_reporte["Etiquetas"] = df_exp.get("etiquetas", "")
+        df_reporte["Modulo"] = df_exp.get("modulo", "")
+        df_reporte["Cliente"] = df_exp.get("cliente", "")
+        df_reporte["Tipo de contacto"] = df_exp.get("tipo_contacto", "")
+        df_reporte["Nivel"] = df_exp.get("nivel", "")
+
+        # Evaluar SLA de Gestión primero
+        sla_gest_series = df_exp.apply(lambda r: evaluar_sla_gestion_excel(r, sla_gest_threshold), axis=1) if not df_exp.empty else pd.Series(dtype=str)
+        df_reporte["SLA Tiempo Gestion"] = sla_gest_series
+
+        # Filtrar tiempo de resolución en minutos y horas: solo se completa si es 'cumple' o 'no cumple'
+        if not df_exp.empty:
+            minutos_raw = df_exp.get("tiempo_resolucion_minutos", pd.Series(dtype=float))
+            es_valido_gestion = sla_gest_series.isin(["cumple", "no cumple"])
+
+            df_reporte["Tiempo resolucion (min)"] = np.where(es_valido_gestion, minutos_raw, np.nan)
+            df_reporte["Tiempo resolucion (horas)"] = np.where(es_valido_gestion, (minutos_raw / 60.0).round(2), np.nan)
+        else:
+            df_reporte["Tiempo resolucion (min)"] = None
+            df_reporte["Tiempo resolucion (horas)"] = None
+
+        df_reporte["AI Title"] = df_exp.get("ai_title", "No Generado")
+
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df_meta = pd.DataFrame([
+                ["REPORTE OPERATIVO DE CONVERSACIONES INTERCOM", ""],
+                ["Rango de Fechas Consultado:", f"Desde {f_desde_val} hasta {f_hasta_val}"],
+                ["Franja Horaria Aplicada:", horario_texto],
+                ["Fecha de Generacion:", now_py_str],
+                ["", ""]
+            ])
+            df_meta.to_excel(writer, index=False, header=False, sheet_name="Detalle", startrow=0)
+            df_reporte.to_excel(writer, index=False, sheet_name="Detalle", startrow=6)
+
+            ws = writer.sheets["Detalle"]
+            for i, col in enumerate(df_reporte.columns, 1):
+                ws.column_dimensions[get_column_letter(i)].width = 24
+
+        output.seek(0)
+        return output
+
+    # ==========================================
+    # DIÁLOGO MODAL DE EXPORTACIÓN A EXCEL
+    # ==========================================
+    @st.dialog("Exportar Reporte a Excel")
+    def modal_exportar_excel():
+        st.caption("Selecciona el rango de fechas que deseas incluir en el archivo Excel:")
+
+        col_d1, col_d2 = st.columns(2)
+        hoy = obtener_fecha_local_hoy()
+        f_exp_inicio = col_d1.date_input("Fecha Desde:", value=hoy, key="modal_exp_desde")
+        f_exp_fin = col_d2.date_input("Fecha Hasta:", value=hoy, key="modal_exp_hasta")
+
+        usar_hora_exp = st.checkbox("Restringir Franja Horaria en Excel", value=False)
+        if usar_hora_exp:
+            col_h1, col_h2 = st.columns(2)
+            h_exp_ini = col_h1.time_input("Hora Inicio", time(8, 0), key="modal_exp_h_ini")
+            h_exp_fin = col_h2.time_input("Hora Fin", time(18, 0), key="modal_exp_h_fin")
+        else:
+            h_exp_ini, h_exp_fin = time(8, 0), time(18, 0)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if not df_all.empty and "fecha_solo" in df_all.columns:
+            df_exp_filt = df_all[
+                (df_all["fecha_solo"] >= pd.to_datetime(f_exp_inicio).date()) & 
+                (df_all["fecha_solo"] <= pd.to_datetime(f_exp_fin).date())
+            ].copy()
+
+            if usar_hora_exp and not df_exp_filt.empty:
+                df_exp_filt = df_exp_filt[
+                    (df_exp_filt["hora_solo"] >= h_exp_ini) & 
+                    (df_exp_filt["hora_solo"] <= h_exp_fin)
+                ]
+        else:
+            df_exp_filt = pd.DataFrame()
+
+        if not df_exp_filt.empty:
+            st.success(f" Se encontraron **{len(df_exp_filt)} registros** para el rango seleccionado.")
+
+            excel_bytes = generar_excel_reporte(
+                df_exp_filt, 
+                f_exp_inicio, 
+                f_exp_fin, 
+                usar_hora_exp, 
+                h_exp_ini, 
+                h_exp_fin
+            )
+
+            st.download_button(
+                label=" Descargar Archivo Excel",
+                data=excel_bytes,
+                file_name=f"reporte_intercom_{f_exp_inicio}_a_{f_exp_fin}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.warning("No existen registros cargados en la base de datos para las fechas seleccionadas.")
+
+    # SECCIÓN DE BOTONES EN LA BARRA LATERAL
+    st.markdown("---")
+
+    if st.button("Exportar Reporte a Excel", use_container_width=True):
+        modal_exportar_excel()
+
+    st.button(
+        "Cerrar Sesión",
+        use_container_width=True,
+        key="btn_logout_sidebar",
+        on_click=cerrar_sesion_google
+    )
+
+with st.container(key="bims_dashboard_header"):
+    # ==========================================
+    # INDICADOR DE ESTADO EN VIVO (CABECERA)
+    # ==========================================
+    # ==========================================
+    def obtener_estado_bot_salud():
+        # El estado manual se lee directamente de Supabase para no depender
+        # de que Render ya haya desplegado la versión nueva de /health-status.
+        bot_active = None
+        try:
+            res_cfg = (
+                supabase.table("config_notificaciones")
+                .select("bot_activo")
+                .eq("id", 1)
+                .limit(1)
+                .execute()
+            )
+            if res_cfg.data:
+                bot_active = bool(res_cfg.data[0].get("bot_activo", True))
+        except Exception:
+            pass
+
+        try:
+            url_base = NOTIFICADOR_API_URL.replace("/health-status", "").rstrip('/')
+            url_salud = f"{url_base}/health-status"
+            res = requests.get(url_salud, timeout=2)
+            if res.status_code == 200:
+                data = res.json()
+                state = str(data.get("whatsapp_state", "disconnected")).strip().lower()
+                # La salud del servidor no equivale a la conexión de WhatsApp.
+                online = state in {"open", "connected", "online", "authenticated"}
+                if bot_active is None:
+                    bot_active = bool(data.get("bot_active", True))
+                return online, state, bot_active
+        except Exception:
+            pass
+        return False, "offline", True if bot_active is None else bot_active
+
+    bot_online, bot_state, bot_activo_header = obtener_estado_bot_salud()
+
+    # Estilos CSS de pulso sutil tipo "radar"
+    st.html("""
+    <style>
+    .st-key-bims_user_menu button {
+        position: relative !important;
+        display: block !important;
+        min-width: 42px !important;
+        width: 42px !important;
+        min-height: 42px !important;
+        height: 42px !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        border-radius: 50% !important;
+        border: 1px solid rgba(148, 163, 184, .35) !important;
+        background: rgba(30, 41, 59, .72) !important;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, .18) !important;
+    }
+    .st-key-bims_user_menu button > div,
+    .st-key-bims_user_menu button p {
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 0 !important;
+    }
+    .st-key-bims_user_menu button img {
+        position: absolute !important;
+        inset: 0 !important;
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        height: 100% !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        object-fit: cover !important;
+        object-position: center !important;
+    }
+    /* Oculta el icono desplegable que Streamlit agrega al botón del popover.
+       Streamlit puede renderizarlo como SVG o como icono Material según la versión. */
+    .st-key-bims_user_menu button svg,
+    .st-key-bims_user_menu button [data-testid="stIconMaterial"],
+    .st-key-bims_user_menu button [data-testid="stPopoverIcon"],
+    .st-key-bims_user_menu button .material-symbols-rounded,
+    .st-key-bims_user_menu button .material-icons,
+    .st-key-bims_user_menu button .material-icons-round {
+        display: none !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-bims_user_menu button {
+        gap: 0 !important;
+        justify-content: center !important;
+    }
+    /* El ajuste de columnas se limita al botón; no forzar el layout de la fila principal.
+       El selector anterior :has() también alcanzaba la fila exterior de la cabecera. */
+    .st-key-btn_abrir_guardias_header_calendar button {
+        width:34px !important; min-width:34px !important; height:34px !important;
+        padding:0 !important; gap:0 !important; justify-content:center !important;
+    }
+    .st-key-btn_abrir_guardias_header_calendar button p {
+        font-size:0 !important; line-height:0 !important;
+    }
+    /* Logotipo oficial de WhatsApp con transformación animada al estado de sincronización. */
+    .bims-whatsapp-state-icon {
+        position:relative;
+        display:inline-block;
+        width:26px; height:26px; flex:0 0 26px;
+    }
+    /* Logo y flechas son capas hermanas: ninguna máscara recorta a la otra. */
+    .bims-whatsapp-state-icon::before,
+    .bims-whatsapp-state-icon::after {
+        content:"";
+        position:absolute; inset:0;
+        background-color:var(--bims-whatsapp-color);
+        background-repeat:no-repeat;
+        background-position:center;
+        background-size:contain;
+    }
+    .bims-whatsapp-state-icon::before {
+        -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+        mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M17.472%2014.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.149-.198.297-.767.967-.94%201.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.149-.174.198-.298.297-.497.099-.198.05-.372-.025-.521-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198%200-.52.074-.792.372s-1.04%201.016-1.04%202.479%201.065%202.876%201.213%203.074c.149.198%202.096%203.2%205.077%204.487.709.306%201.262.489%201.693.626.711.226%201.358.194%201.87.118.571-.085%201.758-.719%202.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421%207.403h-.004a9.87%209.87%200%2001-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86%209.86%200%2001-1.51-5.26c.002-5.45%204.437-9.884%209.893-9.884%202.64.001%205.122%201.03%206.988%202.898a9.825%209.825%200%20012.893%206.994c-.003%205.45-4.438%209.884-9.891%209.884m8.413-18.297A11.815%2011.815%200%200012.05%200C5.495%200%20.16%205.335.157%2011.892c0%202.096.547%204.142%201.588%205.946L.057%2024l6.305-1.654a11.882%2011.882%200%20005.683%201.448h.005c6.554%200%2011.89-5.335%2011.893-11.893a11.821%2011.821%200%2000-3.48-8.413z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+    }
+    .bims-whatsapp-state-icon::after {
+        opacity:0;
+        transform:rotate(-90deg) scale(.72);
+        -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.15' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.2 7.2A9 9 0 0 0 4 10'/%3E%3Cpath d='M20 3.5v4.5h-4.5'/%3E%3Cpath d='M3.8 16.8A9 9 0 0 0 20 14'/%3E%3Cpath d='M4 20.5V16h4.5'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+        mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.15' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.2 7.2A9 9 0 0 0 4 10'/%3E%3Cpath d='M20 3.5v4.5h-4.5'/%3E%3Cpath d='M3.8 16.8A9 9 0 0 0 20 14'/%3E%3Cpath d='M4 20.5V16h4.5'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .bims-whatsapp-state-icon.is-online::before {
+        animation:bims-whatsapp-logo-to-sync 4.8s ease-in-out infinite;
+    }
+    .bims-whatsapp-state-icon.is-online::after {
+        animation:bims-whatsapp-sync-to-logo 4.8s ease-in-out infinite;
+    }
+    @keyframes bims-whatsapp-logo-to-sync {
+        0%, 12%, 88%, 100% { opacity:1; transform:scale(1) rotate(0deg); }
+        36%, 64% { opacity:0; transform:scale(.72) rotate(90deg); }
+    }
+    @keyframes bims-whatsapp-sync-to-logo {
+        0%, 12%, 88%, 100% { opacity:0; transform:rotate(-90deg) scale(.72); }
+        36%, 64% { opacity:1; transform:rotate(270deg) scale(1); }
+    }
+    .bims-whatsapp-state-icon.is-offline::before {
+        opacity:1;
+        animation:none !important;
+    }
+    .bims-whatsapp-state-icon.is-offline::after,
+    .bims-whatsapp-state-icon.is-paused::after {
+        opacity:0;
+        animation:none !important;
+    }
+    .bims-whatsapp-state-icon.is-paused::before {
+        opacity:1;
+        animation:none !important;
+    }
+    .bims-mobile-bot-icon { display:none; vertical-align:middle; margin-left:5px; line-height:0; }
+    .bims-mobile-bot-icon .bims-whatsapp-state-icon { width:19px; height:19px; }
+    </style>
+    """)
+
+    periodo_header = (
+        f"{fecha_desde.strftime('%d %b %Y')} — {fecha_hasta.strftime('%d %b %Y')}"
+        if fecha_desde != fecha_hasta
+        else fecha_desde.strftime("%d %b %Y")
+    )
+
+    color_bot = "#fbbf24" if not bot_activo_header else ("#34d399" if bot_online else "#f87171")
+    texto_estado_bot = "Bot pausado manualmente" if not bot_activo_header else ("WhatsApp conectado" if bot_online else "WhatsApp desconectado")
+    clase_estado_bot = "is-paused" if not bot_activo_header else ("is-online" if bot_online else "is-offline")
+    indicador_bot_html = f"""
+        <span class="bims-whatsapp-state-icon {clase_estado_bot}" aria-hidden="true" style="--bims-whatsapp-color:{color_bot};"></span>
+    """
+
+    estado_bot_html = f'<div class="bims-header-bot-status" style="display:flex;justify-content:center;align-items:center;gap:0;min-height:50px;" title="{texto_estado_bot}">{indicador_bot_html}</div>'
+
+    titulo_header_html = f"""
+    <div style="display:flex; align-items:center; min-width:0; min-height:50px;">
+        <div style="min-width:0;">
+            <h1 style="font-size:1.38rem; line-height:1.2; font-weight:750; margin:0; padding:0; color:#f8fafc;">
+                Dashboard Soporte BIMS <span class="bims-mobile-bot-icon" style="background:{color_bot};" title="{texto_estado_bot}"></span>
+            </h1>
+            <div style="font-size:0.72rem; color:#94a3b8; margin-top:5px; letter-spacing:0.04em;">
+                PERÍODO · <span style="color:#cbd5e1; font-weight:600;">{periodo_header}</span>
+            </div>
+        </div>
+    </div>
+    """
+
+    col_header_info, col_header_bot, col_header_user = st.columns(
+        [20, 1.35, 1.0], gap="small", vertical_alignment="center"
+    )
+    with col_header_info:
+        st.html(titulo_header_html)
+    with col_header_bot:
+        col_guardia_alerta, col_estado_bot = st.columns([1, 1], gap="medium", vertical_alignment="center")
+        with col_guardia_alerta:
+            usuario_id_actual = obtener_id_usuario_actual(st.session_state.get("user_email", ""))
+            render_widget_guardia(supabase=supabase, usuario_actual_id=usuario_id_actual)
+        with col_estado_bot:
+            @st.fragment(run_every=30)
+            def renderizar_estado_bot_header():
+                online, state, activo = obtener_estado_bot_salud()
+                color = "#fbbf24" if not activo else ("#34d399" if online else "#f87171")
+                texto = "Bot pausado manualmente" if not activo else ("WhatsApp conectado" if online else "WhatsApp desconectado")
+                clase = "is-paused" if not activo else ("is-online" if online else "is-offline")
+                icono = (
+                    f'<span class="bims-whatsapp-state-icon {clase}" '
+                    f'aria-hidden="true" style="--bims-whatsapp-color:{color};"></span>'
+                )
+                st.html(
+                    '<div class="bims-header-bot-status" '
+                    'style="display:flex;justify-content:center;align-items:center;'
+                    'min-height:50px;box-sizing:border-box;transform:translateX(-7px);" '
+                    f'title="{texto}">{icono}</div>'
+                )
+
+            renderizar_estado_bot_header()
+
+    with col_header_user:
+        avatar_url = st.session_state.get("user_picture", "")
+        etiqueta_avatar = f"![Perfil]({avatar_url})" if avatar_url.startswith("https://") else "👤"
+        with st.popover(
+            etiqueta_avatar,
+            help="Cuenta de usuario",
+            key="bims_user_menu"
+        ):
+            st.markdown(f"**{st.session_state.get('user_name', 'Usuario')}**")
+            st.divider()
+            st.button(
+                "Cerrar sesión",
+                use_container_width=True,
+                key="btn_logout_user_menu",
+                on_click=cerrar_sesion_google
+            )
+
+
+st.markdown('<div class="bims-header-spacer"></div>', unsafe_allow_html=True)
+
+
+# 1. Obtener usuario actual (ajusta según tu variable de sesión o auth existente)
+usuario_actual = st.session_state.get("user_email", "").strip().lower()
+permisos = obtener_permisos_usuario(usuario_actual)
+
+puede_ver_wbr = permisos["acceso_wbr"]
+puede_ver_admin = permisos["acceso_admin"]
+
+# 2. Construir lista dinámica de pestañas
+titulos_tabs = [
+    "Control Operativo & SLA", 
+    "Distribución de Carga",
+    "Resumen de Chats & Agentes"
+]
+
+if puede_ver_wbr:
+    titulos_tabs.append("Gestión L2")
+    titulos_tabs.append("Informe WBR Gerencial")
+
+if puede_ver_admin:
+    titulos_tabs.append("Administración & Configuracion")
+
+titulos_tabs.append("FAQ")
+
+# 3. Crear las pestañas principales dentro de un contenedor identificable.
+# Este ancla permite distinguirlas siempre de las subpestañas de Administración.
+with st.container(key="bims_main_navigation"):
+    tabs_creadas = st.tabs(titulos_tabs)
+
+# Integra únicamente la navegación principal de Streamlit dentro de la cabecera fija.
+# Mantiene un único observador y sustituye la lista anterior cuando Streamlit la reconstruye.
+st.iframe("""
+<script>
+(function () {
+    try {
+        const parentWindow = window.parent;
+        const doc = parentWindow.document;
+        const controllerKey = '__bimsMainNavigationController';
+        const previousController = parentWindow[controllerKey];
+
+        // Cada rerun sustituye el observador, pero conserva la referencia a la
+        // lista principal por si Streamlit reconstruye el encabezado o su contenedor.
+        if (previousController && previousController.observer) {
+            previousController.observer.disconnect();
+        }
+
+        const headerSelector = '.st-key-bims_dashboard_header';
+        const mainNavigationSelector = '.st-key-bims_main_navigation .stTabs [role="tablist"]';
+        const placeholderId = 'bims-fixed-tabs-placeholder';
+        let tabList = previousController && previousController.tabList
+            ? previousController.tabList
+            : null;
+
+        function integrarNavegacion() {
+            const header = doc.querySelector(headerSelector);
+            const headerInner = header && header.querySelector('[data-testid="stVerticalBlock"]');
+
+            // Mantener el ajuste móvil del bloque del informe WBR.
+            const wbrAnchor = doc.querySelector('.bims-wbr-scope-anchor');
+            if (wbrAnchor) {
+                const wbrRoot = wbrAnchor.closest('[data-testid="stVerticalBlock"]');
+                if (wbrRoot) {
+                    wbrRoot.classList.add('bims-wbr-mobile-root');
+                    wbrRoot.style.marginTop = '-1.25rem';
+                }
+            }
+
+            if (!headerInner) return;
+
+            // Identificar la navegación principal por sus tres pestañas permanentes.
+            // El contenedor principal también contiene los paneles de cada pestaña;
+            // por eso una búsqueda simple puede encontrar las subpestañas de Administración.
+            function esNavegacionPrincipal(lista) {
+                if (!lista) return false;
+                const etiquetas = Array.from(lista.querySelectorAll('[role="tab"]'))
+                    .map(tab => (tab.textContent || '').replace(/\s+/g, ' ').trim());
+                return [
+                    'Control Operativo & SLA',
+                    'Distribución de Carga',
+                    'Resumen de Chats & Agentes'
+                ].every(etiqueta => etiquetas.some(texto => texto.includes(etiqueta)));
+            }
+
+            const listasCandidatas = doc.querySelectorAll(mainNavigationSelector);
+            const listaNueva = Array.from(listasCandidatas).find(esNavegacionPrincipal) || null;
+
+            // Priorizar una lista recién creada por Streamlit. Si todavía no existe,
+            // reutilizar la referencia conservada aunque el nodo esté temporalmente
+            // separado del DOM durante un rerun o una reanudación de sesión.
+            if (listaNueva) {
+                tabList = listaNueva;
+            } else if (!tabList) {
+                const currentTabList = doc.getElementById('bims-main-tablist');
+                if (currentTabList && currentTabList.dataset.bimsMainTablist === 'true') {
+                    tabList = currentTabList;
+                }
+            }
+
+            if (!tabList) return;
+
+            // Si Streamlit creó una lista nueva, retirar la anterior del encabezado.
+            const previousTabList = doc.getElementById('bims-main-tablist');
+            if (previousTabList && previousTabList !== tabList) {
+                previousTabList.remove();
+            }
+
+            tabList.id = 'bims-main-tablist';
+            tabList.dataset.bimsMainTablist = 'true';
+
+            const tabsWrapper = tabList.closest('.stTabs');
+            if (tabsWrapper) {
+                tabsWrapper.id = 'bims-main-tabs-wrapper';
+            }
+
+            let placeholder = doc.getElementById(placeholderId);
+            if (!placeholder) {
+                placeholder = doc.createElement('div');
+                placeholder.id = placeholderId;
+                if (tabsWrapper && tabsWrapper.parentNode) {
+                    tabsWrapper.parentNode.insertBefore(placeholder, tabsWrapper);
+                }
+            }
+
+            if (tabList.parentNode !== headerInner) {
+                headerInner.appendChild(tabList);
+            }
+        }
+
+        integrarNavegacion();
+
+        const observer = new parentWindow.MutationObserver(integrarNavegacion);
+        parentWindow[controllerKey] = { observer: observer, get tabList() { return tabList; } };
+        observer.observe(doc.body, { childList: true, subtree: true });
+    } catch (error) {
+        console.error('BIMS: no se pudo integrar la navegación fija', error);
+    }
+})();
+</script>
+""", width=1, height=1)
+
+
+# Mapear las pestañas a variables de forma segura
+idx = 0
+tab_operativo = tabs_creadas[idx]; idx += 1
+tab_carga_vivo = tabs_creadas[idx]; idx += 1
+tab_resumen = tabs_creadas[idx]; idx += 1
+
+tab_l2 = None
+tab_wbr = None
+if puede_ver_wbr:
+    tab_l2 = tabs_creadas[idx]; idx += 1
+    tab_wbr = tabs_creadas[idx]; idx += 1
+
+tab_admin = None
+if puede_ver_admin:
+    tab_admin = tabs_creadas[idx]; idx += 1
+
+tab_faq = tabs_creadas[idx]
+
+# ==========================================
+# FRAGMENTO DE ALERTAS EN VIVO (CADA 10s)
+# ==========================================
+@st.fragment(run_every=10)
+def renderizar_alertas_en_vivo():
+    try:
+        alerta_nuevo_th = float(st.session_state.get("alerta_nuevo_th", 1.0))
+    except (ValueError, TypeError):
+        alerta_nuevo_th = 1.0
+
+    act_sonido = bool(st.session_state.get("act_sonido", True))
+    tz_py = timezone(timedelta(hours=-3))
+    now_dt = datetime.now(tz_py)
+    
+    error_msg = None
+    datos_todos = []
+
+    try:
+        datos_todos = obtener_alertas_compartidas()
+    except Exception as e:
+        error_msg = str(e)
+
+    if error_msg:
+        with st.expander("Panel de Verificación de Alertas (ERROR DE CONEXIÓN)", expanded=True):
+            st.error(f"Error al consultar Supabase: {error_msg}")
+        return
+
+    if datos_todos:
+        df_base = pd.DataFrame(datos_todos)
+        
+        df_base["estado_clean"] = df_base["estado"].fillna("").astype(str).str.strip().str.lower()
+        estados_cerrados = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+        
+        # 1. Filtramos chats abiertos
+        df_activos = df_base[~df_base["estado_clean"].isin(estados_cerrados)].copy()
+        
+        # 2. FILTRO EXCLUSIVO: Solo consideramos chats con agente "Sin Asignar" / vacíos / "soporte"
+        # (Se descartan Mónica y cualquier agente humano ya asignado)
+        agentes_permitidos_sin_asignar = ["sin asignar", "none", "nan", ""]
+        df_activos["agente_clean"] = df_activos["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
+        
+        df_activos = df_activos[
+            df_activos["agente_clean"].isin(agentes_permitidos_sin_asignar) | 
+            df_activos["agente_clean"].str.contains("sin asignar", na=False)
+        ].copy()
+
+        canal_act = df_activos["canal"].fillna("").astype(str).str.strip().str.lower() if "canal" in df_activos.columns else pd.Series("", index=df_activos.index)
+        tags_act = df_activos["etiquetas"].fillna("").astype(str).str.strip().str.lower() if "etiquetas" in df_activos.columns else pd.Series("", index=df_activos.index)
+
+        df_activos = df_activos[
+            ~canal_act.str.contains("correo|email|mail", regex=True)
+            & ~tags_act.str.contains("correo|spam|l2", regex=True)
+        ].copy()
+
+        if not df_activos.empty:
+            df_activos["id_str"] = df_activos["id"].astype(str).str.strip()
+            df_activos["intercom_url"] = df_activos["id_str"].apply(
+                lambda x: f"https://app.intercom.io/a/apps/{INTERCOM_APP_ID}/inbox/inbox/all/conversations/{x}"
+            )
+
+            # Usamos updated_at para medir el tiempo desde la derivación efectiva
+            fecha_ref = pd.to_datetime(df_activos["updated_at"].fillna(df_activos["created_at"]), errors="coerce", utc=True)
+            df_activos["created_at_dt"] = fecha_ref.dt.tz_convert("America/Asuncion")
+            df_activos["created_at_fmt"] = df_activos["created_at_dt"].dt.strftime("%Y-%m-%d %H:%M").fillna("Sin fecha")
+            df_activos = df_activos.drop_duplicates(subset=["id"])
+            
+            df_activos["1ra_resp_num"] = pd.to_numeric(df_activos["primera_respuesta_min"], errors="coerce")
+            
+            calc_min = (now_dt - df_activos["created_at_dt"]).dt.total_seconds() / 60.0
+            df_activos["min_transcurridos"] = calc_min.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
+            
+            sin_respuesta = df_activos["1ra_resp_num"].isna()
+            tiempo_superado = df_activos["min_transcurridos"] >= alerta_nuevo_th
+            
+            df_criticos_sla = df_activos[sin_respuesta & tiempo_superado].copy()
+
+            if not df_criticos_sla.empty:
+                cant = len(df_criticos_sla)
+                palabra_chat = "chat" if cant == 1 else "chats"
+
+                # Título que se mostrará integrado en el banner
+                titulo_banner = f"ALERTA CRÍTICA: Hay {cant} {palabra_chat} en espera de asignación humana (> {alerta_nuevo_th} min) — Haz clic para desplegar y gestionar"
+
+                with st.expander(titulo_banner, expanded=False):
+                    # Marcador invisible que activa las reglas CSS del banner sobre este expander
+                    st.markdown('<div class="alerta-ancla-activa" style="display:none;"></div>', unsafe_allow_html=True)
+
+                    if act_sonido and evaluar_horario_estricto(now_dt):
+                        html_con_ts = f"<!-- {now_dt.timestamp()} -->\n" + AUDIO_ALARM_HTML
+                        st.components.v1.html(html_con_ts, height=0)
+
+                    df_criticos_sla["atendido"] = False
+                    cols_check = ["atendido", "intercom_url", "created_at_fmt", "min_transcurridos", "nombre_contacto", "tenant", "agente_asignado", "estado"]
+                    if "canal" in df_criticos_sla.columns:
+                        cols_check.append("canal")
+
+                    df_criticos_editor = df_criticos_sla.reindex(columns=cols_check).dropna(how="all", axis=1).copy()
+
+                    edited_data = st.data_editor(
+                        df_criticos_editor,
+                        column_config={
+                            "atendido": st.column_config.CheckboxColumn("Atendido", default=False),
+                            "intercom_url": st.column_config.LinkColumn(
+                                "ID Conversación", 
+                                display_text=r".*/(\d+)"
+                            ),
+                            "created_at_fmt": st.column_config.TextColumn("Fecha Derivación", disabled=True),
+                            "min_transcurridos": st.column_config.NumberColumn("Min. Transcurridos", disabled=True),
+                            "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
+                            "tenant": st.column_config.TextColumn("Tenant", disabled=True),
+                            "agente_asignado": st.column_config.TextColumn("Estado Asignación", disabled=True),
+                            "estado": st.column_config.TextColumn("Estado", disabled=True),
+                            "canal": st.column_config.TextColumn("Canal", disabled=True),
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        key="editor_alertas_tabla"
+                    )
+
+                    cambios = st.session_state.get("editor_alertas_tabla", {}).get("edited_rows", {})
+                    if cambios:
+                        actualizados = 0
+                        for fila_idx, datos_editados in cambios.items():
+                            if datos_editados.get("atendido") is True:
+                                row_data = df_criticos_sla.iloc[int(fila_idx)]
+                                chat_id = row_data["id"]
+                                id_str = row_data["id_str"]
+
+                                try:
+                                    supabase.table("conversaciones")\
+                                        .update({"primera_respuesta_min": 0.0})\
+                                        .eq("id", chat_id)\
+                                        .execute()
+                                    actualizados += 1
+                                except Exception as ex_update:
+                                    st.error(f"Error al actualizar chat {id_str}: {ex_update}")
+
+                        if actualizados > 0:
+                            invalidar_cache_datos_conversaciones()
+                            obtener_alertas_compartidas.clear()
+                            st.rerun()
+
+            
+            
+# ==========================================
+# RENDERIZADO DE PESTAÑAS
+# ==========================================
+
+with tab_operativo:
+    st.markdown('<div class="bims-operativo-sla-scope" style="display:none;"></div>', unsafe_allow_html=True)
+    renderizar_alertas_en_vivo()
+
+    sla_1ra_th = st.session_state["sla_1ra_th"]
+    sla_gest_th = st.session_state["sla_gest_th"]
+    alerta_nuevo_th = st.session_state["alerta_nuevo_th"]
+
+    if not df_all.empty:
+        # Extraemos el estado limpiando espacios y minúsculas
+        estado_clean = df_all.get("estado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
+        
+        # Un chat está CERRADO únicamente si su estado en Supabase/Intercom indica cierre explícito
+        df_all["es_cerrado"] = estado_clean.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"])
+
+        # Identificamos si el agente asignado es sin asignar o Mónica
+        agente_clean = df_all.get("agente_asignado", pd.Series(dtype=str)).fillna("").astype(str).str.strip().str.lower()
+        es_monica_o_sin_asignar = agente_clean.isin(["sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"])
+
+        # Regla de Horario Normal idéntica a evaluar_sla_normal_excel
+        dt_1ra = df_all["created_at_dt"]
+        dia_1ra = dt_1ra.dt.dayofweek
+        hora_1ra = dt_1ra.dt.time
+        fecha_1ra = dt_1ra.dt.strftime("%Y-%m-%d")
+        
+        es_horario_normal_1ra = (
+            ((dia_1ra.isin([0, 1, 2, 3, 4])) & (hora_1ra >= time(8, 0)) & (hora_1ra <= time(17, 30))) |
+            ((dia_1ra == 5) & (hora_1ra >= time(9, 0)) & (hora_1ra <= time(11, 45)))
+        ) & (~fecha_1ra.isin(FERIADOS))
+        
+        # EVALUACIÓN VECTORIZADA DE SLA 1RA RESPUESTA Y GESTIÓN
+        cond_1ra = [
+            (df_all["por_agente"] == "excluido") | (~es_horario_normal_1ra) | es_monica_o_sin_asignar,
+            df_all["primera_respuesta_min"].isna(),
+            df_all["primera_respuesta_min"] <= sla_1ra_th
+        ]
+        val_1ra = ["excluido", "no cumple", "cumple"]
+        df_all["sla_1ra_eval"] = np.select(cond_1ra, val_1ra, default="no cumple")
+
+        es_sin_respuesta = df_all.get("etiquetas", pd.Series(dtype=str)).astype(str).str.lower().str.contains("sin respuesta", na=False)
+        # La evaluación de Gestión usa las mismas reglas que el Excel:
+        # agente válido + horario válido + sin "Sin Respuesta" + conversación cerrada.
+        cond_gest = [
+            (df_all["por_agente"] == "excluido") | (df_all["horario_evaluado"] == "fuera de horario") | es_sin_respuesta | es_monica_o_sin_asignar,
+            ~df_all["es_cerrado"],
+            df_all["tiempo_resolucion_minutos"].isna(),
+            df_all["tiempo_resolucion_minutos"] <= sla_gest_th
+        ]
+        val_gest = ["excluido", "sin cerrar", "sin cerrar", "cumple"]
+        df_all["sla_gest_eval"] = np.select(cond_gest, val_gest, default="no cumple")
+
+        for col in ["tenant", "company", "nombre_contacto", "motivo_normalizado", "ai_title"]:
+            if col not in df_all.columns:
+                if col == "motivo_normalizado":
+                    df_all[col] = "Consulta General"
+                elif col == "ai_title":
+                    df_all[col] = "No Generado"
+                else:
+                    df_all[col] = "Sin datos"
+            else:
+                if col == "ai_title":
+                    df_all[col] = df_all[col].fillna("No Generado").replace(["", "None", "nan", "null"], "No Generado")
+
+    f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
+    
+    if not df_all.empty and "fecha_solo" in df_all.columns:
+        df_filtered = df_all[(df_all["fecha_solo"] >= f_desde_v) & (df_all["fecha_solo"] <= f_hasta_v)].copy()
+    else:
+        df_filtered = pd.DataFrame()
+
+    if usar_filtro_hora and not df_filtered.empty:
+        df_filtered = df_filtered[(df_filtered["hora_solo"] >= hora_inicio) & (df_filtered["hora_solo"] <= hora_fin)]
+
+    now_dt = pd.Timestamp.now(tz="America/Asuncion")
+    # El backlog histórico reúne chats y correos; el resto del dashboard
+    # conserva su universo habitual, separado de los correos.
+    df_unificado_backlog = pd.concat(
+        [d for d in [df_all, df_correos_all] if not d.empty],
+        ignore_index=True
+    ) if (not df_all.empty or not df_correos_all.empty) else pd.DataFrame()
+    if not df_unificado_backlog.empty and "estado" in df_unificado_backlog.columns:
+        # Recalcular el estado después de unir chats y correos.
+        # df_correos_all se separa antes de que df_all reciba es_cerrado,
+        # por lo que no se debe interpretar un es_cerrado nulo como abierto.
+        estados_cerrados_backlog = ["cerrado", "closed", "resolved", "resuelto", "snoozed"]
+        estado_backlog = (
+            df_unificado_backlog["estado"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+        df_unificado_backlog["es_cerrado"] = estado_backlog.isin(estados_cerrados_backlog)
+        df_abiertos_all = df_unificado_backlog[
+            ~df_unificado_backlog["es_cerrado"]
+        ].drop_duplicates(subset=["id"], keep="first").copy()
+    else:
+        df_abiertos_all = pd.DataFrame()
+
+    # CSAT SCORECARD ULTRA-RÁPIDO (PRE-PROCESADO EN UN SOLO PASO)
+    st.markdown("### CSAT Performance")
+    now_date = obtener_fecha_local_hoy()
+
+    df_csat_global = obtener_df_csat_valido(df_all)
+
+    if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
+        c_hoy, pos_hoy, k_hoy = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == now_date])
+        c_ayer, _, _ = calcular_csat_rapido(df_csat_global[df_csat_global["fecha_calificacion_solo"] == (now_date - timedelta(days=1))])
+        diff_hoy = round(c_hoy - c_ayer, 1)
+
+        inicio_sem = now_date - timedelta(days=now_date.weekday())
+        c_sem, pos_sem, k_sem = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_sem) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
+        ini_sem_ant = inicio_sem - timedelta(days=7)
+        fin_sem_ant = inicio_sem - timedelta(days=1)
+        c_sem_ant, _, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_sem_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_sem_ant)])
+        diff_sem = round(c_sem - c_sem_ant, 1)
+
+        inicio_mes = now_date.replace(day=1)
+        c_mes, pos_mes, k_mes = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= inicio_mes) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
+        fin_mes_ant = inicio_mes - timedelta(days=1)
+        ini_mes_ant = fin_mes_ant.replace(day=1)
+        c_mes_ant, _, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_mes_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_mes_ant)])
+        diff_mes = round(c_mes - c_mes_ant, 1)
+
+        q_act = (now_date.month - 1) // 3 + 1
+        q_ant = 4 if q_act == 1 else q_act - 1
+        ini_q = datetime(now_date.year, 3 * (q_act - 1) + 1, 1).date()
+        c_q, pos_q, k_q = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q) & (df_csat_global["fecha_calificacion_solo"] <= now_date)])
+        fin_q_ant = ini_q - timedelta(days=1)
+        ini_q_ant = datetime(fin_q_ant.year, 3 * (q_ant - 1) + 1, 1).date()
+        c_q_ant, _, _ = calcular_csat_rapido(df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= ini_q_ant) & (df_csat_global["fecha_calificacion_solo"] <= fin_q_ant)])
+        diff_q = round(c_q - c_q_ant, 1)
+
+        df_filtered_csat = df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= f_desde_v) & (df_csat_global["fecha_calificacion_solo"] <= f_hasta_v)]
+        c_rango, pos_rango, k_rango = calcular_csat_rapido(df_filtered_csat)
+        duracion_dias = (f_hasta_v - f_desde_v).days + 1
+        f_hasta_prev = f_desde_v - timedelta(days=1)
+        f_desde_prev = f_hasta_prev - timedelta(days=duracion_dias - 1)
+        df_prev_rango = df_csat_global[(df_csat_global["fecha_calificacion_solo"] >= f_desde_prev) & (df_csat_global["fecha_calificacion_solo"] <= f_hasta_prev)]
+        c_rango_prev, _, _ = calcular_csat_rapido(df_prev_rango)
+        diff_rango = round(c_rango - c_rango_prev, 1)
+    else:
+        c_hoy, pos_hoy, k_hoy, diff_hoy = 0.0, 0, 0, 0.0
+        c_sem, pos_sem, k_sem, diff_sem = 0.0, 0, 0, 0.0
+        c_mes, pos_mes, k_mes, diff_mes = 0.0, 0, 0, 0.0
+        c_q, pos_q, k_q, diff_q, q_act, q_ant = 0.0, 0, 0, 0.0, 1, 4
+        c_rango, pos_rango, k_rango, diff_rango = 0.0, 0, 0, 0.0
+        df_filtered_csat = pd.DataFrame()
+
+    def render_metric_card(title, value, diff, comp_texto, sub_text):
+        diff_color = "#34d399" if diff >= 0 else "#f43f5e"
+        diff_symbol = "▲" if diff >= 0 else "▼"
+        return f"""
+        <div class="metric-card bims-csat-kpi-card" style="border-left: 4px solid #38bdf8;">
+            <div class="metric-card-title">{title}</div>
+            <div class="metric-card-value">{value}</div>
+            <div style="display: inline-block; background: transparent; color: {diff_color}; padding: 2px 0; border-radius: 0; font-size: 0.78rem; font-weight: 700; margin-top: 4px;">
+                {diff_symbol} {abs(diff)}% {comp_texto}
+            </div>
+            <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem; margin-top: 6px;">{sub_text}</div>
+        </div>
+        """
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.markdown(render_metric_card("CSAT Hoy", f"{c_hoy}%", diff_hoy, "vs ayer", f"{pos_hoy} de {k_hoy} encuestas"), unsafe_allow_html=True)
+    m2.markdown(render_metric_card("CSAT Esta Semana", f"{c_sem}%", diff_sem, "vs semana anterior", f"{pos_sem} de {k_sem} encuestas"), unsafe_allow_html=True)
+    m3.markdown(render_metric_card("CSAT Este Mes", f"{c_mes}%", diff_mes, "vs mes anterior", f"{pos_mes} de {k_mes} encuestas"), unsafe_allow_html=True)
+    m4.markdown(render_metric_card(f"CSAT Trimestre Q{q_act}", f"{c_q}%", diff_q, f"vs Q{q_ant}", f"{pos_q} de {k_q} encuestas"), unsafe_allow_html=True)
+    m5.markdown(render_metric_card("CSAT Rango", f"{c_rango}%", diff_rango, "vs período anterior", f"{pos_rango} de {k_rango} encuestas"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    @st.fragment
+    def render_csat_evolution(df_csat_global, now_date):
+        # EVOLUCIÓN DE CSAT: HISTÓRICO SEMANAL O DETALLE DIARIO DE LA SEMANA ACTUAL
+        q_act_evo = (now_date.month - 1) // 3 + 1
+        q_ant_evo = 4 if q_act_evo == 1 else q_act_evo - 1
+        st.markdown("""<style>
+        .st-key-bims_csat_switch_wrap [data-testid='stVerticalBlock'] { align-items: flex-end !important; }
+        .st-key-bims_csat_switch_wrap [data-testid='stElementContainer'] { width: auto !important; align-self: flex-end !important; }
+        </style>""", unsafe_allow_html=True)
+        col_titulo_csat, col_switch_csat = st.columns([5.5, 1.5], vertical_alignment="center")
+        with col_titulo_csat:
+            titulo_csat_evo = st.empty()
+        with col_switch_csat:
+            with st.container(key="bims_csat_switch_wrap"):
+                vista_diaria_csat = st.toggle("Vista diaria", value=False, key="bims_csat_daily_view", help="Alternar entre la evolución histórica y el CSAT diario de esta semana.")
+        if vista_diaria_csat:
+            titulo_csat_evo.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;">CSAT diario — semana en curso</h3></div>', unsafe_allow_html=True)
+        else:
+            titulo_csat_evo.markdown('<div class="bims-csat-evo-title"><h3 style="margin:0; padding:0; font-size:1.17rem; font-weight:600; line-height:1.3;"><span class="bims-title-desktop">Evolución semanal del CSAT — desde el trimestre anterior</span><span class="bims-title-mobile">Evolución semanal del CSAT</span></h3></div>', unsafe_allow_html=True)
+    
+        if vista_diaria_csat:
+            if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
+                inicio_semana_csat = now_date - timedelta(days=now_date.weekday())
+                df_csat_diario = df_csat_global[
+                    (df_csat_global["fecha_calificacion_solo"] >= inicio_semana_csat) &
+                    (df_csat_global["fecha_calificacion_solo"] <= now_date)
+                ].copy()
+                if not df_csat_diario.empty:
+                    df_csat_diario["Dia"] = df_csat_diario["fecha_calificacion_solo"].apply(
+                        lambda f: f"{['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][f.weekday()]} {f.strftime('%d/%m')}"
+                    )
+                    res_csat_diario = []
+                    for dia, grp in df_csat_diario.groupby("fecha_calificacion_solo"):
+                        total_dia = len(grp)
+                        positivas_dia = int((grp["rating_num"] >= 4).sum())
+                        res_csat_diario.append({
+                            "Fecha": dia,
+                            "Día": grp["Dia"].iloc[0],
+                            "CSAT %": round((positivas_dia / total_dia) * 100, 1) if total_dia else None,
+                            "Encuestas": total_dia
+                        })
+                    df_evo_csat_diario = pd.DataFrame(res_csat_diario).sort_values("Fecha")
+                    colores_diarios = [
+                        "#10b981" if v >= 90.0 else "#f59e0b"
+                        for v in df_evo_csat_diario["CSAT %"]
+                    ]
+                    fig_csat_diario = go.Figure()
+                    fig_csat_diario.add_trace(go.Scatter(
+                        x=df_evo_csat_diario["Día"],
+                        y=df_evo_csat_diario["CSAT %"],
+                        mode="lines+markers+text",
+                        name="CSAT (%)",
+                        text=[f"<b>{v:.1f}%</b>" for v in df_evo_csat_diario["CSAT %"]],
+                        textposition="top center",
+                        textfont=dict(color="#f8fafc", size=11),
+                        marker=dict(size=9, color=colores_diarios, line=dict(color="#0f172a", width=2)),
+                        customdata=df_evo_csat_diario[["Encuestas"]].to_numpy(),
+                        hovertemplate="<b>%{x}</b><br>CSAT: <b>%{y:.1f}%</b><br>Total encuestas: %{customdata[0]}<extra></extra>",
+                        line=dict(color="#38bdf8", width=3, shape="spline", smoothing=0.6),
+                        fill="tozeroy",
+                        fillgradient=dict(type="vertical", colorscale=[
+                            [0.0, "rgba(56, 189, 248, 0.0)"],
+                            [1.0, "rgba(56, 189, 248, 0.22)"]
+                        ])
+                    ))
+                    fig_csat_diario.add_hline(
+                        y=90, line=dict(color="#34d399", width=1.5, dash="dot"),
+                        annotation_text="<b>Meta 90%</b>", annotation_position="top left",
+                        annotation_font=dict(color="#34d399", size=11),
+                        annotation_bgcolor="rgba(11, 17, 32, 0.85)"
+                    )
+                    min_csat_diario = max(0, min(85, float(df_evo_csat_diario["CSAT %"].min()) - 8))
+                    fig_csat_diario.update_layout(
+                        xaxis=dict(title=None, showgrid=False, zeroline=False, tickfont=dict(color="#94a3b8", size=11)),
+                        yaxis=dict(title=None, range=[min_csat_diario, 104], showgrid=False, showticklabels=False, zeroline=False, showline=False, ticksuffix="%"),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1"), margin=dict(t=12, b=35, l=12, r=12),
+                        height=380, showlegend=False
+                    )
+                    st.plotly_chart(
+                        fig_csat_diario, use_container_width=True,
+                        key="bims_csat_daily_evolution_chart",
+                        config={"displayModeBar": False, "scrollZoom": False}
+                    )
+                else:
+                    st.info("Todavía no hay evaluaciones registradas esta semana.")
+            else:
+                st.info("Sin registros en la base de datos.")
+        else:
+            if not df_csat_global.empty and "fecha_calificacion_solo" in df_csat_global.columns:
+                anio_inicio_q = now_date.year - 1 if q_act_evo == 1 else now_date.year
+                mes_inicio_q = 10 if q_act_evo == 1 else 3 * (q_ant_evo - 1) + 1
+                fecha_inicio_q_ant_evo = date(anio_inicio_q, mes_inicio_q, 1)
+        
+                df_csat_evo = df_csat_global[df_csat_global["fecha_calificacion_solo"] >= fecha_inicio_q_ant_evo].copy()
+        
+                if not df_csat_evo.empty:
+                    # Agrupación por semana ISO (Lunes a Domingo)
+                    df_csat_evo["Inicio_Semana"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(lambda r: r.start_time)
+                    df_csat_evo["Semana_Etiqueta"] = df_csat_evo["fecha_calificacion_dt"].dt.isocalendar().week.apply(lambda w: f"S{w}")
+                    # Rango legible de fechas de Lunes a Domingo para el tooltip
+                    df_csat_evo["Rango_Fechas"] = df_csat_evo["fecha_calificacion_dt"].dt.to_period("W-SUN").apply(
+                        lambda r: f"{r.start_time.strftime('%d/%m')} al {r.end_time.strftime('%d/%m')}"
+                    )
+        
+                    res_csat_semanal = []
+                    for _, grp in df_csat_evo.groupby(["Inicio_Semana", "Semana_Etiqueta"]):
+                        tot = len(grp)
+                        pos = len(grp[grp["rating_num"] >= 4])
+                        val_csat = round((pos / tot) * 100, 1) if tot > 0 else 0.0
+                        res_csat_semanal.append({
+                            "Inicio_Semana": grp["Inicio_Semana"].iloc[0],
+                            "Semana": grp["Semana_Etiqueta"].iloc[0],
+                            "Rango_Fechas": grp["Rango_Fechas"].iloc[0],
+                            "CSAT %": val_csat,
+                            "Encuestas": tot
+                        })
+        
+                    df_evo_csat = pd.DataFrame(res_csat_semanal).sort_values("Inicio_Semana")
+        
+                    fig_csat = go.Figure()
+        
+                    # Colores dinámicos en los nodos según cumplimiento de meta (90%)
+                    colores_nodos = [
+                        "#10b981" if v >= 90.0 else "#f59e0b"
+                        for v in df_evo_csat["CSAT %"]
+                    ]
+        
+                    fig_csat.add_trace(go.Scatter(
+                        x=df_evo_csat["Semana"],
+                        y=df_evo_csat["CSAT %"],
+                        mode="lines+markers+text",
+                        name="CSAT (%)",
+                        text=[f"<b>{v:.1f}%</b>" for v in df_evo_csat["CSAT %"]],
+                        textposition="top center",
+                        textfont=dict(color="#f8fafc", size=11),
+                        marker=dict(
+                            size=8,
+                            color=colores_nodos,
+                            line=dict(color="#0f172a", width=2)
+                        ),
+                        hovertemplate=(
+                            "<b>%{x}</b> (%{customdata[0]})<br>"
+                            "CSAT: <b>%{y:.1f}%</b><br>"
+                            "Total encuestas: %{customdata[1]}<extra></extra>"
+                        ),
+                        customdata=np.stack((df_evo_csat["Rango_Fechas"], df_evo_csat["Encuestas"]), axis=-1),
+                        line=dict(color="#38bdf8", width=3, shape="spline", smoothing=0.8),
+                        fill="tozeroy",
+                        fillgradient=dict(
+                            type="vertical",
+                            colorscale=[
+                                [0.0, "rgba(56, 189, 248, 0.0)"],
+                                [1.0, "rgba(56, 189, 248, 0.22)"]
+                            ]
+                        )
+                    ))
+        
+                    # Línea de meta objetivo (90%)
+                    fig_csat.add_hline(
+                        y=90,
+                        line=dict(color="#34d399", width=1.5, dash="dot"),
+                        annotation_text="<b>Meta 90%</b>",
+                        annotation_position="top left",
+                        annotation_font=dict(color="#34d399", size=11),
+                        annotation_bgcolor="rgba(11, 17, 32, 0.85)"
+                    )
+        
+                    # Aire lateral en eje X para que S27 y S47 nunca se corten
+                    total_semanas = len(df_evo_csat)
+                    min_y = max(60, float(df_evo_csat["CSAT %"].min()) - 6)
+        
+                    fig_csat.update_layout(
+                        xaxis=dict(
+                            title=None,
+                            range=[-0.25, total_semanas - 0.75],
+                            showgrid=False,
+                            zeroline=False,
+                            tickfont=dict(color="#94a3b8", size=11)
+                        ),
+                        yaxis=dict(
+                            title=None,
+                            range=[min_y, 104],
+                            showgrid=False,
+                            showticklabels=False,
+                            zeroline=False,
+                            showline=False,
+                            ticksuffix="%",
+                            tickfont=dict(color="#64748b", size=10)
+                        ),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#cbd5e1"),
+                        margin=dict(t=4, b=35, l=12, r=12),
+                        height=380,
+                        showlegend=False
+                    )
+                    # En móvil se muestran únicamente las 10 semanas más recientes.
+                    # El ajuste se realiza en el navegador para no alterar el histórico de escritorio.
+                    st.plotly_chart(
+                        fig_csat,
+                        use_container_width=True,
+                        key="bims_csat_evolution_chart",
+                        config={"displayModeBar": False, "scrollZoom": False}
+                    )
+                    st.iframe(f"""
+                    <script>
+                    (function() {{
+                        const doc = window.parent.document;
+                        const mobile = window.parent.matchMedia('(max-width: 600px)');
+                        const chartSelector = '.st-key-bims_csat_evolution_chart .js-plotly-plot';
+                        const applyView = function() {{
+                            const chart = doc.querySelector(chartSelector);
+                            if (!chart || !window.parent.Plotly) return;
+                            const container = chart.closest('[data-testid="stElementContainer"]') || chart.parentElement;
+                            if (mobile.matches) {{
+                                if (container) container.style.pointerEvents = 'none';
+                                chart.style.pointerEvents = 'none';
+                                window.parent.Plotly.relayout(chart, {{
+                                    'xaxis.range': [Math.max(-0.25, {total_semanas} - 10.75), {total_semanas} - 0.75],
+                                    'xaxis.autorange': false
+                                }});
+                            }} else {{
+                                if (container) container.style.pointerEvents = '';
+                                chart.style.pointerEvents = '';
+                                window.parent.Plotly.relayout(chart, {{'xaxis.autorange': true}});
+                            }}
+                        }};
+                        const observer = new MutationObserver(function() {{
+                            const chart = doc.querySelector(chartSelector);
+                            if (chart) {{
+                                applyView();
+                                observer.disconnect();
+                            }}
+                        }});
+                        observer.observe(doc.body, {{childList: true, subtree: true}});
+                        applyView();
+                        if (doc.querySelector(chartSelector)) observer.disconnect();
+                        mobile.addEventListener('change', applyView);
+                    }})();
+                    </script>
+                    """, height=1, width=1)
+        
+                else:
+                    st.info(f"No hay encuestas registradas desde Q{q_ant_evo} para generar el gráfico.")
+            else:
+                st.info("Sin registros en la base de datos.")
+
+    render_csat_evolution(df_csat_global, now_date)
+
+    # La edición de motivos CSAT utiliza el mismo permiso de Administración.
+    es_super_usuario = puede_ver_admin
+
+    @st.fragment
+    def render_csat_negative_editor(df_all, f_desde_v, f_hasta_v, usar_filtro_hora, hora_inicio, hora_fin, es_super_usuario):
+        # DETALLE Y CATEGORIZACIÓN CSAT DIRECTO EN TABLA (Filtrado por fecha_calificacion, no por fecha de creación)
+        if not df_all.empty and "rating" in df_all.columns and "fecha_calificacion_solo" in df_all.columns:
+            df_csat_det = df_all.dropna(subset=["rating"]).copy()
+            df_csat_det["rating_num"] = pd.to_numeric(df_csat_det["rating"], errors="coerce")
+            df_csat_det = df_csat_det.dropna(subset=["rating_num"])
+            df_csat_det = df_csat_det[df_csat_det["rating_num"].isin([1, 2])].copy()
+            df_csat_det = df_csat_det[
+                (df_csat_det["fecha_calificacion_solo"] >= f_desde_v) &
+                (df_csat_det["fecha_calificacion_solo"] <= f_hasta_v)
+            ].copy()
+            if usar_filtro_hora and not df_csat_det.empty and "fecha_calificacion_dt" in df_csat_det.columns:
+                hora_calif_s = df_csat_det["fecha_calificacion_dt"].dt.time
+                df_csat_det = df_csat_det[(hora_calif_s >= hora_inicio) & (hora_calif_s <= hora_fin)]
+
+            st.markdown("### Evaluaciones negativas (1–2 estrellas)")
+            if not df_csat_det.empty:
+                df_csat_det["Calificacion"] = df_csat_det["rating_num"].apply(calificacion_a_estrellas)
+            
+                OPCIONES_MOTIVOS = obtener_lista_motivos_csat()
+
+                df_csat_det["motivo_normalizado"] = df_csat_det.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar")
+                df_csat_det["ticket_relacionado"] = df_csat_det.get("ticket_relacionado", pd.Series(dtype=str)).fillna("")
+                # Asignar 'Nivel 1' por defecto si viene nulo, vacío o como 'Sin Nivel'
+                df_csat_det["nivel"] = (
+                    df_csat_det.get("nivel", pd.Series(dtype=str))
+                    .fillna("Nivel 1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+                )
+
+                cols_csat_deseadas = [
+                    "id_str", 
+                    "intercom_url", 
+                    "fecha_calificacion_fmt", 
+                    "agente_evaluado",
+                    "nivel",
+                    "rating_num", 
+                    "Calificacion", 
+                    "feedback", 
+                    "motivo_normalizado", 
+                    "ticket_relacionado", 
+                    "nombre_contacto", 
+                    "tenant", 
+                    "company"
+                ]
+
+                # ORDEN ASCENDENTE POR CALIFICACIÓN
+                df_editor = df_csat_det.reindex(columns=cols_csat_deseadas)\
+                    .sort_values(by=["rating_num", "fecha_calificacion_fmt"], ascending=[True, False])\
+                    .reset_index(drop=True)\
+                    .copy()
+
+                config_columnas = {
+                    "id_str": None,
+                    "rating_num": None,
+                    "intercom_url": st.column_config.LinkColumn("ID Chat", display_text=r".*/(\d+)"),
+                    "fecha_calificacion_fmt": st.column_config.TextColumn("Fecha/Hora Calificación", disabled=True),
+                    "agente_evaluado": st.column_config.TextColumn("Agente Evaluado", disabled=True),
+                    "nivel": st.column_config.TextColumn("Nivel", disabled=True),
+                    "Calificacion": st.column_config.TextColumn("Puntaje", disabled=True),
+                    "feedback": st.column_config.TextColumn("Comentario / Feedback", disabled=True),
+                    "nombre_contacto": st.column_config.TextColumn("Contacto", disabled=True),
+                    "tenant": st.column_config.TextColumn("Tenant", disabled=True),
+                    "company": st.column_config.TextColumn("Company", disabled=True),
+                }
+
+                if es_super_usuario:
+                    config_columnas["motivo_normalizado"] = st.column_config.SelectboxColumn(
+                        "Motivo Normalizado",
+                        options=OPCIONES_MOTIVOS,
+                        required=True
+                    )
+                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado")
+                else:
+                    config_columnas["motivo_normalizado"] = st.column_config.TextColumn("Motivo Normalizado", disabled=True)
+                    config_columnas["ticket_relacionado"] = st.column_config.TextColumn("Ticket Relacionado", disabled=True)
+
+                # ENVOLVEMOS LA TABLA EN UN FORMULARIO PARA EVITAR SOBREESCRITURAS DE ESTADO
+                with st.form("form_tabla_csat_edicion", clear_on_submit=False):
+                    edited_df = st.data_editor(
+                        df_editor,
+                        column_config=config_columnas,
+                        hide_index=True,
+                        use_container_width=True,
+                        key="editor_csat_tabla"
+                    )
+
+                    if es_super_usuario:
+                        btn_guardar_cambios = st.form_submit_button("Guardar Cambios", use_container_width=True)
+                    else:
+                        btn_guardar_cambios = False
+
+                # PROCESAMIENTO SEGURO AL HACER CLIC EN GUARDAR
+                if btn_guardar_cambios and es_super_usuario:
+                    cambios = st.session_state.get("editor_csat_tabla", {}).get("edited_rows", {})
+                
+                    if cambios:
+                        errores = 0
+                        guardados = 0
+                        for fila_idx, datos_editados in cambios.items():
+                            chat_id = df_editor.iloc[int(fila_idx)]["id_str"]
+                            id_chat_val = int(chat_id) if str(chat_id).isdigit() else chat_id
+                            
+                            payload_update = {}
+                            if "motivo_normalizado" in datos_editados:
+                                payload_update["motivo_normalizado"] = datos_editados["motivo_normalizado"]
+                            if "ticket_relacionado" in datos_editados:
+                                payload_update["ticket_relacionado"] = str(datos_editados["ticket_relacionado"]).strip()
+
+                            if payload_update:
+                                try:
+                                    supabase.table("conversaciones")\
+                                        .update(payload_update)\
+                                        .eq("id", id_chat_val)\
+                                        .execute()
+                                    guardados += 1
+                                except Exception as ex:
+                                    errores += 1
+                                    st.error(f"Error al actualizar chat {chat_id}: {ex}")
+
+                        if guardados > 0:
+                            st.success(f"Se actualizaron {guardados} registros.")
+                            invalidar_cache_datos_conversaciones()
+                            # El editor ya refleja los cambios; evitamos rerun global.
+                    else:
+                        st.info("No se detectaron cambios pendientes para guardar.")
+            else:
+                st.info("No hay evaluaciones negativas de 1 o 2 estrellas en el período seleccionado.")
+            st.markdown("---")
+
+
+    render_csat_negative_editor(df_all, f_desde_v, f_hasta_v, usar_filtro_hora, hora_inicio, hora_fin, es_super_usuario)
+
+    # ==========================================
+    # MÉTRICAS POR AGENTE EN DASHBOARD
+    # ==========================================
+    st.markdown("### Métricas por Agente & SLA Operativo")
+    if not df_filtered.empty:
+        df_f = df_filtered.drop_duplicates(subset=["id"]).copy()
+        
+        # Universos independientes para que cada métrica coincida con su Excel.
+        # 1) Primera respuesta: NO exige cierre ni excluye "Sin Respuesta".
+        #    Debe incluir exactamente los registros evaluables por SLA 1ra respuesta.
+        # 2) Gestión: sí exige cierre y excluye "Sin Respuesta".
+        etiquetas_f = df_f.get("etiquetas", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.lower()
+        es_sin_respuesta_f = etiquetas_f.str.contains("sin respuesta", na=False)
+        agente_f = df_f.get("agente_asignado", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
+        por_agente_f = df_f.get("por_agente", pd.Series(index=df_f.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
+
+        # Primera respuesta: mismo universo que el Excel (SLA Normal O Extendido).
+        # Importante: aquí NO exigimos cierre ni excluimos la etiqueta "Sin Respuesta".
+        es_agente_valido_1ra = (
+            (por_agente_f == "no excluido") &
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"])
+        )
+        dt_1ra = df_f["created_at_dt"]
+        dia_1ra = dt_1ra.dt.dayofweek
+        hora_1ra = dt_1ra.dt.time
+        fecha_1ra = dt_1ra.dt.strftime("%Y-%m-%d")
+        normal_1ra = (
+            (dia_1ra.isin([0,1,2,3,4])) &
+            (hora_1ra >= time(8,0)) & (hora_1ra <= time(17,30))
+        ) | (
+            (dia_1ra == 5) &
+            (hora_1ra >= time(9,0)) & (hora_1ra <= time(11,45))
+        )
+        # extendido_1ra original guardado
+        # extendido_1ra = (
+        #     (dia_1ra.isin([0,1,2])) &
+        #     ((hora_1ra >= time(19,0)) | (hora_1ra <= time(1,45)))
+        # ) | (
+        #     (dia_1ra.isin([3,4,5,6])) &
+        #     ((hora_1ra >= time(18,0)) | (hora_1ra <= time(2,45)))
+        # )
+        
+        # INTERRUPTOR TEMPORAL: Forzamos a False para ignorar horario extendido
+        extendido_1ra = False
+        no_feriado_1ra = ~fecha_1ra.isin(FERIADOS)
+        es_horario_1ra = (normal_1ra | extendido_1ra) & no_feriado_1ra
+        v_1ra = df_f[es_agente_valido_1ra & es_horario_1ra].copy()
+        v_1ra["p_1ra_num"] = pd.to_numeric(v_1ra["primera_respuesta_min"], errors="coerce")
+        s_1ra_total = v_1ra["p_1ra_num"].dropna()
+        p_1r = round(s_1ra_total.mean(), 2) if not s_1ra_total.empty else 0.0
+
+        # Gestión: mismas reglas que el Excel.
+        es_agente_valido_gest = (
+            (por_agente_f == "no excluido") &
+            ~agente_f.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+        )
+        es_horario_gest = df_f["horario_evaluado"] != "fuera de horario"
+        v_df = df_f[
+            es_agente_valido_gest &
+            es_horario_gest &
+            (~es_sin_respuesta_f) &
+            (df_f["es_cerrado"])
+        ].copy()
+        v_df["p_gest_num"] = pd.to_numeric(v_df["tiempo_resolucion_minutos"], errors="coerce")
+        s_gest_total = v_df["p_gest_num"].dropna()
+        p_gest = round(s_gest_total.mean(), 2) if not s_gest_total.empty else 0.0
+
+        if "sla_1ra_eval" in df_f.columns:
+            eval_1ra_rango = df_f[df_f["sla_1ra_eval"].isin(["cumple", "no cumple"])]
+            if not eval_1ra_rango.empty:
+                cumplen_1ra = (eval_1ra_rango["sla_1ra_eval"] == "cumple").sum()
+                pct_sla_1ra_total = round((cumplen_1ra / len(eval_1ra_rango)) * 100, 1)
+            else:
+                pct_sla_1ra_total = 0.0
+        else:
+            pct_sla_1ra_total = 0.0
+
+        if "sla_gest_eval" in df_f.columns:
+            eval_gest_rango = df_f[df_f["sla_gest_eval"].isin(["cumple", "no cumple"])]
+            if not eval_gest_rango.empty:
+                cumplen_gest = (eval_gest_rango["sla_gest_eval"] == "cumple").sum()
+                pct_sla_gest_total = round((cumplen_gest / len(eval_gest_rango)) * 100, 1)
+            else:
+                pct_sla_gest_total = 0.0
+        else:
+            pct_sla_gest_total = 0.0
+
+        df_cerrados = df_f[df_f["es_cerrado"]]
+
+        total_ingresados_tot = len(df_f)
+        # "Humano": incluye a Monica y también conversaciones con etiqueta
+        # "Sin Respuesta". Solo se excluyen bots/sin asignar.
+        es_humano_f = (
+            ~agente_f.isin(["", "sin asignar", "none", "monica", "mónica", "nan", "monica (bot)"])
+        )
+        ingresados_humanos = int(es_humano_f.sum())
+
+        total_cerrados_tot = len(df_cerrados)
+        cerrados_humanos = int((es_humano_f & df_f["es_cerrado"]).sum())
+
+        es_cumplido_1ra = pct_sla_1ra_total >= 90.0
+        color_1ra_val = "#34d399" if es_cumplido_1ra else "#f43f5e"
+        border_1ra_card = "#10b981" if es_cumplido_1ra else "#ef4444"
+
+        es_cumplido_gest = pct_sla_gest_total >= 90.0
+        color_gest_val = "#34d399" if es_cumplido_gest else "#f43f5e"
+        border_gest_card = "#10b981" if es_cumplido_gest else "#ef4444"
+
+        def render_sla_card(title, value, sub_text, val_color="#f8fafc", border_color="#0284c7"):
+            return f"""
+            <div class="metric-card bims-sla-kpi-card" style="border-left: 4px solid {border_color}; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div class="metric-card-title">{title}</div>
+                    <div class="metric-card-value" style="color: {val_color};">{value}</div>
+                </div>
+                <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{sub_text}</div>
+            </div>
+            """
+
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1.markdown(render_sla_card("Prom. 1a Respuesta", f"{p_1r} min", f"Meta ≤ {sla_1ra_th} min"), unsafe_allow_html=True)
+        k2.markdown(render_sla_card("Prom. Gestión", f"{p_gest} min", f"Meta ≤ {sla_gest_th} min"), unsafe_allow_html=True)
+        k3.markdown(render_sla_card("% SLA 1ra Resp.", f"{pct_sla_1ra_total}%", "Meta ≥ 90%", val_color=color_1ra_val, border_color=border_1ra_card), unsafe_allow_html=True)
+        k4.markdown(render_sla_card("% SLA Gestión", f"{pct_sla_gest_total}%", "Meta ≥ 90%", val_color=color_gest_val, border_color=border_gest_card), unsafe_allow_html=True)
+        k5.markdown(render_sla_card("Total Ingresados", f"{total_ingresados_tot}", f"Humano: {ingresados_humanos}"), unsafe_allow_html=True)
+        k6.markdown(render_sla_card("Total Cerrados", f"{total_cerrados_tot}", f"Humano: {cerrados_humanos}"), unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        res_agentes = []
+        for agente, grp in df_f.groupby("agente_asignado"):
+            asig_totales = len(grp)
+            cerrados_totales = len(grp[grp["es_cerrado"]])
+            
+            agente_g = grp.get("agente_asignado", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
+            etiquetas_g = grp.get("etiquetas", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.lower()
+            es_sin_respuesta_g = etiquetas_g.str.contains("sin respuesta", na=False)
+            por_agente_g = grp.get("por_agente", pd.Series(index=grp.index, dtype=str)).fillna("").astype(str).str.strip().str.lower()
+            es_agente_valido_g = (por_agente_g == "no excluido") & ~agente_g.isin(["", "sin asignar", "none", "nan", "monica", "monica (bot)"])
+
+            # Primera respuesta: mismo criterio que el promedio general.
+            v_1ra_g = grp[es_agente_valido_g & (grp["horario_evaluado"] != "fuera de horario")].copy()
+            v_1ra_g["p_1ra_num"] = pd.to_numeric(v_1ra_g["primera_respuesta_min"], errors="coerce")
+
+            # Gestión: mismas exclusiones que Excel.
+            v_g = grp[
+                es_agente_valido_g
+                & (grp["horario_evaluado"] != "fuera de horario")
+                & (~es_sin_respuesta_g)
+                & (grp["es_cerrado"])
+            ].copy()
+            v_g["p_gest_num"] = pd.to_numeric(v_g["tiempo_resolucion_minutos"], errors="coerce")
+
+            s_1ra = v_1ra_g["p_1ra_num"].dropna()
+            if not s_1ra.empty:
+                p_1 = round(s_1ra.mean(), 2)
+                cumplen_1ra = (s_1ra <= sla_1ra_th).sum()
+                sla_1_val = round((cumplen_1ra / len(s_1ra)) * 100, 1)
+                sla_1_str = f"{sla_1_val}% ({cumplen_1ra}/{len(s_1ra)})"
+            else:
+                p_1 = 0.0
+                sla_1_str = "N/A"
+
+            s_gest = v_g["p_gest_num"].dropna()
+            if not s_gest.empty:
+                cumplen_gest = (s_gest <= sla_gest_th).sum()
+                sla_g_val = round((cumplen_gest / len(s_gest)) * 100, 1)
+                sla_g_str = f"{sla_g_val}% ({cumplen_gest}/{len(s_gest)})"
+            else:
+                sla_g_str = "N/A"
+
+            res_agentes.append({
+                "Agente": agente, 
+                "Asignados": asig_totales, 
+                "Cerrados": cerrados_totales,
+                "Prom. 1a Resp (min)": p_1, 
+                f"% SLA 1a Resp (<= {sla_1ra_th}m)": sla_1_str, 
+                f"% SLA Gestion (<= {sla_gest_th}m)": sla_g_str
+            })
+
+        df_res_agentes = pd.DataFrame(res_agentes)
+        if not df_res_agentes.empty:
+            df_res_agentes = df_res_agentes.sort_values(by="Asignados", ascending=False)
+            # Usar el DataFrame directamente y ocultar explícitamente su índice.
+            # st.table + pandas Styler puede volver a mostrar la columna de índice.
+            df_res_agentes = df_res_agentes.reset_index(drop=True)
+            st.dataframe(
+                df_res_agentes,
+                column_config={
+                    "Prom. 1a Resp (min)": st.column_config.NumberColumn(
+                        "Prom. 1a Resp (min)",
+                        format="%.2f"
+                    )
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="tabla_metricas_agentes_sla"
+            )
+        else:
+            st.info("No hay datos de agentes disponibles para el periodo seleccionado.")
+    else:
+        st.info("No hay chats registrados en la base de datos para mostrar métricas por agente.")
+
+    # ==============================================================================
+    # LISTADO DETALLADO: CHATS CON PRIMERA RESPUESTA FUERA DE SLA
+    # ==============================================================================
+    st.markdown("---")
+
+    # Tomamos el umbral configurado de SLA 1ra Respuesta
+    umbral_sla_1ra_resp = float(st.session_state.get("sla_1ra_th", 2.0))
+
+    if not df_filtered.empty:
+        df_fuera_eval = df_filtered.copy()
+        
+        # 1. Aplicar la misma evaluación exacta que el Excel para 1ra Respuesta
+        df_fuera_eval["sla_eval_excel"] = df_fuera_eval.apply(
+            lambda r: evaluar_sla_normal_excel(r, umbral_sla_1ra_resp), axis=1
+        )
+        
+        # 2. Filtrar únicamente chats que fueron EVALUADOS dentro de jornada y NO CUMPLIERON
+        # (Esto excluye automáticamente los que fueron fuera de horario, feriados o de bots)
+        df_criticos_fuera = df_fuera_eval[df_fuera_eval["sla_eval_excel"] == "no cumple"].copy()
+
+        # 3. Conversión para etiquetas en pantalla
+        df_criticos_fuera["1ra_resp_num"] = pd.to_numeric(df_criticos_fuera["primera_respuesta_min"], errors="coerce")
+        now_dt_fuera = pd.Timestamp.now(tz="America/Asuncion")
+        calc_min_fuera = (now_dt_fuera - df_criticos_fuera["created_at_dt"]).dt.total_seconds() / 60.0
+        df_criticos_fuera["min_espera_calc"] = calc_min_fuera.apply(lambda x: round(max(0.0, x), 1) if pd.notna(x) else 0.0)
+
+        with st.expander(f"Chats fuera de objetivo SLA 1ra Respuesta (> {umbral_sla_1ra_resp} min) [{len(df_criticos_fuera)}]", expanded=False):
+            if not df_criticos_fuera.empty:
+                # Clasificacion clara para cada registro
+                df_criticos_fuera["estado_sla"] = df_criticos_fuera.apply(
+                    lambda r: f"Atendido tarde ({round(r['1ra_resp_num'], 1)} min)" if pd.notna(r['1ra_resp_num']) else f"Pendiente ({r['min_espera_calc']} min)",
+                    axis=1
+                )
+
+                cols_mostrar_fuera = [
+                    "intercom_url", "nombre_contacto", "tenant", 
+                    "agente_asignado", "estado_sla", "created_at_fmt", "estado"
+                ]
+                
+                if "canal" in df_criticos_fuera.columns:
+                    cols_mostrar_fuera.append("canal")
+
+                st.dataframe(
+                    df_criticos_fuera.reindex(columns=cols_mostrar_fuera).dropna(how="all", axis=1),
+                    column_config={
+                        "intercom_url": st.column_config.LinkColumn(
+                            "ID Conversación", 
+                            display_text=r".*/(\d+)"
+                        ),
+                        "nombre_contacto": st.column_config.TextColumn("Contacto"),
+                        "tenant": st.column_config.TextColumn("Tenant"),
+                        "agente_asignado": st.column_config.TextColumn("Agente Asignado"),
+                        "estado_sla": st.column_config.TextColumn("Estado SLA 1ra Resp."),
+                        "created_at_fmt": st.column_config.TextColumn("Fecha Creación/Derivación"),
+                        "estado": st.column_config.TextColumn("Estado Chat"),
+                        "canal": st.column_config.TextColumn("Canal")
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+            else:
+                st.success("¡Excelente! Todos los chats evaluados en este período cumplen con el SLA de primera respuesta.")
+    
+        st.markdown("---")
+
+    # RANKING DE CHATS ABIERTOS FILTRADO POR FECHA
+    if f_desde_v == f_hasta_v:
+        texto_rango_abiertos = f"del dia {f_desde_v}"
+    else:
+        texto_rango_abiertos = f"del periodo {f_desde_v} al {f_hasta_v}"
+
+    df_abiertos_filtrados = df_filtered[~df_filtered["es_cerrado"]].copy() if not df_filtered.empty and "es_cerrado" in df_filtered.columns else pd.DataFrame()
+    cant_abiertos_filtrados = len(df_abiertos_filtrados.drop_duplicates(subset=["id"])) if not df_abiertos_filtrados.empty else 0
+
+    st.markdown(f"### Ranking de Chats Abiertos ({texto_rango_abiertos}) — {cant_abiertos_filtrados} chats")
+    
+    if not df_abiertos_filtrados.empty:
+        df_abiertos_filtrados = df_abiertos_filtrados.drop_duplicates(subset=["id"])
+        
+        if "min_transcurridos" not in df_abiertos_filtrados.columns and "created_at_dt" in df_abiertos_filtrados.columns:
+            df_abiertos_filtrados["min_transcurridos"] = ((now_dt - df_abiertos_filtrados["created_at_dt"]).dt.total_seconds() / 60).round(1)
+            
+        if "min_transcurridos" in df_abiertos_filtrados.columns:
+            df_abiertos_filtrados["Horas Transcurridas"] = (df_abiertos_filtrados["min_transcurridos"] / 60).round(1)
+        else:
+            df_abiertos_filtrados["Horas Transcurridas"] = 0.0
+
+        if "created_at_dt" in df_abiertos_filtrados.columns:
+            df_abiertos_filtrados = df_abiertos_filtrados.sort_values(by="created_at_dt", ascending=True)
+
+        cols_mostrar_filt = ["intercom_url", "created_at_fmt", "agente_asignado", "Horas Transcurridas", "ai_title",
+                             "nombre_contacto", "tenant", "company"]
+
+        st.dataframe(
+            df_abiertos_filtrados.reindex(columns=cols_mostrar_filt).dropna(how="all", axis=1),
+            column_config={
+                "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
+                "created_at_fmt": "Fecha Creacion", 
+                "agente_asignado": "Agente Asignado",
+                "Horas Transcurridas": "Horas Abierto",
+                "ai_title": "AI Title",
+                "nombre_contacto": "Contacto",
+                "tenant": "Tenant",
+                "company": "Company",
+            },
+            hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_filtrados"
+        )
+    else:
+        st.info(f"No hay chats abiertos pendientes creados en el rango {texto_rango_abiertos}.")
+
+    st.markdown("---")
+
+    # ==========================================
+    # RANKING DE CHATS ABIERTOS GENERAL HISTÓRICO CON FILTRO MULTI-AGENTE
+    # ==========================================
+    if not df_abiertos_all.empty:
+        # Exclusión explícita de Mónica, Soporte y sin asignar
+        agentes_omitidos = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
+        df_abiertos_rank_filtro = df_abiertos_all[
+            ~df_abiertos_all["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitidos)
+        ].copy()
+    else:
+        df_abiertos_rank_filtro = pd.DataFrame()
+
+    cant_abiertos_gen = len(df_abiertos_rank_filtro) if not df_abiertos_rank_filtro.empty else 0
+    st.markdown(f"### Ranking General de Chats Abiertos (Histórico Pendiente) — {cant_abiertos_gen} chats")
+    
+    if not df_abiertos_rank_filtro.empty:
+        df_rank = df_abiertos_rank_filtro.copy()
+
+        agentes_abiertos_unicos = sorted([
+            str(a).strip() for a in df_rank["agente_asignado"].dropna().unique() if str(a).strip() != ""
+        ])
+        
+        agentes_rank_sel = st.multiselect(
+            "Filtrar Ranking por Agente(s) Asignado(s):",
+            options=agentes_abiertos_unicos,
+            default=[],
+            placeholder="Todos los agentes (Por defecto)",
+            key="multiselect_agentes_ranking_gen"
+        )
+
+        if agentes_rank_sel:
+            df_rank = df_rank[df_rank["agente_asignado"].isin(agentes_rank_sel)]
+
+        if "min_transcurridos" not in df_rank.columns and "created_at_dt" in df_rank.columns:
+            df_rank["min_transcurridos"] = ((now_dt - df_rank["created_at_dt"]).dt.total_seconds() / 60).round(1)
+            
+        if "min_transcurridos" in df_rank.columns:
+            df_rank["Horas Transcurridas"] = (df_rank["min_transcurridos"] / 60).round(1)
+        else:
+            df_rank["Horas Transcurridas"] = 0.0
+
+        if "created_at_dt" in df_rank.columns:
+            df_rank = df_rank.sort_values(by="created_at_dt", ascending=True)
+
+        cols_deseadas = ["intercom_url", "ai_title", "created_at_fmt", "canal", "agente_asignado", "Horas Transcurridas", 
+                         "nombre_contacto", "tenant", "company"]
+
+        st.dataframe(
+            df_rank.reindex(columns=cols_deseadas).dropna(how="all", axis=1),
+            column_config={
+                "intercom_url": st.column_config.LinkColumn("ID Conversación", display_text=r".*/(\d+)"),
+                "ai_title": "AI Title",
+                "created_at_fmt": "Fecha Creación", 
+                "canal": "Canal",
+                "agente_asignado": "Agente Asignado",
+                "Horas Transcurridas": "Horas Abierto",
+                "nombre_contacto": "Contacto",
+                "tenant": "Tenant",
+                "company": "Company",
+            },
+            hide_index=True, use_container_width=True, key="tabla_ranking_abiertos_historico_general"
+        )
+    else:
+        st.info("No hay chats abiertos pendientes en este momento.")
+
+    # ==========================================
+    # ANTIGÜEDAD DEL BACKLOG HISTÓRICO
+    # ==========================================
+    st.markdown("#### Antigüedad del Backlog por Agente")
+
+    if not df_abiertos_rank_filtro.empty:
+        df_abiertos_filtro = df_abiertos_rank_filtro.copy()
+        now_py_resumen = pd.Timestamp.now(tz="America/Asuncion")
+        df_abiertos_filtro["dias_antiguedad_num"] = df_abiertos_filtro.apply(
+            lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_resumen) / 60.0 / 8.0),
+            axis=1
+        ).fillna(0.0)
+
+        def clasificar_antiguedad(dias_habiles):
+            if dias_habiles < 1.0:
+                return "0 días (Hoy)"
+            elif dias_habiles < 2.0:
+                return "1 día hábil"
+            elif dias_habiles < 3.0:
+                return "2 días hábiles"
+            elif dias_habiles <= 4.0:
+                return "3 días hábiles"
+            return ">3 días hábiles"
+
+        df_abiertos_filtro["Rango_Antiguedad"] = df_abiertos_filtro["dias_antiguedad_num"].apply(clasificar_antiguedad)
+        df_antiguedad_grp = df_abiertos_filtro.groupby(
+            ["agente_asignado", "Rango_Antiguedad"]
+        ).size().reset_index(name="Cantidad")
+
+        orden_rangos = ["0 días (Hoy)", "1 día hábil", "2 días hábiles", "3 días hábiles", ">3 días hábiles"]
+        color_map_antiguedad = {
+            "0 días (Hoy)": "#10b981",
+            "1 día hábil": "#38bdf8",
+            "2 días hábiles": "#fbbf24",
+            "3 días hábiles": "#f97316",
+            ">3 días hábiles": "#ef4444"
+        }
+
+        fig_antiguedad = px.bar(
+            df_antiguedad_grp,
+            x="agente_asignado",
+            y="Cantidad",
+            color="Rango_Antiguedad",
+            category_orders={"Rango_Antiguedad": orden_rangos},
+            color_discrete_map=color_map_antiguedad,
+            barmode="stack",
+            text="Cantidad"
+        )
+        fig_antiguedad.update_traces(textposition="inside", marker=dict(cornerradius=4))
+        fig_antiguedad.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1", size=12),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats Abiertos"),
+            legend_title_text="Antigüedad",
+            height=380,
+            margin=dict(t=20, b=20, l=20, r=20)
+        )
+        st.plotly_chart(fig_antiguedad, use_container_width=True)
+    else:
+        st.info("No existen chats abiertos asignados a agentes humanos para analizar su antigüedad.")
+
+    st.markdown("---")
+
+    # BÚSQUEDA DINÁMICA POR TENANT O AGENTE
+    st.markdown("### Buscador de Chats (Por Tenant / Agente)")
+    
+    if not df_all.empty and "tenant" in df_all.columns:
+        col_b1, col_b2 = st.columns(2)
+        
+        tenants_unicos = sorted([str(x) for x in df_all["tenant"].dropna().unique() if str(x).strip() != ""])
+        agentes_unicos = sorted([str(x) for x in df_all["agente_asignado"].dropna().unique() if str(x).strip() != ""])
+        
+        tenant_sel = col_b1.multiselect("Filtrar por Tenant(s):", options=tenants_unicos)
+        agente_sel = col_b2.multiselect("Filtrar por Agente(s):", options=agentes_unicos)
+        
+        df_busqueda = df_all.copy()
+        
+        if tenant_sel:
+            df_busqueda = df_busqueda[df_busqueda["tenant"].isin(tenant_sel)]
+        if agente_sel:
+            df_busqueda = df_busqueda[df_busqueda["agente_asignado"].isin(agente_sel)]
+            
+        if tenant_sel or agente_sel:
+            st.markdown(f"#### Resultados de la Busqueda ({len(df_busqueda)} chats encontrados)")
+            if not df_busqueda.empty:
+                df_busqueda["Estado_Texto"] = df_busqueda["es_cerrado"].apply(lambda x: "Cerrado" if x else "Abierto")
+                df_busqueda = df_busqueda.sort_values(by="created_at_dt", ascending=False)
+                
+                cols_search = ["intercom_url", "Estado_Texto", "created_at_fmt", "agente_asignado", 
+                               "nombre_contacto", "tenant", "company"]
+
+                st.dataframe(
+                    df_busqueda.reindex(columns=cols_search).dropna(how="all", axis=1),
+                    column_config={
+                        "intercom_url": st.column_config.LinkColumn("ID Conversacion", display_text=r".*/(\d+)"),
+                        "Estado_Texto": "Estado",
+                        "created_at_fmt": "Fecha Creacion",
+                        "agente_asignado": "Agente Asignado",
+                        "nombre_contacto": "Contacto",
+                        "tenant": "Tenant",
+                        "company": "Company",
+                    },
+                    hide_index=True, use_container_width=True, key="tabla_busqueda_tenant_agente"
+                )
+            else:
+                st.info("No se encontraron registros que coincidan exactamente con la seleccion.")
+        else:
+            st.caption("Selecciona al menos un Tenant o Agente arriba para desplegar los resultados.")
+    else:
+        st.info("Sin datos para el buscador.")
+
+with tab_carga_vivo:
+    st.markdown("### Distribución y Carga de Trabajo del Equipo (Tiempo Real)")
+    st.caption("Panel en vivo pensado para el asignador. Muestra la cantidad de chats abiertos activos y resueltos hoy por cada agente.")
+    renderizar_panel_carga_asignador()
+
+@st.fragment
+def renderizar_panel_resumen(df_all_in, fecha_desde_in, fecha_hasta_in, usar_hora_in, h_ini_in, h_fin_in):
+    f_desde_v, f_hasta_v = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
+    if not df_all_in.empty and "fecha_solo" in df_all_in.columns:
+        df_filtered_r = df_all_in[(df_all_in["fecha_solo"] >= f_desde_v) & (df_all_in["fecha_solo"] <= f_hasta_v)].copy()
+        if usar_filtro_hora and not df_filtered_r.empty:
+            df_filtered_r = df_filtered_r[(df_filtered_r["hora_solo"] >= hora_inicio) & (df_filtered_r["hora_solo"] <= hora_fin)]
+    else:
+        df_filtered_r = pd.DataFrame()
+
+    st.markdown(f"### Análisis Operativo & Métricas (`{f_desde_v}` al `{f_hasta_v}`)")
+    
+    if not df_filtered_r.empty:
+        df_res = df_filtered_r.copy().sort_values(by="created_at_dt", ascending=True)
+        df_res["Dia"] = df_res["created_at_dt"].dt.strftime("%Y-%m-%d").fillna("Sin fecha")
+        df_agentes_total = df_res["agente_asignado"].value_counts().reset_index()
+        df_agentes_total.columns = ["Agente", "Cantidad de Chats"]
+
+        total_chats_periodo = len(df_res)
+        num_dias = df_res["Dia"].nunique()
+        promedio_diario = round(total_chats_periodo / num_dias, 1) if num_dias > 0 else 0
+        top_agente = df_agentes_total.iloc[0]["Agente"] if not df_agentes_total.empty else "N/A"
+        top_agente_count = df_agentes_total.iloc[0]["Cantidad de Chats"] if not df_agentes_total.empty else 0
+        pct_top = round((top_agente_count / total_chats_periodo) * 100, 1) if total_chats_periodo > 0 else 0
+
+        r1, r2, r3, r4 = st.columns(4)
+        r1.markdown(f'<div class="metric-card" style="border-left: 4px solid #0284c7;"><div class="metric-card-title">Total Chats en Rango</div><div class="metric-card-value">{total_chats_periodo:,}</div><div class="metric-card-sub">{num_dias} días consultados</div></div>', unsafe_allow_html=True)
+        r2.markdown(f'<div class="metric-card" style="border-left: 4px solid #38bdf8;"><div class="metric-card-title">Promedio Diario</div><div class="metric-card-value">{promedio_diario}</div><div class="metric-card-sub">chats por jornada</div></div>', unsafe_allow_html=True)
+        r3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">Agente con Más Chats</div><div class="metric-card-value" style="font-size:1.35rem; color:#34d399;">{top_agente}</div><div class="metric-card-sub">{top_agente_count} chats atendidos</div></div>', unsafe_allow_html=True)
+        r4.markdown(f'<div class="metric-card" style="border-left: 4px solid #818cf8;"><div class="metric-card-title">Participación Top Agente</div><div class="metric-card-value">{pct_top}%</div><div class="metric-card-sub">del total acumulado</div></div>', unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        palette_mate = ["#0284c7", "#38bdf8", "#0ea5e9", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#94a3b8"]
+        
+        # ==========================================
+        # 1. BLOQUE GENERAL DE AGENTES Y EVOLUCIÓN
+        # ==========================================
+        g_pie, g_bar = st.columns([1, 1.2])
+
+        with g_pie:
+            st.markdown("#### Distribución de Chats por Agente")
+            fig_pie = px.pie(
+                df_agentes_total, 
+                values="Cantidad de Chats", 
+                names="Agente", 
+                hole=0.5, 
+                color_discrete_sequence=palette_mate
+            )
+            fig_pie.update_traces(
+                textposition='inside', 
+                textinfo='percent', 
+                hovertemplate="<b>%{label}</b><br>Chats: %{value}<br>Porcentaje: %{percent}<extra></extra>", 
+                marker=dict(line=dict(color='#0b1120', width=2))
+            )
+            fig_pie.update_layout(
+                showlegend=True, 
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                font=dict(color="#cbd5e1", size=11), 
+                height=360, 
+                legend=dict(orientation="v", y=0.5, x=1.05),
+                margin=dict(t=20, b=20, l=10, r=10)
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with g_bar:
+            st.markdown("#### Evolución Diaria por Agente")
+            df_dia_agente = df_res.groupby(["Dia", "agente_asignado"]).size().reset_index(name="Cantidad")
+            fig_bar = px.bar(
+                df_dia_agente, 
+                x="Dia", 
+                y="Cantidad", 
+                color="agente_asignado", 
+                barmode="stack", 
+                color_discrete_sequence=palette_mate
+            )
+            fig_bar.update_traces(marker=dict(cornerradius=4))
+            fig_bar.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                font=dict(color="#cbd5e1", size=11), 
+                height=360, 
+                xaxis=dict(gridcolor="#1e293b", title=None),
+                yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
+                margin=dict(t=20, b=20, l=20, r=20)
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### Tabla General de Chats por Día y Agente")
+        df_pivot = df_res.pivot_table(index="Dia", columns="agente_asignado", values="id", aggfunc="count", fill_value=0)
+        df_pivot["TOTAL CHATS"] = df_pivot.sum(axis=1)
+        st.dataframe(df_pivot, use_container_width=True)
+
+        st.markdown("---")
+
+        # El gráfico de antigüedad histórica se trasladó al ranking general
+        # de chats abiertos de la pestaña Control Operativo & SLA.
+
+        st.markdown("---")
+
+        # ==========================================
+        # 3. ANTIGÜEDAD DE CHATS PENDIENTES POR FRANJA HORARIA
+        # ==========================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### Antigüedad de Chats Pendientes por Hora")
+
+        df_abiertos_horas = df_all_in[~df_all_in["es_cerrado"]].copy() if not df_all_in.empty and "es_cerrado" in df_all_in.columns else pd.DataFrame()
+
+        if not df_abiertos_horas.empty:
+            agentes_excluidos_hs = ["monica", "mónica", "monica (bot)", "soporte", "sin asignar", "none", "nan", ""]
+            df_abiertos_hs_filtro = df_abiertos_horas[
+                ~df_abiertos_horas["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_excluidos_hs)
+            ].copy()
+
+            if not df_abiertos_hs_filtro.empty:
+                now_py_horas = pd.Timestamp.now(tz="America/Asuncion")
+                df_abiertos_hs_filtro["horas_abierto_num"] = df_abiertos_hs_filtro.apply(
+                    lambda r: (calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_horas) / 60.0),
+                    axis=1
+                ).fillna(0.0)
+
+                def clasificar_franja_horas(horas):
+                    if horas <= 1.0:
+                        return "0 a 1 hora"
+                    elif horas <= 3.0:
+                        return ">1 a 3 horas"
+                    elif horas <= 5.0:
+                        return ">3 a 5 horas"
+                    else:
+                        return ">5 horas"
+
+                df_abiertos_hs_filtro["Franja_Horaria"] = df_abiertos_hs_filtro["horas_abierto_num"].apply(clasificar_franja_horas)
+                df_horas_grp = df_abiertos_hs_filtro.groupby(["agente_asignado", "Franja_Horaria"]).size().reset_index(name="Cantidad")
+
+                orden_franjas = ["0 a 1 hora", ">1 a 3 horas", ">3 a 5 horas", ">5 horas"]
+                color_map_horas = {
+                    "0 a 1 hora": "#10b981",
+                    ">1 a 3 horas": "#fbbf24",
+                    ">3 a 5 horas": "#f97316",
+                    ">5 horas": "#ef4444"
+                }
+
+                fig_horas = px.bar(
+                    df_horas_grp,
+                    x="agente_asignado",
+                    y="Cantidad",
+                    color="Franja_Horaria",
+                    category_orders={"Franja_Horaria": orden_franjas},
+                    color_discrete_map=color_map_horas,
+                    barmode="stack",
+                    text="Cantidad"
+                )
+
+                fig_horas.update_traces(textposition="inside", marker=dict(cornerradius=4))
+                fig_horas.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font=dict(color="#cbd5e1", size=12),
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title="Cantidad de Chats Abiertos"),
+                    legend_title_text="Franja Horaria", 
+                    height=380,
+                    margin=dict(t=20, b=20, l=20, r=20)
+                )
+
+                st.plotly_chart(fig_horas, use_container_width=True)
+            else:
+                st.info("No existen chats abiertos asignados a agentes humanos actualmente.")
+        else:
+            st.info("No existen chats abiertos pendientes en el sistema.")
+
+        st.markdown("---")
+
+        # ==========================================
+        # 4. ANÁLISIS DE EVALUACIONES NEGATIVAS (<=3 ★)
+        # ==========================================
+        st.markdown("### Análisis de Evaluaciones Negativas (1, 2 y 3 ★)")
+        
+        df_res["rating_num"] = pd.to_numeric(df_res.get("rating"), errors="coerce")
+        df_negativos_res = df_res[df_res["rating_num"] <= 3].copy()
+
+        if not df_negativos_res.empty:
+            g_motivo, g_nivel = st.columns([1.1, 1])
+
+            # A. Por Motivo Normalizado
+            with g_motivo:
+                st.markdown("#### Evaluaciones Negativas por Motivo")
+                df_motivos_cnt = df_negativos_res.get("motivo_normalizado", pd.Series(dtype=str)).fillna("Sin categorizar").value_counts().reset_index()
+                df_motivos_cnt.columns = ["Motivo Normalizado", "Cantidad"]
+
+                fig_motivos = px.bar(
+                    df_motivos_cnt, 
+                    x="Cantidad", 
+                    y="Motivo Normalizado", 
+                    orientation="h",
+                    color="Cantidad",
+                    color_continuous_scale=["#f97316", "#ef4444"],
+                    text="Cantidad"
+                )
+                fig_motivos.update_traces(
+                    textposition="outside", 
+                    marker=dict(cornerradius=4, line=dict(color="#0b1120", width=1))
+                )
+                fig_motivos.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font=dict(color="#cbd5e1", size=11), 
+                    height=360, 
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(autorange="reversed", gridcolor="#1e293b", title=None),
+                    coloraxis_showscale=False,
+                    margin=dict(t=20, b=20, l=10, r=20)
+                )
+                st.plotly_chart(fig_motivos, use_container_width=True)
+
+            # B. Por Nivel de Soporte
+            with g_nivel:
+                st.markdown("#### Evaluaciones Negativas por Nivel")
+                niveles_series = (
+                    df_negativos_res.get("nivel", pd.Series(dtype=str))
+                    .fillna("Niv-L1")
+                    .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+                )
+    
+                df_nivel_cnt = niveles_series.value_counts().reset_index()
+                df_nivel_cnt.columns = ["Nivel", "Cantidad"]
+
+                fig_nivel = px.bar(
+                    df_nivel_cnt, 
+                    x="Nivel", 
+                    y="Cantidad", 
+                    color="Nivel",
+                    color_discrete_map={"Niv-L1": "#38bdf8", "Niv-L2": "#0284c7", "Niv-L3": "#ef4444"},
+                    text="Cantidad"
+                )
+                fig_nivel.update_traces(textposition="outside", marker=dict(cornerradius=6))
+                fig_nivel.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font=dict(color="#cbd5e1", size=11), 
+                    height=360, 
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(gridcolor="#1e293b", title=None, showticklabels=False),
+                    showlegend=False,
+                    margin=dict(t=20, b=20, l=10, r=20)
+                )
+                st.plotly_chart(fig_nivel, use_container_width=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # C. Ticket Relacionado
+            st.markdown("#### Evaluaciones Negativas por Ticket Relacionado")
+            tickets_series = df_negativos_res.get("ticket_relacionado", pd.Series(dtype=str)).fillna("").astype(str).str.strip()
+            tickets_validos = tickets_series[~tickets_series.isin(["", "None", "nan", "null"])]
+
+            if not tickets_validos.empty:
+                df_tickets_cnt = tickets_validos.value_counts().reset_index()
+                df_tickets_cnt.columns = ["Ticket / Tarea", "Cantidad"]
+
+                fig_ticket = px.bar(
+                    df_tickets_cnt, 
+                    x="Cantidad", 
+                    y="Ticket / Tarea", 
+                    orientation="h",
+                    color="Cantidad",
+                    color_continuous_scale=["#38bdf8", "#0284c7"],
+                    text="Cantidad"
+                )
+                fig_ticket.update_traces(
+                    textposition="outside", 
+                    marker=dict(cornerradius=4, line=dict(color="#0b1120", width=1))
+                )
+                fig_ticket.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font=dict(color="#cbd5e1", size=11), 
+                    height=300, 
+                    xaxis=dict(gridcolor="#1e293b", title=None),
+                    yaxis=dict(autorange="reversed", gridcolor="#1e293b", title=None),
+                    coloraxis_showscale=False,
+                    margin=dict(t=20, b=20, l=10, r=20)
+                )
+                st.plotly_chart(fig_ticket, use_container_width=True)
+            else:
+                st.info("No hay tickets/tareas vinculadas a las calificaciones negativas del período.")
+        else:
+            st.info("No se registraron evaluaciones negativas (1, 2 o 3 ★) para el período seleccionado.")
+
+        st.markdown("---")
+
+with tab_resumen:
+    renderizar_panel_resumen(df_all, fecha_desde, fecha_hasta, usar_filtro_hora, hora_inicio, hora_fin)
+
+# ==========================================
+# Sección de L2                                                      
+# ==========================================
+
+@st.fragment
+def renderizar_panel_nivel_2(df_chats_in, df_correos_in, f_desde_v, f_hasta_v):
+    st.markdown(f"### Seguimiento & Productividad Nivel 2 (`{f_desde_v}` al `{f_hasta_v}`)")
+    st.caption("Métricas exclusivas de especialistas L2: casos cerrados en el período seleccionado y tiempos hábiles de resolución.")
+
+    agentes_l2_set = {
+        "martin moreira", "martín moreira",
+        "dario olmedo", "darío olmedo",
+        "ivan amarilla", "iván amarilla",
+        "gerardo gaona",
+        "hector trinidad", "héctor trinidad"
+    }
+
+    mapa_normalizacion_l2 = {
+        "martin moreira": "Martín Moreira",
+        "martín moreira": "Martín Moreira",
+        "dario olmedo": "Darío Olmedo",
+        "darío olmedo": "Darío Olmedo",
+        "ivan amarilla": "Iván Amarilla",
+        "iván amarilla": "Iván Amarilla",
+        "gerardo gaona": "Gerardo Gaona",
+        "hector trinidad": "Héctor Trinidad",
+        "héctor trinidad": "Héctor Trinidad"
+    }
+
+    def preparar_universo_l2(df_src, tipo_canal):
+        if df_src is None or df_src.empty:
+            return pd.DataFrame()
+        df_tmp = df_src.copy()
+        ag_low = df_tmp["agente_asignado"].fillna("").astype(str).str.strip().str.lower()
+        ag_sin_prefijo = ag_low.str.replace(r"^l2\s*[-:]\s*", "", regex=True).str.strip()
+        tags_low = df_tmp["etiquetas"].fillna("").astype(str).str.lower() if "etiquetas" in df_tmp.columns else pd.Series("", index=df_tmp.index)
+
+        es_l2 = (
+            ag_low.str.startswith("l2")
+            | ag_sin_prefijo.isin(agentes_l2_set)
+            | tags_low.str.contains("niv-l2|l2:", regex=True)
+        )
+        df_tmp = df_tmp[es_l2].copy()
+        if df_tmp.empty:
+            return df_tmp
+
+        def nom_l2(val):
+            s = str(val or "").strip()
+            s_clean = s.lower().replace("l2 -", "").replace("l2:", "").strip()
+            return mapa_normalizacion_l2.get(s_clean, s if s else "L2 Sin Asignar")
+
+        df_tmp["especialista_l2"] = df_tmp["agente_asignado"].apply(nom_l2)
+        df_tmp["tipo_canal_l2"] = tipo_canal
+
+        estado_low = df_tmp["estado"].fillna("").astype(str).str.strip().str.lower()
+        df_tmp["es_cerrado_l2"] = estado_low.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"])
+
+        # Fecha efectiva de cierre (para imputar productividad al día en que se resolvió el caso)
+        if "fecha_cierre_dt" in df_tmp.columns:
+            fecha_ref_cierre = df_tmp["fecha_cierre_dt"].copy()
+            if "updated_at_dt" in df_tmp.columns:
+                fecha_ref_cierre = fecha_ref_cierre.fillna(df_tmp["updated_at_dt"])
+            elif "created_at_dt" in df_tmp.columns:
+                fecha_ref_cierre = fecha_ref_cierre.fillna(df_tmp["created_at_dt"])
+            df_tmp["fecha_cierre_solo"] = fecha_ref_cierre.dt.date
+        elif "fecha_solo" in df_tmp.columns:
+            df_tmp["fecha_cierre_solo"] = df_tmp["fecha_solo"]
+        else:
+            df_tmp["fecha_cierre_solo"] = pd.NaT
+
+        # Cálculo exacto en horas hábiles desde created_at_dt hasta fecha_cierre_dt
+        if "created_at_dt" in df_tmp.columns and "fecha_cierre_dt" in df_tmp.columns:
+            df_tmp["horas_habiles_cierre"] = df_tmp.apply(
+                lambda r: round(calcular_minutos_habiles_rapido(r["created_at_dt"], r["fecha_cierre_dt"]) / 60.0, 2)
+                if (r["es_cerrado_l2"] and pd.notna(r["created_at_dt"]) and pd.notna(r["fecha_cierre_dt"]))
+                else np.nan,
+                axis=1
+            )
+        else:
+            df_tmp["horas_habiles_cierre"] = np.nan
+
+        return df_tmp
+
+    # 1. Universo completo L2 (chats y correos)
+    df_l2_chats_all = preparar_universo_l2(df_chats_in, "Chat")
+    df_l2_correos_all = preparar_universo_l2(df_correos_in, "Correo")
+
+    # 2. Filtrar SOLO CERRADOS cuya fecha de cierre caiga dentro del rango seleccionado [f_desde_v, f_hasta_v]
+    df_l2_chats_cerrados = df_l2_chats_all[
+        (df_l2_chats_all["es_cerrado_l2"]) &
+        (df_l2_chats_all["fecha_cierre_solo"] >= f_desde_v) &
+        (df_l2_chats_all["fecha_cierre_solo"] <= f_hasta_v)
+    ].copy() if not df_l2_chats_all.empty else pd.DataFrame()
+
+    df_l2_correos_cerrados = df_l2_correos_all[
+        (df_l2_correos_all["es_cerrado_l2"]) &
+        (df_l2_correos_all["fecha_cierre_solo"] >= f_desde_v) &
+        (df_l2_correos_all["fecha_cierre_solo"] <= f_hasta_v)
+    ].copy() if not df_l2_correos_all.empty else pd.DataFrame()
+
+    # 3. Backlog abierto histórico actual de L2
+    df_l2_abiertos = pd.concat([
+        df_l2_chats_all[~df_l2_chats_all["es_cerrado_l2"]] if not df_l2_chats_all.empty else pd.DataFrame(),
+        df_l2_correos_all[~df_l2_correos_all["es_cerrado_l2"]] if not df_l2_correos_all.empty else pd.DataFrame()
+    ], ignore_index=True)
+
+    tot_chats_l2 = len(df_l2_chats_cerrados)
+    tot_correos_l2 = len(df_l2_correos_cerrados)
+    tot_combinado_l2 = tot_chats_l2 + tot_correos_l2
+    tot_pendientes_l2 = len(df_l2_abiertos)
+
+    prom_hs_chats = round(df_l2_chats_cerrados["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_chats_cerrados.empty and df_l2_chats_cerrados["horas_habiles_cierre"].notna().any() else 0.0
+    prom_hs_correos = round(df_l2_correos_cerrados["horas_habiles_cierre"].dropna().mean(), 1) if not df_l2_correos_cerrados.empty and df_l2_correos_cerrados["horas_habiles_cierre"].notna().any() else 0.0
+
+    # KPIs superiores
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.markdown(f'<div class="metric-card" style="border-left: 4px solid #0284c7;"><div class="metric-card-title">Chats Cerrados L2</div><div class="metric-card-value">{tot_chats_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_chats} hs hábiles</div></div>', unsafe_allow_html=True)
+    k2.markdown(f'<div class="metric-card" style="border-left: 4px solid #38bdf8;"><div class="metric-card-title">Correos Cerrados L2</div><div class="metric-card-value">{tot_correos_l2}</div><div class="metric-card-sub">Prom. cierre: {prom_hs_correos} hs hábiles</div></div>', unsafe_allow_html=True)
+    k3.markdown(f'<div class="metric-card" style="border-left: 4px solid #10b981;"><div class="metric-card-title">Total Cerrado L2</div><div class="metric-card-value" style="color:#34d399;">{tot_combinado_l2}</div><div class="metric-card-sub">Chats + Correos cerrados</div></div>', unsafe_allow_html=True)
+    k4.markdown(f'<div class="metric-card" style="border-left: 4px solid #f97316;"><div class="metric-card-title">Backlog Abierto L2</div><div class="metric-card-value" style="color:#fb923c;">{tot_pendientes_l2}</div><div class="metric-card-sub">Pendientes activos actuales</div></div>', unsafe_allow_html=True)
+    resp_hilos_l2 = int(pd.to_numeric(df_l2_correos_cerrados.get("cantidad_respuestas_agente", 0), errors="coerce").fillna(0).sum()) if not df_l2_correos_cerrados.empty else 0
+    k5.markdown(f'<div class="metric-card" style="border-left: 4px solid #818cf8;"><div class="metric-card-title">Respuestas en Hilos</div><div class="metric-card-value">{resp_hilos_l2}</div><div class="metric-card-sub">En correos cerrados L2</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Preparar lista unificada de especialistas con casos cerrados en el período
+    especialistas = sorted(list(
+        set(df_l2_chats_cerrados["especialista_l2"].tolist() if not df_l2_chats_cerrados.empty else []) |
+        set(df_l2_correos_cerrados["especialista_l2"].tolist() if not df_l2_correos_cerrados.empty else [])
+    ))
+
+    if especialistas:
+        rows_l2 = []
+        for esp in especialistas:
+            sub_ch = df_l2_chats_cerrados[df_l2_chats_cerrados["especialista_l2"] == esp] if not df_l2_chats_cerrados.empty else pd.DataFrame()
+            sub_em = df_l2_correos_cerrados[df_l2_correos_cerrados["especialista_l2"] == esp] if not df_l2_correos_cerrados.empty else pd.DataFrame()
+
+            c_ch = len(sub_ch)
+            c_em = len(sub_em)
+            hs_ch = round(sub_ch["horas_habiles_cierre"].dropna().mean(), 1) if not sub_ch.empty and sub_ch["horas_habiles_cierre"].notna().any() else 0.0
+            hs_em = round(sub_em["horas_habiles_cierre"].dropna().mean(), 1) if not sub_em.empty and sub_em["horas_habiles_cierre"].notna().any() else 0.0
+
+            rows_l2.append({
+                "Especialista": esp,
+                "Chats": c_ch,
+                "Correos": c_em,
+                "Total": c_ch + c_em,
+                "Hs_Cierre_Chat": hs_ch,
+                "Hs_Cierre_Correo": hs_em
+            })
+
+        df_graf_l2 = pd.DataFrame(rows_l2).sort_values(by="Total", ascending=False)
+
+        # FILA 1: 3 Gráficos de barras (Chats Cerrados L2 | Correos Cerrados L2 | Total Cerrado Chats + Correos)
+        g1, g2, g3 = st.columns(3)
+
+        with g1:
+            fig_l2_ch = px.bar(
+                df_graf_l2.sort_values("Chats", ascending=False),
+                x="Especialista", y="Chats", text="Chats",
+                title="<b>Chats Cerrados por Agente L2</b>",
+                color_discrete_sequence=["#0284c7"]
+            )
+            fig_l2_ch.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_l2_ch.update_layout(
+                hovermode=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title=None, showticklabels=False, showgrid=False), height=340, margin=dict(t=45, b=20, l=15, r=15)
+            )
+            st.plotly_chart(fig_l2_ch, use_container_width=True)
+
+        with g2:
+            fig_l2_em = px.bar(
+                df_graf_l2.sort_values("Correos", ascending=False),
+                x="Especialista", y="Correos", text="Correos",
+                title="<b>Correos Cerrados por Agente L2</b>",
+                color_discrete_sequence=["#38bdf8"]
+            )
+            fig_l2_em.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_l2_em.update_layout(
+                hovermode=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title=None, showticklabels=False, showgrid=False), height=340, margin=dict(t=45, b=20, l=15, r=15)
+            )
+            st.plotly_chart(fig_l2_em, use_container_width=True)
+
+        with g3:
+            fig_l2_tot = go.Figure()
+            fig_l2_tot.add_trace(go.Bar(
+                x=df_graf_l2["Especialista"], y=df_graf_l2["Chats"],
+                name="Chats", marker=dict(color="#0284c7", cornerradius=6),
+                text=df_graf_l2["Chats"].apply(lambda v: str(v) if v > 0 else ""), textposition="inside"
+            ))
+            fig_l2_tot.add_trace(go.Bar(
+                x=df_graf_l2["Especialista"], y=df_graf_l2["Correos"],
+                name="Correos", marker=dict(color="#10b981", cornerradius=6),
+                text=df_graf_l2["Correos"].apply(lambda v: str(v) if v > 0 else ""), textposition="inside"
+            ))
+            for _, r in df_graf_l2.iterrows():
+                fig_l2_tot.add_annotation(
+                    x=r["Especialista"], y=r["Total"], text=f"<b>{r['Total']}</b>",
+                    showarrow=False, yshift=10, font=dict(color="#f8fafc", size=12)
+                )
+            fig_l2_tot.update_layout(
+                hovermode=False,
+                barmode="stack", title="<b>Total Cerrado L2 (Chats + Correos)</b>",
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title=None, showticklabels=False, showgrid=False),
+                legend=dict(orientation="h", y=1.02, x=1, xanchor="right"),
+                height=340, margin=dict(t=45, b=20, l=15, r=15)
+            )
+            st.plotly_chart(fig_l2_tot, use_container_width=True)
+
+        st.markdown("---")
+
+        # FILA 2: 2 Gráficos de SLA / Tiempo Hábil de Cierre (Chats L2 vs Correos L2)
+        s1, s2 = st.columns(2)
+
+        with s1:
+            df_sla_ch = df_graf_l2[df_graf_l2["Hs_Cierre_Chat"] > 0].sort_values("Hs_Cierre_Chat", ascending=True)
+            fig_sla_ch = px.bar(
+                df_sla_ch, x="Especialista", y="Hs_Cierre_Chat",
+                text=df_sla_ch["Hs_Cierre_Chat"].apply(lambda v: f"{v} hs"),
+                title="<b>Tiempo Promedio Cierre Chats L2 (Horas Hábiles)</b>",
+                color_discrete_sequence=["#818cf8"]
+            )
+            fig_sla_ch.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_sla_ch.update_layout(
+                hovermode=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title="Horas Hábiles", showgrid=True, gridcolor="#1e293b"), height=340, margin=dict(t=45, b=20, l=20, r=20)
+            )
+            st.plotly_chart(fig_sla_ch, use_container_width=True)
+
+        with s2:
+            df_sla_em = df_graf_l2[df_graf_l2["Hs_Cierre_Correo"] > 0].sort_values("Hs_Cierre_Correo", ascending=True)
+            fig_sla_em = px.bar(
+                df_sla_em, x="Especialista", y="Hs_Cierre_Correo",
+                text=df_sla_em["Hs_Cierre_Correo"].apply(lambda v: f"{v} hs"),
+                title="<b>Tiempo Promedio Cierre Correos L2 (Horas Hábiles)</b>",
+                color_discrete_sequence=["#fbbf24"]
+            )
+            fig_sla_em.update_traces(textposition="outside", marker=dict(cornerradius=6))
+            fig_sla_em.update_layout(
+                hovermode=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11), xaxis=dict(title=None, gridcolor="#1e293b"),
+                yaxis=dict(title="Horas Hábiles", showgrid=True, gridcolor="#1e293b"), height=340, margin=dict(t=45, b=20, l=20, r=20)
+            )
+            st.plotly_chart(fig_sla_em, use_container_width=True)
+    else:
+        st.info("No hay casos cerrados por especialistas L2 en el rango de fechas seleccionado.")
+
+    # Tabla de Backlog Activo L2
+    st.markdown("---")
+    st.markdown(f"#### Backlog Activo Pendiente en Nivel 2 ({tot_pendientes_l2} casos)")
+    if not df_l2_abiertos.empty:
+        now_py_l2 = pd.Timestamp.now(tz="America/Asuncion")
+        df_l2_abiertos["Hs Hábiles Abierto"] = df_l2_abiertos.apply(
+            lambda r: round(calcular_minutos_habiles_rapido(r["created_at_dt"], now_py_l2) / 60.0, 1)
+            if pd.notna(r.get("created_at_dt")) else 0.0,
+            axis=1
+        )
+        df_l2_abiertos = df_l2_abiertos.sort_values(by="Hs Hábiles Abierto", ascending=False)
+        cols_l2_open = ["intercom_url", "tipo_canal_l2", "especialista_l2", "created_at_fmt", "Hs Hábiles Abierto", "ai_title", "nombre_contacto", "tenant"]
+        st.dataframe(
+            df_l2_abiertos.reindex(columns=cols_l2_open).dropna(how="all", axis=1),
+            column_config={
+                "intercom_url": st.column_config.LinkColumn("ID Caso", display_text=r".*/(\d+)"),
+                "tipo_canal_l2": "Canal",
+                "especialista_l2": "Especialista L2",
+                "created_at_fmt": "Fecha Ingreso",
+                "Hs Hábiles Abierto": "Hs Hábiles Abierto",
+                "ai_title": "Título IA",
+                "nombre_contacto": "Contacto",
+                "tenant": "Tenant"
+            },
+            hide_index=True, use_container_width=True
+        )
+    else:
+        st.success("No hay casos abiertos pendientes en Nivel 2.")
+
+# ==========================================
+# FUNCIÓN AISLADA DEL WBR CON ST.FRAGMENT (BLINDADA CONTRA NameError)
+# ==========================================
+@st.fragment
+def renderizar_informe_wbr(df_base_in, df_correos_in=None):
+    # Ancla exclusiva para aislar los estilos responsive del WBR.
+    st.markdown('<div class="bims-wbr-scope-anchor"></div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div style="margin-bottom: 0.15rem;">
+            <div style="font-size: 0.68rem; line-height: 1.2; font-weight: 700;
+                        letter-spacing: 1.5px; color: #64748b; text-transform: uppercase;">
+                WBR · Seguimiento operativo
+            </div>
+            <h3 style="margin: 0.28rem 0 0.18rem 0; font-size: 1.35rem;
+                       font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
+                Informe Ejecutivo Semanal
+            </h3>
+            <div style="font-size: 0.82rem; line-height: 1.45; color: #94a3b8;">
+                Indicadores de gestión, experiencia del cliente y desempeño semanal.
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    if df_base_in.empty or "created_at_dt" not in df_base_in.columns:
+        st.info("No hay datos históricos suficientes cargados en la base de datos para generar el WBR.")
+        return
+
+    df_wbr_base = df_base_in.copy()
+
+    # Normalizaciones de fechas
+    if "fecha_cierre_dt" not in df_wbr_base.columns:
+        df_wbr_base["fecha_ref"] = df_wbr_base["fecha_cierre"].fillna(df_wbr_base["updated_at"])
+        ref_dt = pd.to_datetime(df_wbr_base["fecha_ref"], errors="coerce", utc=True)
+        df_wbr_base["fecha_cierre_dt"] = ref_dt.dt.tz_convert("America/Asuncion")
+
+    # Las fechas de creación nulas producen <NA> en el calendario ISO.
+    # Conservamos esas filas en df_wbr_base, pero no las usamos para crear semanas.
+    iso_info = df_wbr_base["created_at_dt"].dt.isocalendar()
+    df_wbr_base["iso_year"] = iso_info["year"].astype("Int64")
+    df_wbr_base["iso_week"] = iso_info["week"].astype("Int64")
+    df_wbr_base["semana_str"] = (
+        "Semana "
+        + df_wbr_base["iso_week"].astype("string").str.zfill(2)
+        + " ("
+        + df_wbr_base["iso_year"].astype("string")
+        + ")"
+    )
+
+    df_wbr_base["close_iso_year"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().year
+    df_wbr_base["close_iso_week"] = df_wbr_base["fecha_cierre_dt"].dt.isocalendar().week
+
+    semanas_disponibles = (
+        df_wbr_base.loc[
+            df_wbr_base["iso_year"].notna() & df_wbr_base["iso_week"].notna(),
+            ["iso_year", "iso_week", "semana_str"]
+        ]
+        .drop_duplicates()
+        .sort_values(by=["iso_year", "iso_week"], ascending=[False, False])
+        .reset_index(drop=True)
+    )
+
+    # Mostrar semanas desde el trimestre anterior, incluyendo la semana en curso.
+    hoy_paraguay = datetime.now(timezone(timedelta(hours=-3))).date()
+    inicio_trimestre_actual = date(
+        hoy_paraguay.year, ((hoy_paraguay.month - 1) // 3) * 3 + 1, 1
+    )
+    ultimo_dia_trimestre_anterior = inicio_trimestre_actual - timedelta(days=1)
+    inicio_trimestre_anterior = date(
+        ultimo_dia_trimestre_anterior.year,
+        ((ultimo_dia_trimestre_anterior.month - 1) // 3) * 3 + 1,
+        1
+    )
+    from datetime import datetime as dt_calc
+    iso_actual = hoy_paraguay.isocalendar()
+    inicio_semana_actual = dt_calc.fromisocalendar(
+        iso_actual.year, iso_actual.week, 1
+    ).date()
+
+    # Añadir la semana actual aunque todavía no tenga registros, para permitir
+    # supervisar los KPI desde el inicio de la semana.
+    semana_actual_df = pd.DataFrame([{
+        "iso_year": int(iso_actual.year),
+        "iso_week": int(iso_actual.week),
+        "semana_str": f"Semana {int(iso_actual.week):02d} ({int(iso_actual.year)})"
+    }])
+    semanas_disponibles = pd.concat(
+        [semanas_disponibles, semana_actual_df], ignore_index=True
+    ).drop_duplicates(subset=["iso_year", "iso_week"])
+
+    semanas_disponibles["fecha_inicio"] = semanas_disponibles.apply(
+        lambda r: dt_calc.fromisocalendar(int(r["iso_year"]), int(r["iso_week"]), 1).date(),
+        axis=1
+    )
+    semanas_disponibles["fecha_fin"] = semanas_disponibles["fecha_inicio"] + timedelta(days=6)
+    semanas_disponibles = semanas_disponibles[
+        (semanas_disponibles["fecha_inicio"] >= inicio_trimestre_anterior) &
+        (semanas_disponibles["fecha_inicio"] <= inicio_semana_actual)
+    ].sort_values(
+        by=["iso_year", "iso_week"], ascending=[False, False]
+    ).reset_index(drop=True)
+
+    opciones_semanas = semanas_disponibles["semana_str"].tolist()
+    if not opciones_semanas:
+        st.info("No hay semanas disponibles desde el trimestre anterior.")
+        return
+
+    st.caption(
+        "Puedes consultar los KPI de la semana en curso. El resumen ejecutivo y el "
+        "informe PDF se habilitarán automáticamente una vez cerrada la semana."
+    )
+    semana_seleccionada_str = st.selectbox(
+        "Semana del informe:",
+        options=opciones_semanas,
+        index=0,
+        key="sel_wbr_week"
+    )
+
+    if not semana_seleccionada_str:
+        return
+
+    fila_sem = semanas_disponibles[semanas_disponibles["semana_str"] == semana_seleccionada_str].iloc[0]
+    target_year = int(fila_sem["iso_year"])
+    target_week = int(fila_sem["iso_week"])
+    semana_en_curso = (
+        target_year == int(iso_actual.year) and
+        target_week == int(iso_actual.week)
+    )
+
+    resumen_wbr_slot = st.empty()
+    graficos_wbr = []
+    tablas_wbr = []
+
+    def mostrar_grafico_wbr(figura, titulo, **kwargs):
+        graficos_wbr.append((titulo, figura))
+        # Plotly debe recalcular el ancho real de su contenedor, especialmente
+        # cuando Streamlit apila las columnas del WBR en pantallas pequeñas.
+        figura.update_layout(autosize=True, width=None)
+        kwargs.setdefault("use_container_width", True)
+        config_plotly = dict(kwargs.pop("config", {}) or {})
+        config_plotly["responsive"] = True
+        st.plotly_chart(figura, config=config_plotly, **kwargs)
+
+    from datetime import datetime as dt_calc
+    fecha_ref_sem = dt_calc.fromisocalendar(target_year, target_week, 1)
+
+    semanas_5 = []
+    for i in range(4, -1, -1):
+        f_s = fecha_ref_sem - timedelta(weeks=i)
+        iso_y, iso_w, _ = f_s.isocalendar()
+        semanas_5.append((iso_y, iso_w, f"Semana {iso_w}"))
+
+    df_5_semanas_info = pd.DataFrame(semanas_5, columns=["iso_year", "iso_week", "etiqueta_semana"])
+
+    # -------------------------------------------------------------
+    # 1. CÁLCULO DEL EVOLUTIVO DE 5 SEMANAS
+    # -------------------------------------------------------------
+    res_5w = []
+    tot_5w_recibidos = 0
+    tot_5w_cerrados = 0
+
+    for _, s_row in df_5_semanas_info.iterrows():
+        sub_rec = df_wbr_base[
+            (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+            (df_wbr_base["iso_week"] == s_row["iso_week"])
+        ]
+        rec = len(sub_rec)
+
+        sub_cer = df_wbr_base[
+            (df_wbr_base["es_cerrado"] == True) &
+            (df_wbr_base["close_iso_year"] == s_row["iso_year"]) & 
+            (df_wbr_base["close_iso_week"] == s_row["iso_week"])
+        ]
+        cer = len(sub_cer)
+
+        tot_5w_recibidos += rec
+        tot_5w_cerrados += cer
+
+        res_5w.append({
+            "Semana": s_row["etiqueta_semana"],
+            "Recibidos": rec,
+            "Cerrados": cer
+        })
+
+    df_res_5w = pd.DataFrame(res_5w)
+    tablas_wbr.append(("Evolución de volumen de las últimas cinco semanas", df_res_5w.copy()))
+    pct_5w_cerrados = round((tot_5w_cerrados / tot_5w_recibidos * 100), 2) if tot_5w_recibidos > 0 else 0.0
+
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+    # =========================================================================
+    # SLIDE 1: EVOLUTIVO VOLUMEN (5 SEMANAS)
+    # =========================================================================
+    st.markdown("#### 1. WBR | Soporte & Experiencia — Evolutivo de Volumen")
+
+    s1_col1, s1_col2 = st.columns(2)
+    s1_col1.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS (5 SEMANAS)</div>
+        <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_5w_recibidos:,}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    s1_col2.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">PROMEDIO % CHATS CERRADOS (5 SEMANAS)</div>
+        <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+            {pct_5w_cerrados}% <span style="font-size: 1.15rem; color: #94a3b8; font-weight: 500;">({tot_5w_cerrados:,} cerrados)</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    fig_5w = go.Figure()
+    fig_5w.add_trace(go.Bar(
+        x=df_res_5w["Semana"],
+        y=df_res_5w["Recibidos"],
+        name="Q. de chats recibidos",
+        marker=dict(color="#0284c7", cornerradius=8),
+        text=df_res_5w["Recibidos"],
+        textposition="inside",
+        insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+    ))
+    fig_5w.add_trace(go.Bar(
+        x=df_res_5w["Semana"],
+        y=df_res_5w["Cerrados"],
+        name="Q. de chats cerrados",
+        marker=dict(color="#38bdf8", cornerradius=8),
+        text=df_res_5w["Cerrados"],
+        textposition="inside",
+        insidetextfont=dict(color="#0f172a", size=13, family="Arial Black")
+    ))
+    fig_5w.update_layout(
+        hovermode=False,
+        barmode="group",
+        title="<b>Q. de chats recibidos y Q. de chats cerrados (Fotografía Semanal Lunes a Domingo)</b>",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#cbd5e1"),
+        xaxis=dict(gridcolor="#1e293b"),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=50, b=20, l=30, r=20),
+        height=380
+    )
+    mostrar_grafico_wbr(fig_5w, 'Evolutivo de volumen: chats recibidos y cerrados', use_container_width=True)
+
+    st.markdown("---")
+
+    # =========================================================================
+    # SLIDE 2: DETALLE OPERATIVO DE LA SEMANA SELECCIONADA
+    # =========================================================================
+    st.markdown(f"#### 2. WBR | {semana_seleccionada_str} — Detalle Operativo Semanal")
+
+    df_target = df_wbr_base[
+        (df_wbr_base["iso_year"] == target_year) & 
+        (df_wbr_base["iso_week"] == target_week)
+    ].copy()
+    tot_sem_rec = len(df_target)
+
+
+    # =========================================================================
+    # TOP 10 DE MOTIVOS RECURRENTES (NORMALIZACIÓN DEL AI TITLE)
+    # =========================================================================
+    st.markdown("##### Top 10 de motivos recurrentes")
+    try:
+        catalogo_motivos_wbr = obtener_catalogo_motivos_recurrentes()
+        mapa_motivos_wbr = {
+            str(item.get("ai_title", "")).strip(): str(item.get("motivo_recurrente", "")).strip()
+            for item in catalogo_motivos_wbr
+            if str(item.get("ai_title", "")).strip()
+            and str(item.get("motivo_recurrente", "")).strip()
+        }
+        titulos_semana = df_target.get(
+            "ai_title", pd.Series("", index=df_target.index)
+        ).fillna("").astype(str).str.strip()
+        validos_titulo = (
+            (titulos_semana != "")
+            & (titulos_semana.str.lower() != "no generado")
+            & (titulos_semana.str.lower() != "nan")
+        )
+        df_motivos_semana = df_target.loc[validos_titulo].copy()
+        df_motivos_semana["motivo_recurrente_wbr"] = titulos_semana.loc[validos_titulo].map(mapa_motivos_wbr)
+        pendientes_semana = int(df_motivos_semana["motivo_recurrente_wbr"].isna().sum())
+        df_motivos_semana = df_motivos_semana[
+            df_motivos_semana["motivo_recurrente_wbr"].notna()
+            & (df_motivos_semana["motivo_recurrente_wbr"].str.strip() != "")
+        ]
+        df_top_motivos = (
+            df_motivos_semana["motivo_recurrente_wbr"]
+            .value_counts()
+            .head(10)
+            .rename_axis("Motivo recurrente")
+            .reset_index(name="Conversaciones")
+        )
+        if not df_top_motivos.empty:
+            tablas_wbr.append(("Top 10 de motivos recurrentes", df_top_motivos.copy()))
+            fig_top_motivos = go.Figure(go.Bar(
+                x=df_top_motivos["Conversaciones"],
+                y=df_top_motivos["Motivo recurrente"],
+                orientation="h",
+                text=df_top_motivos["Conversaciones"],
+                textposition="outside",
+                cliponaxis=False,
+                marker=dict(color="#0284c7", cornerradius=7),
+                textfont=dict(color="#f8fafc", size=12, family="Arial Black")
+            ))
+            fig_top_motivos.update_layout(
+                hovermode=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=11),
+                xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=None),
+                yaxis=dict(
+                    autorange="reversed",
+                    showgrid=False,
+                    showticklabels=True,
+                    tickfont=dict(color="#F8FAFC", size=16, family="Arial Black"),
+                    automargin=True,
+                    title=None
+                ),
+                margin=dict(t=18, b=22, l=260, r=55),
+                height=max(430, 52 * len(df_top_motivos))
+            )
+            mostrar_grafico_wbr(
+                fig_top_motivos,
+                "Top 10 de motivos recurrentes por conversaciones",
+                use_container_width=True
+            )
+            total_clasificado_semana = int(df_motivos_semana.shape[0])
+            total_titulos_validos_semana = int(validos_titulo.sum())
+            st.caption(
+                f"{total_clasificado_semana:,} conversaciones clasificadas de "
+                f"{total_titulos_validos_semana:,} con AI title válido. "
+                f"Pendientes de clasificación: {pendientes_semana:,}. "
+                "Se excluyen los títulos vacíos y «No Generado»."
+            )
+        else:
+            st.info("Todavía no hay motivos clasificados para esta semana. La clasificación se administra desde Administración.")
+            pendientes_semana = int(validos_titulo.sum())
+            df_top_motivos = pd.DataFrame(columns=["Motivo recurrente", "Conversaciones"])
+    except Exception as error_motivos:
+        st.warning(f"No se pudo cargar el Top 10 de motivos recurrentes: {error_motivos}")
+        df_top_motivos = pd.DataFrame(columns=["Motivo recurrente", "Conversaciones"])
+        pendientes_semana = 0
+
+    st.markdown("---")
+
+    df_target_cerrados = df_wbr_base[
+        (df_wbr_base["es_cerrado"] == True) &
+        (df_wbr_base["close_iso_year"] == target_year) & 
+        (df_wbr_base["close_iso_week"] == target_week)
+    ].copy()
+    tot_sem_cer = len(df_target_cerrados)
+    pct_sem_cer = round((tot_sem_cer / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+
+    sem_prev_num = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[1]
+    sem_prev_year = (fecha_ref_sem - timedelta(weeks=1)).isocalendar()[0]
+    
+    tot_prev_rec = len(df_wbr_base[
+        (df_wbr_base["iso_year"] == sem_prev_year) & 
+        (df_wbr_base["iso_week"] == sem_prev_num)
+    ])
+    tot_prev_cer = len(df_wbr_base[
+        (df_wbr_base["es_cerrado"] == True) &
+        (df_wbr_base["close_iso_year"] == sem_prev_year) & 
+        (df_wbr_base["close_iso_week"] == sem_prev_num)
+    ])
+
+    diff_rec_pct = round(((tot_sem_rec - tot_prev_rec) / tot_prev_rec * 100), 2) if tot_prev_rec > 0 else 0.0
+    diff_cer_pct = round(((tot_sem_cer - tot_prev_cer) / tot_prev_cer * 100), 2) if tot_prev_cer > 0 else 0.0
+
+    s3_m1, s3_m2 = st.columns(2)
+    s3_m1.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">CHATS RECIBIDOS</div>
+        <div class="metric-card-value" style="font-size: 2.1rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    s3_m2.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">CHATS CERRADOS Y EFECTIVIDAD</div>
+        <div class="metric-card-value" style="font-size: 2.1rem; color: #34d399;">
+            {tot_sem_cer:,} <span style="font-size: 1.25rem; font-weight: 600; color: #38bdf8;">({pct_sem_cer}%)</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col_dia_bar, col_pie_ag = st.columns([1.2, 1])
+
+    with col_dia_bar:
+        st.markdown('<div class="bims-wbr-stack-anchor"></div>', unsafe_allow_html=True)
+        st.markdown("##### Chats Recibidos vs. Chats Cerrados (Día a Día)")
+
+        dias_semana_l_d = [fecha_ref_sem.date() + timedelta(days=d) for d in range(7)]
+        df_target["creado_dia"] = df_target["created_at_dt"].dt.date
+        df_target_cerrados["cerrado_dia"] = df_target_cerrados["fecha_cierre_dt"].dt.date
+
+        filas_dias = []
+        for f_dia in dias_semana_l_d:
+            str_dia = f_dia.strftime("%Y-%m-%d")
+            cnt_rec = len(df_target[df_target["creado_dia"] == f_dia])
+            cnt_cer = len(df_target_cerrados[df_target_cerrados["cerrado_dia"] == f_dia])
+            filas_dias.append({
+                "Fecha": str_dia,
+                "Recibidos": cnt_rec,
+                "Cerrados": cnt_cer
+            })
+
+        df_dias_agg = pd.DataFrame(filas_dias)
+        tablas_wbr.append(("Chats recibidos y cerrados por día", df_dias_agg.copy()))
+
+        fig_dias = go.Figure()
+        fig_dias.add_trace(go.Bar(
+            x=df_dias_agg["Fecha"],
+            y=df_dias_agg["Recibidos"],
+            name="Q. de chats recibidos",
+            marker=dict(color="#0284c7", cornerradius=8),
+            text=df_dias_agg["Recibidos"],
+            textposition="inside",
+            insidetextfont=dict(color="#ffffff", size=12, family="Arial Black")
+        ))
+        fig_dias.add_trace(go.Bar(
+            x=df_dias_agg["Fecha"],
+            y=df_dias_agg["Cerrados"],
+            name="Q. de chats cerrados",
+            marker=dict(color="#38bdf8", cornerradius=8),
+            text=df_dias_agg["Cerrados"],
+            textposition="inside",
+            insidetextfont=dict(color="#0f172a", size=12, family="Arial Black")
+        ))
+        fig_dias.update_layout(
+            hovermode=False,
+            barmode="group",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(gridcolor="#1e293b"),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            margin=dict(t=30, b=20, l=20, r=20),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_dias, 'Detalle operativo: recibidos y cerrados día a día', use_container_width=True)
+
+        color_wow_rec = "#34d399" if diff_rec_pct <= 0 else "#f43f5e"
+        color_wow_cer = "#34d399" if diff_cer_pct >= 0 else "#f43f5e"
+        
+        sin_resp_count = int(
+            df_target_cerrados["etiquetas"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains("sin respuesta")
+            .sum()
+        )
+
+        st.markdown(f"""
+        <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.86rem; line-height: 1.6; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+            <div>• <b style="color: {color_wow_rec};">{diff_rec_pct:+.2f}%</b> chats recibidos vs Semana {sem_prev_num} ({tot_prev_rec})</div>
+            <div>• <b style="color: {color_wow_cer};">{diff_cer_pct:+.2f}%</b> chats cerrados vs Semana {sem_prev_num} ({tot_prev_cer})</div>
+            <div style="color: #94a3b8; font-size: 0.78rem;">Obs: De los {tot_sem_cer} chats cerrados en la semana, <b>{sin_resp_count}</b> se cerraron con etiqueta "sin respuesta".</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_pie_ag:
+        st.markdown('<div class="bims-wbr-stack-anchor"></div>', unsafe_allow_html=True)
+        st.markdown("##### Q. de chats cerrados por Agentes")
+        
+        agentes_excluir_pie = [
+            "monica", "mónica", "monica (bot)", 
+            "sin asignar", "none", "nan", ""
+        ]
+
+        agentes_l2_donut = {
+            "martin moreira", "martín moreira",
+            "dario olmedo", "darío olmedo",
+            "ivan amarilla", "iván amarilla",
+            "gerardo gaona",
+            "hector trinidad", "héctor trinidad"
+        }
+
+        def agrupar_agente_donut_wbr(row):
+            ag = str(row.get("agente_asignado") or "").strip()
+            ag_low = ag.lower()
+            ag_clean = ag_low.replace("l2 -", "").replace("l2:", "").strip()
+            tags_low = str(row.get("etiquetas") or "").lower()
+
+            if (
+                ag_low.startswith("l2")
+                or ag_clean in agentes_l2_donut
+                or "niv-l2" in tags_low
+                or "l2:" in tags_low
+            ):
+                return "Nivel 2 (L2)"
+            return ag if ag else "Sin asignar"
+        
+        df_target_cerrados["agente_nom"] = df_target_cerrados["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+        es_cerrado_ia = df_target_cerrados["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"])
+        es_omitido_torta = df_target_cerrados["agente_nom"].str.lower().isin(agentes_excluir_pie)
+        
+        cnt_cerrados_ia = int(es_cerrado_ia.sum())
+        cnt_cerrados_humanos = int((~es_omitido_torta).sum())
+        pct_ia = round((cnt_cerrados_ia / tot_sem_cer * 100), 2) if tot_sem_cer > 0 else 0.0
+
+        df_target_cerrados["agente_nom"] = df_target_cerrados.apply(agrupar_agente_donut_wbr, axis=1)
+        df_ag_pie = df_target_cerrados[~es_omitido_torta]["agente_nom"].value_counts().reset_index()
+        df_ag_pie.columns = ["Agente", "Cerrados"]
+        tablas_wbr.append(("Cierres por agente", df_ag_pie.copy()))
+
+        palette_donut = [
+            "#0369a1", "#0284c7", "#38bdf8", "#0ea5e9", 
+            "#7dd3fc", "#bae6fd", "#94a3b8", "#cbd5e1"
+        ]
+
+        fig_pie_w = go.Figure(data=[go.Pie(
+            labels=df_ag_pie["Agente"],
+            values=df_ag_pie["Cerrados"],
+            hole=0.45,
+            textinfo="label+value+percent",
+            texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+            textposition="outside",
+            insidetextorientation="horizontal",
+            marker=dict(colors=palette_donut, line=dict(color="#0b1120", width=2)),
+            showlegend=False
+        )])
+
+        fig_pie_w.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1", size=11),
+            margin=dict(t=30, b=30, l=40, r=40),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_pie_w, 'Chats cerrados por agente', use_container_width=True)
+
+        cuentas_unicas = df_target["tenant"].nunique() if "tenant" in df_target.columns else 0
+        empresas_unicas = df_target["company"].nunique() if "company" in df_target.columns else 0
+        num_agentes_activos = df_ag_pie[df_ag_pie["Agente"] != "Nivel 2 (L2)"]["Agente"].nunique()
+        prom_por_agente = round(cnt_cerrados_humanos / num_agentes_activos, 2) if num_agentes_activos > 0 else 0.0
+
+        st.markdown(f"""
+        <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+            <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Agente: <span style="color:#38bdf8; font-size:1.1rem; font-weight:700; margin-left:6px;">{prom_por_agente}</span></div>
+            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">
+                <b>{cuentas_unicas}</b> Cuentas Atendidas | <b>{empresas_unicas}</b> Empresas Atendidas
+            </div>
+            <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 3px;">
+                <b>{cnt_cerrados_ia} chats ({pct_ia}%)</b> gestionados por IA.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # =========================================================================
+    # SLIDE 3: TIEMPOS DE GESTIÓN Y 1RA RESPUESTA
+    # =========================================================================
+    st.markdown(f"#### 3. WBR | {semana_seleccionada_str} — Tiempos de Gestión y SLA Operativo")
+
+    def calcular_metricas_tiempos_semana(df_sub):
+        if df_sub.empty:
+            return 0.0, 0.0, 0.0, 0.0
+
+        agentes_omitir_t = ["", "sin asignar", "none", "nan", "monica", "monica (bot)", "soporte"]
+        
+        dt_col = df_sub["created_at_dt"]
+        dias_col = dt_col.dt.dayofweek
+        horas_col = dt_col.dt.time
+        fechas_col = dt_col.dt.strftime("%Y-%m-%d")
+
+        es_horario_1ra = (
+            ((dias_col.isin([0, 1, 2, 3, 4])) & (horas_col >= time(8, 0)) & (horas_col <= time(17, 30))) |
+            ((dias_col == 5) & (horas_col >= time(9, 0)) & (horas_col <= time(11, 45)))
+        ) & (~fechas_col.isin(FERIADOS))
+
+        es_agente_1ra = (
+            (df_sub["por_agente"].fillna("").astype(str).str.lower() == "no excluido") &
+            (~df_sub["agente_asignado"].fillna("").astype(str).str.strip().str.lower().isin(agentes_omitir_t))
+        )
+
+        sub_1ra = df_sub[es_horario_1ra & es_agente_1ra].copy()
+        sub_1ra["p1_num"] = pd.to_numeric(sub_1ra["primera_respuesta_min"], errors="coerce")
+        s_1ra = sub_1ra["p1_num"].dropna()
+
+        prom_1ra_val = round(s_1ra.mean(), 2) if not s_1ra.empty else 0.0
+        pct_sla_1ra_val = round(((s_1ra <= 2.0).sum() / len(s_1ra) * 100), 1) if not s_1ra.empty else 0.0
+
+        etiquetas_s = df_sub["etiquetas"].fillna("").astype(str).str.lower()
+        es_sin_resp = etiquetas_s.str.contains("sin respuesta", na=False)
+        es_horario_gest = df_sub["horario_evaluado"] != "fuera de horario"
+        
+        sub_gest = df_sub[
+            es_agente_1ra & 
+            es_horario_gest & 
+            (~es_sin_resp) & 
+            (df_sub["es_cerrado"] == True)
+        ].copy()
+        
+        sub_gest["pg_num"] = pd.to_numeric(sub_gest["tiempo_resolucion_minutos"], errors="coerce")
+        s_gest = sub_gest["pg_num"].dropna()
+
+        prom_gest_val = round(s_gest.mean(), 1) if not s_gest.empty else 0.0
+        pct_sla_gest_val = round(((s_gest <= 60.0).sum() / len(s_gest) * 100), 1) if not s_gest.empty else 0.0
+
+        return prom_gest_val, prom_1ra_val, pct_sla_gest_val, pct_sla_1ra_val
+
+    evol_tiempos = []
+    for _, s_row in df_5_semanas_info.iterrows():
+        sub_w = df_wbr_base[
+            (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+            (df_wbr_base["iso_week"] == s_row["iso_week"])
+        ]
+        p_gest_w, p_1ra_w, sla_g_w, sla_1_w = calcular_metricas_tiempos_semana(sub_w)
+        evol_tiempos.append({
+            "Semana": s_row["etiqueta_semana"],
+            "Prom_Gestion": p_gest_w,
+            "Prom_1ra": p_1ra_w,
+            "SLA_Gestion": sla_g_w,
+            "SLA_1ra": sla_1_w
+        })
+
+    df_evol_tiempos = pd.DataFrame(evol_tiempos)
+    tablas_wbr.append(("Evolución semanal de tiempos y cumplimiento SLA", df_evol_tiempos.copy()))
+
+    foco_gest = df_evol_tiempos.iloc[-1]["Prom_Gestion"]
+    foco_1ra = df_evol_tiempos.iloc[-1]["Prom_1ra"]
+    foco_sla_gest = df_evol_tiempos.iloc[-1]["SLA_Gestion"]
+    foco_sla_1ra = df_evol_tiempos.iloc[-1]["SLA_1ra"]
+
+    prev_gest = df_evol_tiempos.iloc[-2]["Prom_Gestion"] if len(df_evol_tiempos) >= 2 else 0.0
+    prev_1ra = df_evol_tiempos.iloc[-2]["Prom_1ra"] if len(df_evol_tiempos) >= 2 else 0.0
+
+    wow_gest_pct = round(((foco_gest - prev_gest) / prev_gest * 100), 2) if prev_gest > 0 else 0.0
+    wow_1ra_pct = round(((foco_1ra - prev_1ra) / prev_1ra * 100), 2) if prev_1ra > 0 else 0.0
+
+    col_t1, col_t2 = st.columns(2)
+    col_t1.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">TIEMPO PROMEDIO TOTAL DE GESTIÓN</div>
+        <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_gest} min</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_t2.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">TIEMPO PROM. DE 1RA RESPUESTA</div>
+        <div class="metric-card-value" style="font-size: 2.3rem; color: #38bdf8;">{foco_1ra} min</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col_g_gest, col_g_1ra = st.columns(2)
+
+    with col_g_gest:
+        st.markdown("##### Tiempo promedio total de gestión (min)")
+        fig_bar_gest = go.Figure()
+        fig_bar_gest.add_trace(go.Bar(
+            x=df_evol_tiempos["Semana"],
+            y=df_evol_tiempos["Prom_Gestion"],
+            marker=dict(color="#0284c7", cornerradius=8),
+            text=df_evol_tiempos["Prom_Gestion"].apply(lambda v: f"{v}"),
+            textposition="inside",
+            insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+        ))
+        fig_bar_gest.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1"),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            margin=dict(t=30, b=20, l=20, r=20),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_bar_gest, 'Evolución del tiempo promedio de gestión', use_container_width=True)
+
+        color_wow_g = "#34d399" if wow_gest_pct <= 0 else "#f43f5e"
+        color_sla_g = "#34d399" if foco_sla_gest >= 90.0 else "#f43f5e"
+
+        st.markdown(f"""
+        <div class="bims-wbr-chart-summary" style="font-size: 0.88rem;">
+            <div><b style="color: {color_wow_g};">{wow_gest_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_gest} min)</div>
+            <div>SLA Gestión: <b style="color: {color_sla_g}; font-size: 1.05rem;">{foco_sla_gest}%</b></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_g_1ra:
+        st.markdown("##### Tiempo promedio primera respuesta")
+        fig_bar_1ra = go.Figure()
+        fig_bar_1ra.add_trace(go.Bar(
+            x=df_evol_tiempos["Semana"],
+            y=df_evol_tiempos["Prom_1ra"],
+            marker=dict(color="#0369a1", cornerradius=8),
+            text=df_evol_tiempos["Prom_1ra"].apply(lambda v: f"{v}"),
+            textposition="inside",
+            insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+        ))
+        fig_bar_1ra.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1"),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            margin=dict(t=30, b=20, l=20, r=20),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_bar_1ra, 'Evolución del tiempo promedio de primera respuesta', use_container_width=True)
+
+        color_wow_1 = "#34d399" if wow_1ra_pct <= 0 else "#f43f5e"
+        color_sla_1 = "#34d399" if foco_sla_1ra >= 90.0 else "#f43f5e"
+
+        st.markdown(f"""
+        <div class="bims-wbr-chart-summary" style="font-size: 0.88rem;">
+            <div><b style="color: {color_wow_1};">{wow_1ra_pct:+.2f}%</b> WoW {semana_seleccionada_str.split(' ')[0]} {target_week} vs Semana {sem_prev_num} ({prev_1ra} min)</div>
+            <div>SLA 1ra Respuesta: <b style="color: {color_sla_1}; font-size: 1.05rem;">{foco_sla_1ra}%</b> <span style="font-size: 0.74rem; color: #94a3b8;">(Sin horario extendido)</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # =========================================================================
+    # SLIDE 4: EVALUACIÓN DE CSAT & SENTIMIENTO
+    # =========================================================================
+    st.markdown(f"#### 4. WBR | {semana_seleccionada_str} — Chats Evaluados & Sentimiento")
+
+    if "fecha_calificacion_dt" in df_target.columns:
+        df_target_csat = df_wbr_base[
+            (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+            (df_wbr_base["rating"].notna()) &
+            (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == target_year) &
+            (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == target_week)
+        ].copy()
+    else:
+        df_target_csat = df_target[
+            (df_target["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+            (df_target["rating"].notna())
+        ].copy()
+
+    df_target_csat["rating_num"] = pd.to_numeric(df_target_csat["rating"], errors="coerce")
+    df_target_csat = df_target_csat.dropna(subset=["rating_num"])
+
+    tot_evaluados = len(df_target_csat)
+    tot_sin_calificar = max(0, tot_sem_rec - tot_evaluados)
+    pct_calificados = round((tot_evaluados / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+    pct_sin_calificar = round((tot_sin_calificar / tot_sem_rec * 100), 2) if tot_sem_rec > 0 else 0.0
+
+    cnt_5 = int((df_target_csat["rating_num"] == 5).sum())
+    cnt_4 = int((df_target_csat["rating_num"] == 4).sum())
+    cnt_3 = int((df_target_csat["rating_num"] == 3).sum())
+    cnt_2 = int((df_target_csat["rating_num"] == 2).sum())
+    cnt_1 = int((df_target_csat["rating_num"] == 1).sum())
+
+    tot_positivas = cnt_5 + cnt_4
+    tot_negativas = cnt_3 + cnt_2 + cnt_1
+
+    def f_pct(c, t):
+        return f"{round((c / t * 100), 1)}%" if t > 0 else "0.0%"
+
+    c_c1, c_c2, c_c3, c_c4 = st.columns(4)
+
+    c_c1.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #0284c7; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">TOTAL CHATS RECIBIDOS</div>
+        <div class="metric-card-value" style="font-size: 2.2rem; color: #f8fafc;">{tot_sem_rec:,}</div>
+        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">100% de la jornada</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c_c2.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">SIN CALIFICAR</div>
+        <div class="metric-card-value" style="color: #38bdf8; font-size: 2.2rem;">{pct_sin_calificar}%</div>
+        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_sin_calificar:,} conversaciones</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c_c3.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-card-title" style="justify-content: center;">CALIFICADOS</div>
+        <div class="metric-card-value" style="color: #34d399; font-size: 2.2rem;">{pct_calificados}%</div>
+        <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.74rem;">{tot_evaluados:,} encuestas recibidas</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c_c4.markdown(f"""
+    <div class="metric-card" style="border-left: 4px solid #818cf8; height: 125px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+        <div class="metric-card-title" style="font-size: 0.7rem; margin-bottom: 3px;">TOP CALIFICACIONES</div>
+        <div style="font-size: 0.75rem; line-height: 1.35; color: #cbd5e1;">
+            • <b>5★:</b> {cnt_5} ({f_pct(cnt_5, tot_evaluados)}) | <b>4★:</b> {cnt_4} ({f_pct(cnt_4, tot_evaluados)})<br>
+            • <b>3★:</b> {cnt_3} ({f_pct(cnt_3, tot_evaluados)}) | <b>2★:</b> {cnt_2} ({f_pct(cnt_2, tot_evaluados)})<br>
+            • <b>1★:</b> {cnt_1} ({f_pct(cnt_1, tot_evaluados)})
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col_p_niv, col_p_sent = st.columns([1.3, 1])
+
+    with col_p_niv:
+        st.markdown("##### Q. de Puntuaciones por Nivel (Solo Calificados)")
+
+        mapa_escala = {
+            5: "Excelente", 4: "Muy Bueno", 3: "Regular", 2: "Malo", 1: "Muy malo"
+        }
+
+        df_target_csat["nivel_norm"] = (
+            df_target_csat.get("nivel", pd.Series(index=df_target_csat.index, dtype=str))
+            .fillna("Niv-L1")
+            .replace(["", "None", "nan", "null", "Sin Nivel"], "Niv-L1")
+        )
+        df_target_csat["rating_int"] = pd.to_numeric(df_target_csat["rating_num"], errors="coerce").fillna(0).astype(int)
+
+        df_target_calificados = df_target_csat[df_target_csat["rating_int"] > 0].copy()
+        df_target_calificados["puntuacion_str"] = df_target_calificados["rating_int"].map(mapa_escala)
+
+        orden_puntuacion = ["Excelente", "Muy Bueno", "Regular", "Malo", "Muy malo"]
+        df_niv_grp = df_target_calificados.groupby(["puntuacion_str", "nivel_norm"]).size().reset_index(name="Cantidad")
+
+        fig_niv = px.bar(
+            df_niv_grp,
+            x="puntuacion_str",
+            y="Cantidad",
+            color="nivel_norm",
+            barmode="stack",
+            category_orders={
+                "puntuacion_str": orden_puntuacion,
+                "nivel_norm": ["Niv-L1", "Niv-L2", "Niv-L3"]
+            },
+            color_discrete_map={
+                "Niv-L1": "#38bdf8",
+                "Niv-L2": "#818cf8",
+                "Niv-L3": "#f59e0b"
+            },
+            text="Cantidad"
+        )
+        fig_niv.update_traces(
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(color="#0f172a", size=12, family="Arial Black"),
+            marker=dict(cornerradius=6, line=dict(color="#0b1120", width=1.5))
+        )
+
+        # Total acumulado encima de cada barra apilada
+        totales_punt = df_niv_grp.groupby("puntuacion_str")["Cantidad"].sum()
+        for cat_punt, tot_val in totales_punt.items():
+            if tot_val > 0:
+                fig_niv.add_annotation(
+                    x=cat_punt,
+                    y=tot_val,
+                    text=f"<b>{int(tot_val)}</b>",
+                    showarrow=False,
+                    yshift=12,
+                    font=dict(color="#f8fafc", size=13)
+                )
+
+        fig_niv.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1", size=11),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict(
+                range=[0, max(totales_punt.max() * 1.18, 2)] if not totales_punt.empty else [0, 5],
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+                showline=False,
+                title=None
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None),
+            margin=dict(t=35, b=20, l=20, r=20),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_niv, 'Distribución de puntuaciones CSAT', use_container_width=True)
+
+    with col_p_sent:
+        st.markdown("##### Sentimiento de Usuarios (CSAT Positivo vs Negativo)")
+
+        df_sent = pd.DataFrame([
+            {"Sentimiento": "Positivas (≥4★)", "Cantidad": tot_positivas},
+            {"Sentimiento": "Negativas (≤3★)", "Cantidad": tot_negativas}
+        ])
+        df_sent = df_sent[df_sent["Cantidad"] > 0]
+
+        fig_sent = go.Figure(data=[go.Pie(
+            labels=df_sent["Sentimiento"],
+            values=df_sent["Cantidad"],
+            hole=0.45,
+            textinfo="label+value+percent",
+            texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+            textposition="outside",
+            marker=dict(colors=["#0284c7", "#f43f5e"], line=dict(color="#0b1120", width=2)),
+            showlegend=False
+        )])
+        fig_sent.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1", size=11),
+            margin=dict(t=30, b=30, l=30, r=30),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_sent, 'Sentimiento: CSAT positivo y negativo', use_container_width=True)
+
+    st.markdown("---")
+
+    # =========================================================================
+    # SLIDE 5: EVALUACIÓN DE CSAT — CASOS NIVEL 1
+    # =========================================================================
+    st.markdown(f"#### 5. WBR | {semana_seleccionada_str} — Detalle de Fricción en Nivel 1 (L1)")
+
+    df_l1_neg = df_target_csat[
+        (df_target_csat["nivel_norm"] == "Niv-L1") &
+        (df_target_csat["rating_int"].isin([1, 2, 3]))
+    ].copy()
+
+    df_l3_neg = df_target_csat[
+        (df_target_csat["nivel_norm"] == "Niv-L3") &
+        (df_target_csat["rating_int"].isin([1, 2, 3]))
+    ].copy()
+
+    tot_l1_neg = len(df_l1_neg)
+    pct_l1_del_total = round((tot_l1_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+
+    tot_l3_neg = len(df_l3_neg)
+    pct_l3_sobre_total_neg = round((tot_l3_neg / tot_negativas * 100), 1) if tot_negativas > 0 else 0.0
+
+    col_card_l1, col_matriz_l1 = st.columns([1, 2.5])
+
+    with col_card_l1:
+        st.markdown(f"""
+        <div class="metric-card" style="border-left: 4px solid #f59e0b; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L1</div>
+            <div class="metric-card-value" style="font-size: 3.4rem; color: #f59e0b; margin: 8px 0;">{tot_l1_neg}</div>
+            <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                <b>{pct_l1_del_total}%</b> del total de reclamos ({tot_negativas} casos)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_matriz_l1:
+        if not df_l1_neg.empty:
+            df_l1_neg["agente_nom"] = df_l1_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+            
+            pivot_l1 = df_l1_neg.pivot_table(
+                index="agente_nom",
+                columns="rating_int",
+                values="id",
+                aggfunc="count",
+                fill_value=0
+            ).reset_index()
+
+            for col_star in [3, 2, 1]:
+                if col_star not in pivot_l1.columns:
+                    pivot_l1[col_star] = 0
+
+            pivot_l1["Todos los casos"] = pivot_l1[3] + pivot_l1[2] + pivot_l1[1]
+            pivot_l1["% del Total a L1"] = pivot_l1["Todos los casos"].apply(
+                lambda c: f"{round((c / tot_l1_neg * 100), 1)}%" if tot_l1_neg > 0 else "0%"
+            )
+
+            pivot_l1 = pivot_l1.rename(columns={
+                "agente_nom": "Agente Asignado",
+                3: "Regular (3★)",
+                2: "Malo (2★)",
+                1: "Muy malo (1★)"
+            })
+
+            cols_show_l1 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L1"]
+            config_matriz_l1 = {
+                "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
+                "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
+                "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
+                "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
+                "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
+                "% del Total a L1": st.column_config.TextColumn("% del Total a L1")
+            }
+            
+            tabla_l1_pdf = pivot_l1[cols_show_l1].sort_values("Todos los casos", ascending=False)
+            tablas_wbr.append(("Distribución de fricción en Nivel 1", tabla_l1_pdf.copy()))
+            st.dataframe(
+                tabla_l1_pdf,
+                column_config=config_matriz_l1,
+                hide_index=True,
+                use_container_width=True
+            )
+        else:
+            st.markdown(f"""<div style="display:flex;align-items:center;gap:8px;color:#cbd5e1;">{icono_estado_svg("disponible", 18)}<span><strong>Excelente:</strong> No se registraron calificaciones negativas en Nivel 1 esta semana.</span></div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("##### Motivos Normalizados de Reclamos en Nivel 1")
+
+    df_l1_motivos = pd.DataFrame()
+    if not df_l1_neg.empty:
+        df_l1_motivos = df_l1_neg.groupby(["rating_int", "motivo_normalizado"]).size().reset_index(name="Cantidad")
+        df_l1_motivos["Calificación"] = df_l1_motivos["rating_int"].apply(
+            lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+        )
+        df_l1_motivos = df_l1_motivos.sort_values(by=["rating_int", "Cantidad"], ascending=[True, False])
+        tablas_wbr.append((
+            "Motivos normalizados de reclamos en Nivel 1",
+            df_l1_motivos[["rating_int", "motivo_normalizado", "Cantidad"]].rename(
+                columns={"rating_int": "Calificación"}
+            ).copy()
+        ))
+
+        filas_html_l1 = []
+        for rating_val, grp in df_l1_motivos.groupby("rating_int", sort=True):
+            filas = grp.to_dict("records")
+            rowspan_cnt = len(filas)
+            for idx, row_item in enumerate(filas):
+                td_calif = f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; font-weight:700; vertical-align:middle; background-color:#1e293b;'>{row_item['Calificación']}</td>" if idx == 0 else ""
+                filas_html_l1.append(
+                    f"<tr>{td_calif}<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{row_item['motivo_normalizado']}</td>"
+                    f"<td style='padding:10px 14px; border:1px solid #334155; text-align:center; font-weight:700; color:#38bdf8;'>{row_item['Cantidad']}</td></tr>"
+                )
+
+        html_tabla_l1 = f"""
+        <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.86rem; border:1px solid #334155;'>
+            <thead>
+                <tr style='background-color:#0284c7; color:white;'>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:28%;'>Calificación</th>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo Normalizado</th>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:15%;'>Cantidad</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(filas_html_l1)}
+            </tbody>
+        </table>
+        """
+        st.markdown(html_tabla_l1, unsafe_allow_html=True)
+    else:
+        st.caption("Sin motivos registrados en L1.")
+
+    st.markdown("---")
+
+    # =========================================================================
+    # SLIDE 6: EVALUACIÓN DE CSAT — CASOS NIVEL 3 / JIRA
+    # =========================================================================
+    st.markdown(f"#### 6. WBR | {semana_seleccionada_str} — Detalle de Fricción en L3")
+
+    col_card_l3, col_matriz_l3 = st.columns([1, 2.5])
+
+    with col_card_l3:
+        st.markdown(f"""
+        <div class="metric-card" style="border-left: 4px solid #ef4444; text-align: center; height: calc(100% - 10px); min-height: 200px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <div class="metric-card-title" style="justify-content: center; font-size: 0.82rem;">CASOS NIVEL L3</div>
+            <div class="metric-card-value" style="font-size: 3.4rem; color: #ef4444; margin: 8px 0;">{tot_l3_neg}</div>
+            <div class="metric-card-sub" style="color: #94a3b8; font-size: 0.85rem;">
+                <b>{pct_l3_sobre_total_neg}%</b> del total de reclamos ({tot_negativas} casos)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_matriz_l3:
+        if not df_l3_neg.empty:
+            df_l3_neg["agente_nom"] = df_l3_neg["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+            pivot_l3 = df_l3_neg.pivot_table(
+                index="agente_nom",
+                columns="rating_int",
+                values="id",
+                aggfunc="count",
+                fill_value=0
+            ).reset_index()
+
+            for col_star in [3, 2, 1]:
+                if col_star not in pivot_l3.columns:
+                    pivot_l3[col_star] = 0
+
+            pivot_l3["Todos los casos"] = pivot_l3[3] + pivot_l3[2] + pivot_l3[1]
+            pivot_l3["% del Total a L3"] = pivot_l3["Todos los casos"].apply(
+                lambda c: f"{round((c / tot_l3_neg * 100), 1)}%" if tot_l3_neg > 0 else "0%"
+            )
+
+            pivot_l3 = pivot_l3.rename(columns={
+                "agente_nom": "Agente Asignado",
+                3: "Regular (3★)",
+                2: "Malo (2★)",
+                1: "Muy malo (1★)"
+            })
+
+            cols_show_l3 = ["Agente Asignado", "Regular (3★)", "Malo (2★)", "Muy malo (1★)", "Todos los casos", "% del Total a L3"]
+            config_matriz_l3 = {
+                "Agente Asignado": st.column_config.TextColumn("Agente Asignado"),
+                "Regular (3★)": st.column_config.NumberColumn("Regular (3★)", format="%d"),
+                "Malo (2★)": st.column_config.NumberColumn("Malo (2★)", format="%d"),
+                "Muy malo (1★)": st.column_config.NumberColumn("Muy malo (1★)", format="%d"),
+                "Todos los casos": st.column_config.NumberColumn("Todos los casos", format="%d"),
+                "% del Total a L3": st.column_config.TextColumn("% del Total a L3")
+            }
+            
+            tabla_l3_pdf = pivot_l3[cols_show_l3].sort_values("Todos los casos", ascending=False)
+            tablas_wbr.append(("Distribución de fricción en Nivel 3", tabla_l3_pdf.copy()))
+            st.dataframe(
+                tabla_l3_pdf,
+                column_config=config_matriz_l3,
+                hide_index=True,
+                use_container_width=True
+            )
+        else:
+            st.markdown(f"""<div style="display:flex;align-items:center;gap:8px;color:#cbd5e1;">{icono_estado_svg("disponible", 18)}<span><strong>Excelente:</strong> No se registraron calificaciones negativas en Nivel 3 esta semana.</span></div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("##### Detalle de Casos L3 & Tickets Relacionados")
+
+    if not df_l3_neg.empty:
+        df_l3_neg["ticket_limpio"] = (
+            df_l3_neg["ticket_relacionado"]
+            .fillna("")
+            .replace(["None", "nan", ""], "Sin ticket")
+            .astype(str)
+            .str.strip()
+        )
+
+
+
+        df_l3_neg["Calificación_HTML"] = df_l3_neg["rating_int"].apply(
+            lambda r: f"<span style='color:#fbbf24;'>{'★'*r}</span> {mapa_escala.get(r, '')} ({r}★)"
+        )
+        df_l3_neg["motivo_clean"] = df_l3_neg["motivo_normalizado"].fillna("Sin categorizar")
+        df_l3_neg["tenant_clean"] = df_l3_neg["tenant"].fillna("Sin tenant")
+        df_l3_neg["agente_clean"] = df_l3_neg["agente_asignado"].fillna("Sin asignar")
+
+
+        df_l3_neg = df_l3_neg.sort_values(by=["rating_int", "agente_clean"], ascending=[True, True])
+        tablas_wbr.append((
+            "Detalle de fricción L3 y tickets relacionados",
+            df_l3_neg[[
+                "rating_int", "motivo_clean", "ticket_limpio",
+                "tenant_clean", "agente_clean"
+            ]].rename(columns={
+                "rating_int": "Calificación", "motivo_clean": "Motivo",
+                "ticket_limpio": "Ticket", "tenant_clean": "Tenant",
+                "agente_clean": "Agente"
+            }).copy()
+        ))
+
+        filas_html_l3 = []
+        for rating_val, grp in df_l3_neg.groupby("rating_int", sort=True):
+            filas = grp.to_dict("records")
+            rowspan_cnt = len(filas)
+            for idx, r_item in enumerate(filas):
+                td_calif = (
+                    f"<td rowspan='{rowspan_cnt}' style='padding:10px 14px; border:1px solid #334155; "
+                    f"font-weight:700; vertical-align:middle; background-color:#1e293b; text-align:center;'>"
+                    f"{r_item['Calificación_HTML']}</td>"
+                    if idx == 0 else ""
+                )
+
+                ticket_txt = r_item['ticket_limpio']
+                badge_ticket = (
+                    f"<span style='background:#1e1b4b; border:1px solid #6366f1; color:#c7d2fe; padding:2px 8px; border-radius:4px; font-weight:600; font-family:monospace;'>{ticket_txt}</span>"
+                    if ticket_txt != "Sin ticket" else f"<span style='color:#64748b;'>{ticket_txt}</span>"
+                )
+
+
+                filas_html_l3.append(
+                    f"<tr>{td_calif}"
+                    f"<td style='padding:10px 14px; border:1px solid #334155; color:#f8fafc;'>{r_item['motivo_clean']}</td>"
+                    f"<td style='padding:10px 14px; border:1px solid #334155;'>{badge_ticket}</td>"
+                    f"<td style='padding:10px 14px; border:1px solid #334155; color:#cbd5e1;'>{r_item['tenant_clean']}</td>"
+                    f"<td style='padding:10px 14px; border:1px solid #334155; color:#38bdf8; font-weight:600;'>{r_item['agente_clean']}</td></tr>"
+                )
+
+        html_tabla_l3 = f"""
+        <table style='width:100%; border-collapse:collapse; background-color:#0f172a; border-radius:8px; overflow:hidden; font-size:0.84rem; border:1px solid #334155;'>
+            <thead>
+                <tr style='background-color:#0284c7; color:white;'>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:center; width:18%;'>Calificación</th>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:left;'>Motivo</th>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Ticket</th>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:14%;'>Tenant</th>
+                    <th style='padding:10px; border:1px solid #0284c7; text-align:left; width:13%;'>Agente</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(filas_html_l3)}
+            </tbody>
+        </table>
+        """
+        st.markdown(html_tabla_l3, unsafe_allow_html=True)
+    else:
+        st.info("No hay casos escalados a L3 con calificación negativa esta semana.")
+
+    st.markdown("---")
+
+    # =========================================================================
+    # SLIDE 7: EVOLUTIVO CSAT & RATIO CONTACTOS POR EMPRESA
+    # =========================================================================
+    st.markdown(f"#### 7. WBR | {semana_seleccionada_str} — Evolutivo de Satisfacción & Frecuencia por Empresa")
+
+    evol_csat = []
+    for _, s_row in df_5_semanas_info.iterrows():
+        if "fecha_calificacion_dt" in df_wbr_base.columns:
+            sub_csat = df_wbr_base[
+                (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                (df_wbr_base["rating"].notna()) &
+                (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().year == s_row["iso_year"]) &
+                (df_wbr_base["fecha_calificacion_dt"].dt.isocalendar().week == s_row["iso_week"])
+            ].copy()
+        else:
+            sub_csat = df_wbr_base[
+                (df_wbr_base["por_agente"].fillna("").astype(str).str.lower() != "excluido") &
+                (df_wbr_base["rating"].notna()) &
+                (df_wbr_base["iso_year"] == s_row["iso_year"]) &
+                (df_wbr_base["iso_week"] == s_row["iso_week"])
+            ].copy()
+
+        sub_csat["r_num"] = pd.to_numeric(sub_csat["rating"], errors="coerce")
+        sub_csat = sub_csat.dropna(subset=["r_num"])
+        tot_c = len(sub_csat)
+        pos_c = int((sub_csat["r_num"] >= 4).sum())
+        pct_c = round((pos_c / tot_c * 100), 1) if tot_c > 0 else 0.0
+
+        sub_vol = df_wbr_base[
+            (df_wbr_base["iso_year"] == s_row["iso_year"]) & 
+            (df_wbr_base["iso_week"] == s_row["iso_week"])
+        ]
+        tot_chats_w = len(sub_vol)
+        empresas_w = sub_vol["company"].nunique() if "company" in sub_vol.columns else 0
+        ratio_empresa = round(tot_chats_w / empresas_w, 2) if empresas_w > 0 else 0.0
+
+        evol_csat.append({
+            "Semana": s_row["etiqueta_semana"],
+            "CSAT": pct_c,
+            "Ratio_Empresa": ratio_empresa
+        })
+
+    df_evol_csat = pd.DataFrame(evol_csat)
+    tablas_wbr.append(("Evolución semanal de CSAT y contactos por empresa", df_evol_csat.copy()))
+
+    foco_csat = df_evol_csat.iloc[-1]["CSAT"]
+    prev_csat = df_evol_csat.iloc[-2]["CSAT"] if len(df_evol_csat) >= 2 else 0.0
+    diff_csat = round(foco_csat - prev_csat, 2)
+    foco_ratio = df_evol_csat.iloc[-1]["Ratio_Empresa"]
+    prev_ratio = df_evol_csat.iloc[-2]["Ratio_Empresa"] if len(df_evol_csat) >= 2 else 0.0
+    diff_ratio = round(foco_ratio - prev_ratio, 2)
+
+    col_g_csat, col_g_ratio = st.columns(2)
+
+    with col_g_csat:
+        st.markdown("##### Satisfacción del Cliente (CSAT %)")
+        fig_bar_csat = go.Figure()
+        fig_bar_csat.add_trace(go.Bar(
+            x=df_evol_csat["Semana"],
+            y=df_evol_csat["CSAT"],
+            marker=dict(color="#0284c7", cornerradius=8),
+            text=df_evol_csat["CSAT"].apply(lambda v: f"{v}%"),
+            textposition="inside",
+            insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+        ))
+        fig_bar_csat.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1"),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            margin=dict(t=30, b=20, l=20, r=20),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_bar_csat, 'Evolución semanal del CSAT', use_container_width=True)
+
+        color_diff_csat = "#34d399" if diff_csat >= 0 else "#f43f5e"
+        st.markdown(f"""
+        <div style="background-color: #0f172a; border-radius: 10px; border: 1px solid #334155; padding: 14px 18px; font-size: 0.88rem; line-height: 1.6; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+            <b style="color: {color_diff_csat}; font-size: 1.1rem;">{diff_csat:+.2f}% CSAT</b>
+            <span style="color: #cbd5e1; font-size: 0.85rem;">{semana_seleccionada_str.split(' ')[0]} {target_week} ({foco_csat}%) vs Semana {sem_prev_num} ({prev_csat}%)</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_g_ratio:
+        st.markdown("##### Evolución Semana a Semana (Promedio Contactos por Empresa)")
+        fig_bar_ratio = go.Figure()
+        fig_bar_ratio.add_trace(go.Bar(
+            x=df_evol_csat["Semana"],
+            y=df_evol_csat["Ratio_Empresa"],
+            marker=dict(color="#0369a1", cornerradius=8),
+            text=df_evol_csat["Ratio_Empresa"].apply(lambda v: f"{v:.2f}"),
+            textposition="inside",
+            insidetextfont=dict(color="#ffffff", size=13, family="Arial Black")
+        ))
+        fig_bar_ratio.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1"),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict( showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            margin=dict(t=30, b=20, l=20, r=20),
+            height=360
+        )
+        mostrar_grafico_wbr(fig_bar_ratio, 'Promedio de contactos por empresa', use_container_width=True)
+
+        st.markdown(f"""
+        <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 115px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 10px 14px;">
+            <div class="metric-card-title" style="justify-content: center; margin: 0;"># Contactos Promedio por Empresa</div>
+            <div class="metric-card-value" style="color: #38bdf8; font-size: 1.9rem; margin: 2px 0;">{foco_ratio:.2f}</div>
+            <div style="font-size: 0.8rem; color: #34d399; font-weight: 600;">{pct_sem_cer}% Conversaciones Cerradas</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # =========================================================================
+    # SLIDE 7B: DISTRIBUCIÓN POR NIVELES (L1 / L2 / L3) & CORREOS ELECTRÓNICOS
+    # =========================================================================
+    st.markdown(f"#### 8. WBR | {semana_seleccionada_str} — Resolución por Niveles (L1 / L2 / L3) & Correos")
+
+    agentes_l2_wbr = {
+        "martin moreira", "martín moreira",
+        "dario olmedo", "darío olmedo",
+        "ivan amarilla", "iván amarilla",
+        "gerardo gaona",
+        "hector trinidad", "héctor trinidad"
+    }
+
+    def clasificar_nivel_wbr(r):
+        niv_raw = str(r.get("nivel") or "").strip().lower()
+        tags_raw = str(r.get("etiquetas") or "").strip().lower()
+        ag_raw = str(r.get("agente_asignado") or "").strip().lower()
+        ag_clean = ag_raw.replace("l2 -", "").replace("l2:", "").strip()
+
+        if "niv-l3" in niv_raw or "niv-l3" in tags_raw:
+            return "Nivel 3 (L3)"
+        if (
+            "niv-l2" in niv_raw
+            or "niv-l2" in tags_raw
+            or "l2:" in tags_raw
+            or ag_raw.startswith("l2")
+            or ag_clean in agentes_l2_wbr
+        ):
+            return "Nivel 2 (L2)"
+        return "Nivel 1 (L1)"
+
+    df_target["nivel_wbr_cat"] = df_target.apply(clasificar_nivel_wbr, axis=1)
+    orden_niveles_wbr = ["Nivel 1 (L1)", "Nivel 2 (L2)", "Nivel 3 (L3)"]
+    df_niveles_cnt = df_target["nivel_wbr_cat"].value_counts().reindex(orden_niveles_wbr, fill_value=0).reset_index()
+    df_niveles_cnt.columns = ["Nivel", "Cantidad"]
+    tablas_wbr.append(("Distribución de conversaciones por nivel", df_niveles_cnt.copy()))
+    tot_niv_wbr = df_niveles_cnt["Cantidad"].sum()
+    df_niveles_cnt["Texto"] = df_niveles_cnt["Cantidad"].apply(
+        lambda c: f"{c} ({round(c / tot_niv_wbr * 100, 1)}%)" if tot_niv_wbr > 0 else "0 (0%)"
+    )
+
+    # Cálculo de correos electrónicos de la semana seleccionada
+    if df_correos_in is not None and not df_correos_in.empty and "created_at_dt" in df_correos_in.columns:
+        df_cor_sem = df_correos_in[
+            (df_correos_in["created_at_dt"].dt.isocalendar().year == target_year) &
+            (df_correos_in["created_at_dt"].dt.isocalendar().week == target_week)
+        ].copy()
+    else:
+        df_cor_sem = pd.DataFrame()
+
+    tot_correos_rec_w = len(df_cor_sem)
+    estado_cor_low = df_cor_sem["estado"].fillna("").astype(str).str.strip().str.lower() if not df_cor_sem.empty else pd.Series(dtype=str)
+    tot_correos_cer_w = int(estado_cor_low.isin(["cerrado", "closed", "resolved", "resuelto", "snoozed"]).sum()) if not df_cor_sem.empty else 0
+    tot_resp_correos_w = int(pd.to_numeric(df_cor_sem.get("cantidad_respuestas_agente", 0), errors="coerce").fillna(0).sum()) if not df_cor_sem.empty else 0
+    # Si aún hay correos históricos sin contador de respuestas cargado, usar como piso los cerrados/respondidos
+    if tot_resp_correos_w == 0 and tot_correos_cer_w > 0:
+        tot_resp_correos_w = tot_correos_cer_w
+
+    col_niv_chart, col_cor_card = st.columns([1.4, 1], gap="medium")
+
+    with col_niv_chart:
+        st.markdown("##### Cantidad de Chats Tratados por Nivel (L1, L2 y L3)")
+        fig_niveles_wbr = go.Figure(go.Bar(
+            x=df_niveles_cnt["Nivel"],
+            y=df_niveles_cnt["Cantidad"],
+            text=df_niveles_cnt["Texto"],
+            textposition="outside",
+            cliponaxis=False,
+            marker=dict(color=["#0284c7", "#38bdf8", "#f97316"], cornerradius=8),
+            textfont=dict(color="#f8fafc", size=12, family="Arial Black")
+        ))
+        fig_niveles_wbr.update_layout(
+            hovermode=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1", size=12),
+            xaxis=dict(gridcolor="#1e293b", title=None),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, showline=False, title=None),
+            margin=dict(t=35, b=20, l=20, r=20),
+            height=320
+        )
+        mostrar_grafico_wbr(fig_niveles_wbr, 'Chats tratados por nivel L1, L2 y L3', use_container_width=True)
+
+    with col_cor_card:
+        st.markdown("##### Gestión de Correos Electrónicos (Intercom)")
+        pct_cor_res = round((tot_correos_cer_w / tot_correos_rec_w * 100), 1) if tot_correos_rec_w > 0 else 0.0
+        st.markdown(f"""
+        <div class="metric-card" style="border-left: 4px solid #38bdf8; text-align: center; height: 155px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 12px;">
+            <div class="metric-card-title" style="justify-content: center;">HILOS CERRADOS / RECIBIDOS</div>
+            <div class="metric-card-value" style="font-size: 2.4rem; color: #38bdf8;">{tot_correos_cer_w:,} <span style="font-size: 1.1rem; color: #94a3b8;">/ {tot_correos_rec_w:,} recibidos</span></div>
+            <div class="metric-card-sub" style="color: #34d399; font-weight: 600;">{pct_cor_res}% tasa de cierre semanal</div>
+        </div>
+        <div class="metric-card" style="border-left: 4px solid #10b981; text-align: center; height: 145px; display: flex; flex-direction: column; justify-content: center;">
+            <div class="metric-card-title" style="justify-content: center;">TOTAL RESPUESTAS ENVIADAS</div>
+            <div class="metric-card-value" style="font-size: 2.2rem; color: #34d399;">{tot_resp_correos_w:,}</div>
+            <div class="metric-card-sub" style="color: #94a3b8;">Interacciones humanas por correo (cc soporte)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    
+    # =========================================================================
+    # SLIDE 8: OPERACIÓN EN HORARIO EXTENDIDO
+    # =========================================================================
+    st.markdown(f"#### 9. WBR | {semana_seleccionada_str} — Chats en Horario Extendido")
+
+    df_ext_ingresados = df_target[df_target["horario_evaluado"] == "extendido"].copy()
+    tot_ext = len(df_ext_ingresados)
+
+    dias_num = df_ext_ingresados["created_at_dt"].dt.dayofweek
+    tot_domingo = int((dias_num == 6).sum())
+    derivados_l3_ext = int((df_ext_ingresados["nivel"].fillna("").astype(str).str.contains("L3", case=False)).sum())
+
+    df_ext_cerrados_semana = df_wbr_base[
+        (df_wbr_base["es_cerrado"] == True) &
+        (df_wbr_base["horario_evaluado"] == "extendido") &
+        (df_wbr_base["close_iso_year"] == target_year) &
+        (df_wbr_base["close_iso_week"] == target_week)
+    ].copy()
+
+    tot_ext_cerrados = len(df_ext_cerrados_semana)
+    pct_ext_cerrados = round((tot_ext_cerrados / tot_ext * 100), 1) if tot_ext > 0 else 0.0
+
+    agentes_excluir_pie = [
+        "monica", "mónica", "monica (bot)", 
+        "sin asignar", "none", "nan", ""
+    ]
+
+    df_ext_cerrados_semana["agente_nom"] = df_ext_cerrados_semana["agente_asignado"].fillna("Sin asignar").astype(str).str.strip()
+    cerrados_ia_ext = int(df_ext_cerrados_semana["agente_nom"].str.lower().isin(["monica", "mónica", "monica (bot)"]).sum())
+    cerrados_hum_ext = tot_ext_cerrados - cerrados_ia_ext
+
+    col_ext_pie, col_ext_dias = st.columns([1, 1.15], gap="medium")
+
+    with col_ext_pie:
+        st.markdown(f"""
+        <div class="bims-wbr-ext-kpi" style="padding: 14px 20px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
+            <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS CERRADOS EN HORARIO EXTENDIDO</div>
+            <div style="color: #38bdf8; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext_cerrados}</div>
+            <div style="color: #cbd5e1; font-size: 0.78rem;"><b>{cerrados_hum_ext}</b> por humanos | <b>{cerrados_ia_ext}</b> por Mónica</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        df_ext_ag = df_ext_cerrados_semana[
+            ~df_ext_cerrados_semana["agente_nom"].str.lower().isin(agentes_excluir_pie)
+        ]["agente_nom"].value_counts().reset_index()
+        df_ext_ag.columns = ["Agente", "Cantidad"]
+
+        if not df_ext_ag.empty:
+            palette_pie_wbr = ["#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#94a3b8", "#cbd5e1"]
+
+            fig_pie_ext = go.Figure(data=[go.Pie(
+                labels=df_ext_ag["Agente"],
+                values=df_ext_ag["Cantidad"],
+                hole=0.45,
+                textinfo="label+value+percent",
+                texttemplate="<b>%{label}</b><br>%{value} (%{percent})",
+                textposition="outside",
+                insidetextorientation="horizontal",
+                marker=dict(colors=palette_pie_wbr, line=dict(color="#0b1120", width=2)),
+                showlegend=False
+            )])
+            
+            fig_pie_ext.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#cbd5e1", size=10, family="Segoe UI, sans-serif"),
+                margin=dict(t=25, b=25, l=40, r=40),
+                height=310
+            )
+            mostrar_grafico_wbr(fig_pie_ext, 'Cierres por agente en horario extendido', use_container_width=True)
+
+            st.markdown(f"""
+            <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; height: 60px; box-sizing: border-box; display: flex; align-items: center;">
+                <span><b style="color: #38bdf8;">Obs:</b> De los {tot_ext_cerrados} cierres en horario extendido, {cerrados_hum_ext} fueron gestionados por soporte humano.</span>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("Sin cierres por agentes humanos en horario extendido para esta semana.")
+
+    with col_ext_dias:
+        st.markdown(f"""
+        <div class="bims-wbr-ext-kpi" style="padding: 14px 20px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
+            <div style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;">CHATS INGRESADOS EN EXTENDIDO</div>
+            <div style="color: #34d399; font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 2px 0;">{tot_ext}</div>
+            <div style="color: #cbd5e1; font-size: 0.78rem;">Domingo ingresaron <b>{tot_domingo}</b> chats</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if not df_ext_ingresados.empty:
+            mapa_dias_nom = {
+                0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
+                4: "viernes", 5: "sábado", 6: "domingo"
+            }
+            df_ext_ingresados["dia_nombre"] = df_ext_ingresados["created_at_dt"].dt.dayofweek.map(mapa_dias_nom)
+            orden_dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+            
+            df_dias_ext_cnt = df_ext_ingresados["dia_nombre"].value_counts().reindex(orden_dias, fill_value=0).reset_index()
+            df_dias_ext_cnt.columns = ["Día", "Cantidad"]
+            tablas_wbr.append(("Ingresos por día en horario extendido", df_dias_ext_cnt.copy()))
+            df_dias_ext_cnt["texto_barra"] = df_dias_ext_cnt["Cantidad"].apply(lambda v: f"  {v}" if v > 0 else "")
+
+            fig_bar_dias_ext = go.Figure(go.Bar(
+                x=df_dias_ext_cnt["Cantidad"],
+                y=df_dias_ext_cnt["Día"],
+                orientation="h",
+                text=df_dias_ext_cnt["texto_barra"],
+                textposition="outside",
+                cliponaxis=False,
+                marker=dict(
+                    color="#0284c7",
+                    cornerradius=5
+                ),
+                textfont=dict(color="#f8fafc", size=11, family="Segoe UI, sans-serif")
+            ))
+
+            fig_bar_dias_ext.update_layout(
+                title=dict(
+                    text="<b>Q. de chats ingresados por Día</b>",
+                    font=dict(color="#f8fafc", size=13),
+                    x=0.02, y=0.96
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#94a3b8", size=11),
+                xaxis=dict(
+                    showgrid=False,
+                    showticklabels=False,
+                    zeroline=False
+                ),
+                yaxis=dict(
+                    autorange="reversed",
+                    tickfont=dict(color="#cbd5e1", size=11),
+                    showgrid=False
+                ),
+                margin=dict(t=35, b=10, l=10, r=25),
+                height=310
+            )
+            mostrar_grafico_wbr(fig_bar_dias_ext, 'Chats ingresados por día en horario extendido', use_container_width=True)
+
+            st.markdown(f"""
+            <div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 12px 16px; font-size: 0.82rem; line-height: 1.4; color: #cbd5e1; height: 60px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;">
+                <div>• <b>Volumen:</b> Ingresaron {tot_ext} chats en franjas nocturnas/fin de semana.</div>
+                <div>• <b>Derivaciones:</b> {derivados_l3_ext} derivados a Nivel 3.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("Sin registros diarios de ingreso en horario extendido.")
+
+    # Solo se envían indicadores agregados a Gemini: nunca conversaciones ni tickets.
+    metricas_wbr = {
+        "semana": semana_seleccionada_str,
+        "volumen": {
+            "chats_recibidos": int(tot_sem_rec), "chats_cerrados": int(tot_sem_cer),
+            "tasa_cierre_pct": float(pct_sem_cer),
+            "variacion_recibidos_vs_semana_anterior_pct": float(diff_rec_pct),
+            "variacion_cerrados_vs_semana_anterior_pct": float(diff_cer_pct),
+            "semana_anterior_recibidos": int(tot_prev_rec),
+            "semana_anterior_cerrados": int(tot_prev_cer)
+        },
+        "atencion_y_sla": {
+            "promedio_gestion_min": float(foco_gest), "sla_gestion_pct": float(foco_sla_gest),
+            "promedio_primera_respuesta_min": float(foco_1ra),
+            "sla_primera_respuesta_pct": float(foco_sla_1ra),
+            "variacion_gestion_vs_semana_anterior_pct": float(wow_gest_pct),
+            "variacion_primera_respuesta_vs_semana_anterior_pct": float(wow_1ra_pct)
+        },
+        "satisfaccion": {
+            "csat_pct": float(foco_csat),
+            "variacion_csat_puntos_vs_semana_anterior": float(diff_csat),
+            "encuestas": int(tot_evaluados), "positivas": int(tot_positivas),
+            "negativas": int(tot_negativas)
+        },
+        "friccion": {
+            "casos_negativos_l1": int(tot_l1_neg), "casos_negativos_l3": int(tot_l3_neg),
+            "motivos_l1_mas_frecuentes": (
+                df_l1_motivos.groupby("motivo_normalizado")["Cantidad"].sum()
+                .sort_values(ascending=False).head(5).to_dict()
+                if "df_l1_motivos" in locals() and not df_l1_motivos.empty else {}
+            ),
+            "motivos_recurrentes_top10": (
+                dict(zip(df_top_motivos["Motivo recurrente"], df_top_motivos["Conversaciones"]))
+                if not df_top_motivos.empty else {}
+            )
+        },
+        "niveles_y_correos": {
+            "chats_l1": int(df_niveles_cnt.loc[df_niveles_cnt["Nivel"]=="Nivel 1 (L1)","Cantidad"].sum()),
+            "chats_l2": int(df_niveles_cnt.loc[df_niveles_cnt["Nivel"]=="Nivel 2 (L2)","Cantidad"].sum()),
+            "chats_l3": int(df_niveles_cnt.loc[df_niveles_cnt["Nivel"]=="Nivel 3 (L3)","Cantidad"].sum()),
+            "correos_recibidos": int(tot_correos_rec_w),
+            "correos_cerrados": int(tot_correos_cer_w),
+            "tasa_cierre_correos_pct": float(pct_cor_res),
+            "respuestas_por_correo": int(tot_resp_correos_w)
+        },
+        "horario_extendido": {
+            "chats_ingresados": int(tot_ext), "chats_cerrados": int(tot_ext_cerrados),
+            "cierres_humanos": int(cerrados_hum_ext), "cierres_ia": int(cerrados_ia_ext),
+            "ingresos_domingo": int(tot_domingo)
+        }
+    }
+
+    clave_resumen = f"wbr_resumen_ia_{target_year}_{target_week}"
+    resumen_actual = st.session_state.get(clave_resumen, "")
+
+    # Los cuatro KPI se renderizan en el ancla superior, inmediatamente antes del resumen.
+    color_recibidos = "#34d399" if diff_rec_pct <= 0 else "#f87171"
+    color_csat = "#34d399" if diff_csat >= 0 else "#f87171"
+    color_primera = "#34d399" if wow_1ra_pct <= 0 else "#f87171"
+
+    with resumen_wbr_slot.container():
+        st.markdown(
+            f"""
+            <div class="wbr-highlights" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:4px 0 16px;">
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Chats recibidos</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{tot_sem_rec:,}</div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:{color_recibidos};">{diff_rec_pct:+.2f}%</span></div>
+                </div>
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">CSAT</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_csat}%</div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:{color_csat};">{diff_csat:+.2f} puntos</span></div>
+                </div>
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Primera respuesta</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_1ra:.2f} <span style="font-size:.95rem;font-weight:600;">min</span></div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:{color_primera};">{wow_1ra_pct:+.2f}%</span></div>
+                </div>
+                <div style="background:linear-gradient(145deg,#111c30,#0d1728);border:1px solid #26364d;border-radius:12px;padding:15px 16px;min-height:108px;box-shadow:0 5px 16px rgba(0,0,0,.12);">
+                    <div style="font-size:.70rem;font-weight:650;letter-spacing:.65px;color:#94a3b8;text-transform:uppercase;">Contactos por empresa</div>
+                    <div style="font-size:1.75rem;line-height:1.25;font-weight:750;color:#f8fafc;margin:7px 0 5px;">{foco_ratio:.2f}</div>
+                    <div style="font-size:.76rem;color:#94a3b8;">Vs. semana anterior <span style="font-weight:650;color:#cbd5e1;">{diff_ratio:+.2f} conversaciones</span></div>
+                </div>
+            </div>
+            <style>
+            @media (max-width: 900px) {{
+                .wbr-highlights {{ grid-template-columns:repeat(2,minmax(0,1fr)) !important; }}
+            }}
+            @media (max-width: 420px) {{
+                .wbr-highlights {{ grid-template-columns:1fr !important; }}
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+        with st.container(border=True):
+            st.markdown(
+                f"<div style='font-size:1.05rem;font-weight:650;color:#f8fafc;"
+                f"letter-spacing:-.2px;margin-bottom:12px'>Resumen ejecutivo – "
+                f"{semana_seleccionada_str}</div>",
+                unsafe_allow_html=True
+            )
+
+            # La semana en curso es solo de seguimiento. Gemini y el PDF se reservan
+            # para semanas cerradas y se conservan para evitar regeneraciones.
+            if not semana_en_curso and not resumen_actual:
+                try:
+                    with st.spinner("Generando resumen ejecutivo..."):
+                        resumen_actual = obtener_resumen_wbr_gemini(
+                            metricas_wbr, semana_seleccionada_str
+                        )
+                    st.session_state[clave_resumen] = resumen_actual
+                except Exception as error_ia:
+                    st.error(f"No se pudo generar el resumen: {error_ia}")
+
+            if resumen_actual:
+                # Evita repetir el encabezado general si quedó guardado en un resumen
+                # generado anteriormente; se conserva el contenido y sus secciones.
+                lineas_resumen = str(resumen_actual).strip().splitlines()
+                if lineas_resumen and lineas_resumen[0].strip().lstrip("#* ").upper().startswith("RESUMEN EJECUTIVO"):
+                    lineas_resumen = lineas_resumen[1:]
+                    while lineas_resumen and not lineas_resumen[0].strip():
+                        lineas_resumen.pop(0)
+                resumen_actual = "\n".join(lineas_resumen).strip()
+
+                # Separar visualmente las secciones del resumen para facilitar
+                # la lectura sin alterar el texto generado ni sus indicadores.
+                secciones_resumen = re.split(
+                    r"(?i)\b(PANORAMA GENERAL|RESULTADOS POSITIVOS|PUNTOS DE ATENCIÓN|PRIORIDADES SUGERIDAS)\b",
+                    resumen_actual
+                )
+                if len(secciones_resumen) > 1:
+                    for i in range(1, len(secciones_resumen), 2):
+                        titulo_seccion = secciones_resumen[i].strip().upper()
+                        texto_seccion = secciones_resumen[i + 1].strip() if i + 1 < len(secciones_resumen) else ""
+                        if not texto_seccion:
+                            continue
+                        color_seccion = {
+                            "PANORAMA GENERAL": "#60A5FA",
+                            "RESULTADOS POSITIVOS": "#34D399",
+                            "PUNTOS DE ATENCIÓN": "#FBBF24",
+                            "PRIORIDADES SUGERIDAS": "#A78BFA",
+                        }.get(titulo_seccion, "#94A3B8")
+                        st.markdown(
+                            f"<div style='font-size:.70rem;font-weight:750;letter-spacing:.8px;"
+                            f"color:{color_seccion};text-transform:uppercase;margin:10px 0 3px;'>"
+                            f"{titulo_seccion}</div>",
+                            unsafe_allow_html=True
+                        )
+                        st.markdown(texto_seccion)
+                        if i + 2 < len(secciones_resumen):
+                            st.markdown(
+                                "<div style='height:1px;background:rgba(148,163,184,.16);margin:9px 0 5px;'></div>",
+                                unsafe_allow_html=True
+                            )
+                else:
+                    st.markdown(resumen_actual)
+            elif not semana_en_curso:
+                st.markdown(
+                    "<div style='color:#94a3b8;font-size:.86rem;padding:3px 0 1px'>"
+                    "El resumen estará disponible cuando se complete su generación.</div>",
+                    unsafe_allow_html=True
+                )
+
+            # El PDF se construye únicamente cuando el usuario pulsa el botón.
+            # Streamlit ejecuta esta función al solicitar la descarga.
+            if semana_en_curso:
+                st.info(
+                    "El resumen ejecutivo y la descarga del PDF estarán disponibles "
+                    "una vez cerrada esta semana."
+                )
+            elif resumen_actual:
+                def generar_pdf_bajo_demanda():
+                    # El callable se ejecuta al solicitar la descarga; el spinner
+                    # informa del proceso sin provocar un rerun del fragmento WBR.
+                    with st.spinner("Generando el PDF… Esto puede tardar unos segundos."):
+                        return generar_pdf_wbr(
+                        semana_seleccionada_str,
+                        {
+                            "Chats recibidos": f"{tot_sem_rec:,}",
+                            "Chats cerrados": f"{tot_sem_cer:,} ({pct_sem_cer}%)",
+                            "Variación de recibidos": f"{diff_rec_pct:+.2f}% vs. semana anterior",
+                            "Variación de cerrados": f"{diff_cer_pct:+.2f}% vs. semana anterior",
+                            "Recibidos en las últimas cinco semanas": f"{tot_5w_recibidos:,}",
+                            "Cerrados en las últimas cinco semanas": f"{tot_5w_cerrados:,} ({pct_5w_cerrados}%)",
+                            "Cierres con etiqueta Sin Respuesta": f"{sin_resp_count}",
+                            "Cierres por IA": f"{cnt_cerrados_ia} ({pct_ia}%)",
+                            "Cierres humanos": f"{cnt_cerrados_humanos}",
+                            "Promedio de cierres por agente": f"{prom_por_agente}",
+                            "Cuentas / empresas atendidas": f"{cuentas_unicas} / {empresas_unicas}",
+                            "Promedio de gestión": f"{foco_gest} min",
+                            "SLA de gestión": f"{foco_sla_gest}%",
+                            "Primera respuesta": f"{foco_1ra} min",
+                            "SLA primera respuesta": f"{foco_sla_1ra}%",
+                            "CSAT": f"{foco_csat}% ({diff_csat:+.2f} puntos)",
+                            "Encuestas positivas / negativas": f"{tot_positivas} / {tot_negativas}",
+                            "Encuestas recibidas / sin calificar": f"{tot_evaluados} / {tot_sin_calificar}",
+                            "Calificaciones 5★ / 4★ / 3★ / 2★ / 1★": f"{cnt_5} / {cnt_4} / {cnt_3} / {cnt_2} / {cnt_1}",
+                            "Casos negativos L1 / L3": f"{tot_l1_neg} ({pct_l1_del_total}%) / {tot_l3_neg} ({pct_l3_sobre_total_neg}%)",
+                            "Contactos promedio por empresa": f"{foco_ratio:.2f}",
+                            "Correos recibidos / cerrados": f"{tot_correos_rec_w} / {tot_correos_cer_w} ({pct_cor_res}%)",
+                            "Respuestas enviadas por correo": f"{tot_resp_correos_w}",
+                            "Chats en horario extendido": f"{tot_ext} ingresados · {tot_ext_cerrados} cerrados ({pct_ext_cerrados}%)",
+                            "Cierres humanos / IA en horario extendido": f"{cerrados_hum_ext} / {cerrados_ia_ext}",
+                            "Ingresos en domingo": f"{tot_domingo}"
+                        },
+                        resumen_actual, graficos_wbr, tablas_wbr
+                    )
+
+                st.download_button(
+                    "Generar y descargar PDF",
+                    data=generar_pdf_bajo_demanda,
+                    file_name=f"WBR_{target_year}_S{target_week:02d}.pdf",
+                    mime="application/pdf",
+                    key=f"download_pdf_wbr_{target_year}_{target_week}",
+                    type="primary",
+                    use_container_width=True,
+                    on_click="ignore"
+                )
+
+# Llamada limpia en la pestaña
+if tab_l2 is not None:
+    with tab_l2:
+        f_desde_l2, f_hasta_l2 = pd.to_datetime(fecha_desde).date(), pd.to_datetime(fecha_hasta).date()
+        renderizar_panel_nivel_2(df_all, df_correos_all, f_desde_l2, f_hasta_l2)
+if tab_wbr is not None:
+    with tab_wbr:
+        renderizar_informe_wbr(df_all, df_correos_all)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def obtener_total_registros_db():
+    try:
+        res_count = supabase.table("conversaciones").select("id", count="exact").limit(1).execute()
+        return res_count.count if res_count.count is not None else 0
+    except Exception:
+        return 0
+
+# Procesar invalidaciones pendientes en el hilo principal, en cualquier sesión activa.
+if GLOBAL_SYNC_STATE.get("cache_invalidation_pending", False):
+    invalidar_cache_datos_conversaciones()
+    obtener_alertas_compartidas.clear()
+    obtener_cargas_agentes_db.clear()
+    obtener_total_registros_db.clear()
+    GLOBAL_SYNC_STATE["cache_invalidation_pending"] = False
+
+@st.fragment
+def renderizar_panel_admin(df_base_motivos=None):
+    st.markdown("### Centro de Administración")
+    st.caption("Gestiona el estado del sistema, los datos, los accesos y las reglas operativas desde secciones independientes.")
+
+    admin_tabs = st.tabs([
+        "🟢 Sistema y WhatsApp",
+        "🗄️ Datos y sincronización",
+        "⚙️ Configuración",
+        "👥 Usuarios y agentes",
+        "💬 CSAT y notificaciones",
+        "📅 Calendario",
+        "🧩 Versionado",
+        "🔎 Motivos recurrentes",
+        "📋 Logs y notificaciones",
+    ])
+
+    with admin_tabs[0]:
+        # ==========================================
+        # CONTROL EXCLUSIVO DE SALUD Y REINICIO DEL BOT
+        # ==========================================
+        with st.container(border=True):
+            st.markdown("#### Estado y Control de Evolución API (WhatsApp Bot)")
+            st.caption("Monitoreo del servicio de notificaciones y reinicio forzado en Render.")
+
+            # Consulta de salud y estado de pausa del bot
+            estado_bot = "CRITICAL"
+            wa_state = "disconnected"
+            bot_pausado = False
+
+            try:
+                res_cfg_bot = supabase.table("config_notificaciones").select("bot_activo").eq("id", 1).limit(1).execute()
+                if res_cfg_bot.data:
+                    bot_pausado = not bool(res_cfg_bot.data[0].get("bot_activo", True))
+            except Exception:
+                pass
+
+            try:
+                res_health = requests.get(f"{NOTIFICADOR_API_URL.rstrip('/')}/health-status", timeout=4)
+                if res_health.status_code == 200:
+                    data_h = res_health.json()
+                    estado_bot = data_h.get("status_general", "CRITICAL")
+                    wa_state = data_h.get("whatsapp_state", "disconnected")
+            except Exception:
+                estado_bot = "CRITICAL"
+                wa_state = "offline"
+
+            st.markdown("""
+            <style>
+                .st-key-btn_pausar_bot_admin button,
+                .st-key-btn_reanudar_bot_admin button,
+                .st-key-btn_reiniciar_bot_admin button {
+                    width: auto !important;
+                    min-width: 126px !important;
+                    height: 38px !important;
+                    padding: 0.35rem 0.8rem !important;
+                    border-radius: 9px !important;
+                    font-size: 0.82rem !important;
+                    font-weight: 600 !important;
+                    box-shadow: none !important;
+                    white-space: nowrap !important;
+                    transition: all 0.18s ease !important;
+                }
+                .st-key-btn_pausar_bot_admin button {
+                    color: #fbbf24 !important;
+                    border: 1px solid rgba(251, 191, 36, 0.38) !important;
+                    background: rgba(251, 191, 36, 0.08) !important;
+                }
+                .st-key-btn_pausar_bot_admin button:hover {
+                    background: rgba(251, 191, 36, 0.16) !important;
+                    border-color: #fbbf24 !important;
+                }
+                .st-key-btn_reanudar_bot_admin button {
+                    color: #34d399 !important;
+                    border: 1px solid rgba(52, 211, 153, 0.38) !important;
+                    background: rgba(52, 211, 153, 0.08) !important;
+                }
+                .st-key-btn_reanudar_bot_admin button:hover {
+                    background: rgba(52, 211, 153, 0.16) !important;
+                    border-color: #34d399 !important;
+                }
+                .st-key-btn_reiniciar_bot_admin button {
+                    color: #7dd3fc !important;
+                    border: 1px solid rgba(56, 189, 248, 0.38) !important;
+                    background: rgba(56, 189, 248, 0.08) !important;
+                }
+                .st-key-btn_reiniciar_bot_admin button:hover {
+                    background: rgba(56, 189, 248, 0.16) !important;
+                    border-color: #38bdf8 !important;
+                }
+            </style>
+            """, unsafe_allow_html=True)
+
+            col_status1, col_status2, col_status3 = st.columns([2.4, 1, 1], vertical_alignment="center")
+
+            with col_status1:
+                if bot_pausado:
+                    color_estado = "#fbbf24"
+                    icono_estado = icono_estado_svg("pausado", 22)
+                    texto_estado = "Pausado manualmente"
+                    detalle_estado = "Alertas y envíos detenidos por administrador"
+                elif estado_bot == "OK":
+                    color_estado = "#34d399"
+                    icono_estado = icono_estado_svg("disponible", 22)
+                    texto_estado = f"Operativo ({wa_state})"
+                    detalle_estado = "Sesión activa y conectada"
+                else:
+                    color_estado = "#f87171"
+                    icono_estado = icono_estado_svg("desconectado", 22)
+                    texto_estado = f"Desconectado ({wa_state})"
+                    detalle_estado = "El Auto-Healing intentará reconectar automáticamente"
+
+                st.markdown(f"""
+                <div style="padding: 8px 4px 8px 2px; display: flex; flex-direction: column; gap: 4px;">
+                    <div style="font-size: 0.76rem; color: #94a3b8; font-weight: 600; letter-spacing: 0.03em;">ESTADO DEL BOT WHATSAPP</div>
+                    <div style="display: flex; align-items: center; gap: 9px; color: {color_estado}; font-size: 1.08rem; font-weight: 700;">
+                        {icono_estado} <span>{texto_estado}</span>
+                    </div>
+                    <div style="font-size: 0.78rem; color: #94a3b8;">{detalle_estado}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_status2:
+                if bot_pausado:
+                    if st.button("▶ Reanudar", type="secondary", key="btn_reanudar_bot_admin", help="Reactivar el envío de alertas y mensajes"):
+                        supabase.table("config_notificaciones").update({"bot_activo": True}).eq("id", 1).execute()
+                        # La consulta de salud ya no utiliza caché; no requiere clear().
+                        st.rerun(scope="fragment")
+                else:
+                    if st.button("Ⅱ Pausar", type="secondary", key="btn_pausar_bot_admin", help="Detener temporalmente los envíos del bot"):
+                        supabase.table("config_notificaciones").update({"bot_activo": False}).eq("id", 1).execute()
+                        # La consulta de salud ya no utiliza caché; no requiere clear().
+                        st.rerun(scope="fragment")
+
+            with col_status3:
+                if st.button("↻ Reiniciar", type="secondary", key="btn_reiniciar_bot_admin", help="Enviar una orden de reinicio a Render"):
+                    with st.spinner("Enviando orden de reinicio a Render..."):
+                        try:
+                            headers = {"Authorization": f"Bearer {CRON_SECRET_TOKEN}"}
+                            res_req = requests.post(f"{NOTIFICADOR_API_URL.rstrip('/')}/reiniciar-servicio", headers=headers, timeout=10)
+                            res_json = res_req.json()
+
+                            if res_json.get("status") == "success":
+                                st.success("Orden enviada exitosamente. Render reiniciará la instancia en segundos.")
+                            else:
+                                st.error(f"Error: {res_json.get('message')}")
+                        except Exception as ex_r:
+                            st.error(f"Error al comunicar con la API: {ex_r}")
+
+
+    with admin_tabs[1]:
+        with st.container(border=True):
+            st.markdown("#### Sincronización de conversaciones")
+            st.caption("El proceso se ejecuta en un hilo paralelo libre de desconexión.")
+
+            total_registros_db = obtener_total_registros_db()
+
+            c_meta1, c_meta2 = st.columns([1.35, 1], gap="large", vertical_alignment="center")
+            with c_meta1:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #10b981; padding: 14px 18px;">
+                    <div class="metric-card-title">CONVERSACIONES EN SUPABASE</div>
+                    <div class="metric-card-value" style="color: #34d399;">{total_registros_db:,}</div>
+                    <div class="metric-card-sub">Total de registros almacenados</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with c_meta2:
+                st.markdown("**Estado del contador**")
+                st.caption("Consulta el total actualizado en la base de datos.")
+                if st.button("↻ Actualizar contador", type="secondary", key="btn_refresh_counter"):
+                    obtener_total_registros_db.clear()
+                    st.rerun()
+
+            sync_info = GLOBAL_SYNC_STATE
+
+            if sync_info["status"] == "running":
+                st.info(f"⏳ **Sincronización activa en segundo plano.** Registros procesados y guardados: `{sync_info['processed']}`.")
+                time_lib.sleep(2)
+                st.rerun()
+            elif sync_info["status"] == "completed":
+                st.success(f"¡Sincronización finalizada con éxito! {sync_info['log']}")
+                if st.button("Limpiar confirmación", type="secondary", key="btn_limpiar_sync_ok"):
+                    GLOBAL_SYNC_STATE["status"] = "idle"
+                    st.rerun()
+            elif sync_info["status"] == "error":
+                st.error(f"Error en la sincronización: {sync_info['error']}")
+                if st.button("Limpiar error y reintentar", type="secondary", key="btn_limpiar_sync_error"):
+                    GLOBAL_SYNC_STATE["status"] = "idle"
+                    st.rerun()
+
+            st.divider()
+            st.markdown("#### Parámetros de sincronización")
+            st.caption("Selecciona el período que deseas actualizar y el criterio de filtrado.")
+
+            col_f1, col_f2 = st.columns(2, gap="large")
+            with col_f1:
+                f_sync_desde = st.date_input("Fecha inicial", value=date(2026, 1, 1), key="input_sync_desde")
+            with col_f2:
+                f_sync_hasta = st.date_input("Fecha final", value=date(2026, 1, 31), key="input_sync_hasta")
+
+            chk_por_creacion = st.checkbox(
+                "Limitar a conversaciones creadas dentro del rango",
+                value=False,
+                key="chk_sync_por_creacion",
+                help="Al activarlo, filtra por created_at. Si se desactiva, la sincronización considera updated_at."
+            )
+
+            btn_bloqueado = (sync_info["status"] == "running")
+
+            _, col_btn_sync = st.columns([1.5, 1], gap="medium")
+            with col_btn_sync:
+                if st.button("▶ Iniciar sincronización", type="primary", use_container_width=True, key="btn_iniciar_rango", disabled=btn_bloqueado):
+                    if SYNC_AVAILABLE:
+                        GLOBAL_SYNC_STATE["status"] = "running"
+                        GLOBAL_SYNC_STATE["processed"] = 0
+                        GLOBAL_SYNC_STATE["log"] = ""
+                        GLOBAL_SYNC_STATE["error"] = None
+                        def tarea_sync_paralela(f_inicio, f_final, solo_creacion):
+                            try:
+                                def cb_progreso(proc, tot):
+                                    GLOBAL_SYNC_STATE["processed"] = proc
+
+                                tot_f = sincronizar_intercom(
+                                    fecha_desde=f_inicio,
+                                    fecha_hasta=f_final,
+                                    progress_callback=cb_progreso,
+                                    por_creacion=solo_creacion
+                                )
+                                # Solo invalidar si la sincronización realmente procesó registros.
+                                # El hilo marca la invalidación; Streamlit la ejecutará en el hilo principal.
+                                if tot_f > 0:
+                                    GLOBAL_SYNC_STATE["cache_invalidation_pending"] = True
+                                registrar_evento_dashboard(
+                                    "info", "intercom_sync_completed",
+                                    "Finalizó correctamente la sincronización manual de Intercom.",
+                                    {
+                                        "records_processed": int(tot_f),
+                                        "date_from": str(f_inicio),
+                                        "date_to": str(f_final),
+                                        "filter": "created_at" if solo_creacion else "updated_at"
+                                    },
+                                    category="intercom"
+                                )
+                                GLOBAL_SYNC_STATE["status"] = "completed"
+                                tz_py = timezone(timedelta(hours=-3))
+                                hora_actual_py = datetime.now(tz_py).strftime('%H:%M:%S')
+                                criterio_txt = "created_at" if solo_creacion else "updated_at"
+
+                                GLOBAL_SYNC_STATE["log"] = f"Se actualizaron {tot_f} registros ({criterio_txt}) para el rango {f_inicio} a {f_final} a las {hora_actual_py} hs (PY)."
+                            except Exception as ex_thread:
+                                registrar_evento_dashboard(
+                                    "error", "intercom_sync_failed",
+                                    "Falló la sincronización manual de Intercom.",
+                                    {
+                                        "error": str(ex_thread),
+                                        "date_from": str(f_inicio),
+                                        "date_to": str(f_final)
+                                    },
+                                    category="intercom"
+                                )
+                                GLOBAL_SYNC_STATE["status"] = "error"
+                                GLOBAL_SYNC_STATE["error"] = str(ex_thread)
+
+                        registrar_evento_dashboard(
+                            "info", "intercom_sync_started",
+                            "Se inició una sincronización manual de Intercom.",
+                            {
+                                "date_from": str(f_sync_desde),
+                                "date_to": str(f_sync_hasta),
+                                "filter": "created_at" if chk_por_creacion else "updated_at"
+                            },
+                            category="intercom"
+                        )
+                        hilo_sync = threading.Thread(
+                            target=tarea_sync_paralela,
+                            args=(f_sync_desde, f_sync_hasta, chk_por_creacion),
+                            daemon=True
+                        )
+                        hilo_sync.start()
+                        st.rerun()
+                    else:
+                        st.error("No se encontró el módulo `sync_intercom.py` en el proyecto.")
+
+    with admin_tabs[2]:
+        with st.container(border=True):
+            st.markdown("#### Parámetros generales del dashboard")
+            st.caption("Ajusta los tiempos de refresco en vivo, alertas y límites objetivo para los SLA de atención.")
+
+            st.markdown("**Actualización automática**")
+            cfg_auto = st.checkbox(
+                "Activar actualización automática",
+                value=st.session_state["auto_refresh"]
+            )
+
+            st.markdown("**Objetivos y frecuencia**")
+            col_cfg1, col_cfg2, col_cfg3 = st.columns(3, gap="large", vertical_alignment="top")
+            with col_cfg1:
+                cfg_interval = st.number_input(
+                    "Intervalo de actualización (segundos)",
+                    min_value=3,
+                    max_value=60,
+                    value=st.session_state["refresh_interval"]
+                )
+            with col_cfg2:
+                cfg_sla_1ra = st.number_input(
+                    "Primera respuesta (minutos)",
+                    min_value=0.5,
+                    max_value=30.0,
+                    value=float(st.session_state["sla_1ra_th"]),
+                    step=0.5
+                )
+            with col_cfg3:
+                cfg_sla_gest = st.number_input(
+                    "Tiempo de gestión (minutos)",
+                    min_value=5.0,
+                    max_value=480.0,
+                    value=float(st.session_state["sla_gest_th"]),
+                    step=5.0
+                )
+
+            st.divider()
+            st.markdown("**Alerta de chat nuevo**")
+            col_alerta, col_guardar = st.columns([2, 1], gap="large", vertical_alignment="bottom")
+            with col_alerta:
+                cfg_alerta_nuevo = st.number_input(
+                    "Alertar tras (minutos sin responder)",
+                    min_value=0.5,
+                    max_value=60.0,
+                    value=float(st.session_state["alerta_nuevo_th"]),
+                    step=0.5
+                )
+            with col_guardar:
+                if st.button("Guardar configuración", type="primary", use_container_width=True):
+                    st.session_state["auto_refresh"] = cfg_auto
+                    st.session_state["refresh_interval"] = cfg_interval
+                    st.session_state["sla_1ra_th"] = cfg_sla_1ra
+                    st.session_state["sla_gest_th"] = cfg_sla_gest
+                    st.session_state["alerta_nuevo_th"] = cfg_alerta_nuevo
+                    st.success("Configuración actualizada correctamente.")
+                    st.rerun()
+
+    with admin_tabs[3]:
+        with st.container(border=True):
+            st.markdown("#### Usuarios autorizados")
+            st.caption("Administra los correos y contraseñas que tienen permitido acceder a este Dashboard.")
+
+            with st.expander("Crear Nuevo Usuario Autorizado", expanded=False):
+                with st.form("form_nuevo_usuario"):
+                    col_u1, col_u2 = st.columns(2, gap="large")
+                    n_nombre = col_u1.text_input("Nombre del usuario")
+                    n_email = col_u2.text_input("Correo electrónico")
+                    n_pass = st.text_input("Contraseña de acceso", type="password")
+                    btn_crear_u = st.form_submit_button("Guardar Usuario", use_container_width=True)
+
+                    if btn_crear_u:
+                        if n_email.strip() and n_pass.strip() and n_nombre.strip():
+                            try:
+                                supabase.table("usuarios_autorizados").insert({
+                                    "email": n_email.strip().lower(),
+                                    "password": n_pass.strip(),
+                                    "nombre": n_nombre.strip(),
+                                    "activo": True
+                                }).execute()
+                                st.success(f"Usuario {n_email} creado exitosamente.")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"Error al registrar usuario: {str(ex)}")
+                        else:
+                            st.warning("Completa todos los campos obligatorios.")
+
+            try:
+                res_users = supabase.table("usuarios_autorizados").select("*").order("created_at", desc=True).execute()
+                df_users = pd.DataFrame(res_users.data)
+
+                if not df_users.empty:
+                    st.markdown("<b>Listado de Usuarios Registrados:</b>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df_users[["id", "nombre", "email", "activo", "created_at"]],
+                        column_config={
+                            "id": "ID",
+                            "nombre": "Nombre",
+                            "email": "Correo",
+                                "activo": st.column_config.CheckboxColumn("Acceso Activo"),
+                            "created_at": "Fecha Alta"
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    col_edit1, col_edit2 = st.columns(2)
+                    id_toggle = col_edit1.number_input("ID de usuario a activar/desactivar:", min_value=1, step=1)
+                    if col_edit2.button("Alternar Estado (Activo/Inactivo)", use_container_width=True):
+                        usr_actual = df_users[df_users["id"] == id_toggle]
+                        if not usr_actual.empty:
+                            nuevo_estado = not bool(usr_actual.iloc[0]["activo"])
+                            supabase.table("usuarios_autorizados").update({"activo": nuevo_estado}).eq("id", id_toggle).execute()
+                            st.success(f"Estado del usuario ID {id_toggle} actualizado.")
+                            st.rerun()
+                        else:
+                            st.error("ID de usuario no encontrado.")
+                else:
+                    st.info("No hay usuarios registrados aún en la base de datos.")
+            except Exception as e:
+                st.error(f"No se pudo cargar la tabla de usuarios: {str(e)}")
+
+        # ASIGNACIÓN DE TELÉFONOS A AGENTES PARA MENCIONES
+        with st.container(border=True):
+            st.markdown("#### Teléfonos de WhatsApp de los agentes")
+            st.caption("Asigna el número de WhatsApp a cada agente para que el bot lo arrobe (@) en las alertas grupales.")
+
+            try:
+                res_usrs = supabase.table("usuarios_autorizados").select("id, nombre, email, telefono_whatsapp").order("nombre").execute()
+                df_usrs = pd.DataFrame(res_usrs.data or [])
+
+                if not df_usrs.empty:
+                    with st.form("form_telefonos_agentes"):
+                        edited_usrs = st.data_editor(
+                            df_usrs,
+                            column_config={
+                                "id": None,
+                                "nombre": st.column_config.TextColumn("Agente / Usuario", disabled=True),
+                                "email": st.column_config.TextColumn("Correo", disabled=True),
+                                "telefono_whatsapp": st.column_config.TextColumn("Teléfono WhatsApp (ej: 595981xxxxxx)", required=True)
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="editor_telefonos_agentes"
+                        )
+                        btn_save_tels = st.form_submit_button("Guardar Teléfonos de Agentes", use_container_width=True)
+
+                        if btn_save_tels:
+                            cambios = st.session_state.get("editor_telefonos_agentes", {}).get("edited_rows", {})
+                            if cambios:
+                                for fila_idx, datos_ed in cambios.items():
+                                    if "telefono_whatsapp" in datos_ed:
+                                        u_id = df_usrs.iloc[int(fila_idx)]["id"]
+                                        supabase.table("usuarios_autorizados")\
+                                            .update({"telefono_whatsapp": str(datos_ed["telefono_whatsapp"]).strip()})\
+                                            .eq("id", u_id)\
+                                            .execute()
+                                st.success("Teléfonos de agentes actualizados.")
+                                st.rerun()
+                else:
+                    st.info("No hay usuarios registrados aún.")
+            except Exception as ex_u:
+                st.error(f"Error al cargar tabla de teléfonos: {ex_u}")
+
+    with admin_tabs[4]:
+        # GESTIÓN DINÁMICA DE MOTIVOS CSAT
+        with st.container(border=True):
+            st.markdown("#### Motivos de clasificación CSAT")
+            st.caption("Crea y desactiva los motivos que se muestran al categorizar chats negativos.")
+
+            # Formulario para agregar nuevo motivo
+            with st.form("form_nuevo_motivo_csat"):
+                col_m1, col_m2 = st.columns([3, 1])
+                nuevo_motivo_input = col_m1.text_input("Nuevo Motivo:")
+                btn_guardar_motivo = col_m2.form_submit_button("Agregar Motivo", use_container_width=True)
+
+                if btn_guardar_motivo:
+                    txt_motivo = nuevo_motivo_input.strip()
+                    if txt_motivo:
+                        try:
+                            supabase.table("motivos_csat").insert({"nombre": txt_motivo, "activo": True}).execute()
+                            st.success(f"Motivo '{txt_motivo}' creado con éxito.")
+                            obtener_lista_motivos_csat.clear()
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error o motivo duplicado: {ex}")
+                    else:
+                        st.warning("Escribe un nombre para el motivo.")
+
+            # Listado de motivos con opción de Cambiar Estado
+            try:
+                res_mot = supabase.table("motivos_csat").select("*").order("id", desc=False).execute()
+                df_motivos = pd.DataFrame(res_mot.data or [])
+
+                if not df_motivos.empty:
+                    st.markdown("<b>Motivos Configurados Actualmente:</b>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df_motivos[["id", "nombre", "activo"]],
+                        column_config={
+                            "id": "ID",
+                            "nombre": "Nombre del Motivo",
+                            "activo": st.column_config.CheckboxColumn("Estado Activo")
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    col_dis1, col_dis2 = st.columns([2, 1])
+
+                    motivos_dict = {f"ID {r['id']}: {r['nombre']} ({'Activo' if r['activo'] else 'Inactivo'})": r['id'] for _, r in df_motivos.iterrows()}
+                    motivo_seleccionado_str = col_dis1.selectbox("Seleccionar Motivo a Cambiar Estado:", options=list(motivos_dict.keys()))
+
+                    if col_dis2.button("Alternar Estado (Activar/Deshabilitar)", use_container_width=True):
+                        id_motivo_sel = motivos_dict[motivo_seleccionado_str]
+                        motivo_row = df_motivos[df_motivos["id"] == id_motivo_sel].iloc[0]
+                        nuevo_estado = not bool(motivo_row["activo"])
+
+                        try:
+                            supabase.table("motivos_csat")\
+                                .update({"activo": nuevo_estado})\
+                                .eq("id", id_motivo_sel)\
+                                .execute()
+
+                            st.success(f"El motivo ID {id_motivo_sel} ahora está {'Activo' if nuevo_estado else 'Deshabilitado'}.")
+                            obtener_lista_motivos_csat.clear()
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error al actualizar motivo: {ex}")
+                else:
+                    st.info("No hay motivos registrados en la base de datos.")
+            except Exception as e:
+                st.error(f"No se pudieron cargar los motivos: {e}")
+
+        # GESTIÓN DE CONFIGURACIÓN DE NOTIFICACIONES
+        with st.container(border=True):
+            st.markdown("#### Notificaciones y alertas")
+            st.caption("Ajusta los umbrales de tiempo, correos y números sin modificar el código fuente.")
+
+            try:
+                res_cfg = supabase.table("config_notificaciones").select("*").eq("id", 1).execute()
+                cfg_data = res_cfg.data[0] if res_cfg.data else {}
+            except Exception:
+                cfg_data = {}
+
+            try:
+                hora_val = datetime.strptime(str(cfg_data.get("hora_reporte_diario", "18:00:00")), "%H:%M:%S").time()
+            except Exception:
+                hora_val = time(18, 0)
+
+            with st.form("form_config_notificaciones"):
+                st.markdown("**Reporte diario por correo**")
+                col_e1, col_e2 = st.columns(2)
+                v_hora_rep = col_e1.time_input("Hora de Envío (PY):", value=hora_val)
+                v_email_dest = col_e2.text_input("Correo Destinatario:", value=cfg_data.get("email_destino_reporte", "admin@empresa.com"))
+
+                st.markdown("---")
+                st.markdown("**Alerta individual de chat sin responder**")
+                col_w1, col_w2 = st.columns(2)
+                v_min_indiv = col_w1.number_input("Disparar alerta tras (Minutos sin respuesta):", min_value=1.0, max_value=60.0, value=float(cfg_data.get("minutos_alerta_individual", 5.0)), step=1.0)
+                v_tel_indiv = col_w2.text_input("Tu Número de WhatsApp (ej: 595981xxxxxx):", value=cfg_data.get("telefono_alerta_individual", ""))
+
+                st.markdown("---")
+                st.markdown("**Alerta grupal por antigüedad de chats**")
+                col_g1, col_g2 = st.columns(2)
+                v_hs_grupo = col_g1.number_input("Disparar si el chat supera (Horas abierto):", min_value=1.0, max_value=72.0, value=float(cfg_data.get("horas_alerta_grupo", 5.0)), step=0.5)
+                v_jid_grupo = col_g2.text_input("ID/JID del Grupo de WhatsApp (ej: 120363... @g.us):", value=cfg_data.get("jid_grupo_whatsapp", ""))
+
+                btn_guardar_notif = st.form_submit_button("Guardar Parámetros de Notificación", use_container_width=True)
+
+                if btn_guardar_notif:
+                    try:
+                        supabase.table("config_notificaciones").upsert({
+                            "id": 1,
+                            "hora_reporte_diario": v_hora_rep.strftime("%H:%M:%S"),
+                            "email_destino_reporte": v_email_dest.strip(),
+                            "minutos_alerta_individual": v_min_indiv,
+                            "telefono_alerta_individual": v_tel_indiv.strip(),
+                            "horas_alerta_grupo": v_hs_grupo,
+                            "jid_grupo_whatsapp": v_jid_grupo.strip(),
+                            "updated_at": datetime.now(timezone(timedelta(hours=-3))).isoformat()
+                        }).execute()
+                        st.success("Configuración de notificaciones guardada en Supabase.")
+                        st.rerun()
+                    except Exception as ex_g:
+                        st.error(f"Error al guardar configuración: {ex_g}")
+
+    with admin_tabs[5]:
+        # GESTIÓN DINÁMICA DE FERIADOS
+        with st.container(border=True):
+            st.markdown("#### Calendario de Feriados Oficiales & Móviles")
+            st.caption("Configura feriados trasladados o extraordinarios. Se sincroniza con el bot y se mantiene en memoria sin saturar la base de datos.")
+
+            feriados_actuales = obtener_feriados_activos()
+
+            col_add1, col_add2 = st.columns([2, 1])
+            fecha_nueva_feriado = col_add1.date_input("Agregar nueva fecha feriado:", value=obtener_fecha_local_hoy(), key="input_nuevo_feriado")
+
+            if col_add2.button("Agregar Feriado", use_container_width=True):
+                str_f = fecha_nueva_feriado.strftime("%Y-%m-%d")
+                if str_f not in feriados_actuales:
+                    feriados_actuales.append(str_f)
+                    if guardar_feriados_db(feriados_actuales):
+                        st.success(f"Feriado {str_f} agregado correctamente.")
+                        st.rerun()
+                else:
+                    st.info("Esa fecha ya se encuentra registrada como feriado.")
+
+            df_feriados_adm = pd.DataFrame({"Fecha Feriado (YYYY-MM-DD)": feriados_actuales})
+            st.dataframe(df_feriados_adm, use_container_width=True, hide_index=True)
+
+            col_del1, col_del2 = st.columns([2, 1])
+            feriado_a_borrar = col_del1.selectbox("Seleccionar feriado a remover:", options=feriados_actuales, key="sel_borrar_feriado")
+            if col_del2.button("Eliminar Feriado Seleccionado", use_container_width=True):
+                feriados_actuales.remove(feriado_a_borrar)
+                if guardar_feriados_db(feriados_actuales):
+                    st.success(f"Feriado {feriado_a_borrar} eliminado.")
+                    st.rerun()
+        pass
+
+    with admin_tabs[6]:
+        st.markdown("#### Versiones del dashboard")
+        st.caption("Identificación del código desplegado y seguimiento de actualizaciones publicadas desde GitHub.")
+
+        version_info = {
+            "version": "Pendiente de publicación",
+            "commit": "No disponible",
+            "fecha_utc": "No disponible",
+            "run_number": "—",
+        }
+        try:
+            ruta_version = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.json")
+            with open(ruta_version, "r", encoding="utf-8") as archivo_version:
+                datos_version = json.load(archivo_version)
+                if isinstance(datos_version, dict):
+                    version_info.update(datos_version)
+        except Exception:
+            pass
+
+        with st.container(border=True):
+            st.markdown("##### Versión activa")
+            c_ver, c_fecha = st.columns(2)
+            c_ver.metric("Versión", str(version_info.get("version", "No disponible")))
+            c_fecha.metric("N.º de publicación", str(version_info.get("run_number", "—")))
+            st.caption("Commit de código: " + str(version_info.get("commit", "No disponible")))
+            st.caption("Generada (UTC): " + str(version_info.get("fecha_utc", "No disponible")))
+            url_commit = version_info.get("commit_url")
+            if url_commit:
+                st.markdown("[Ver commit en GitHub](" + str(url_commit) + ")")
+
+        st.info("Esta información se genera automáticamente al publicar cambios en la rama main. Si no aparece una versión, el sistema de publicación todavía no ha generado los metadatos.")
+
+    with admin_tabs[7]:
+        renderizar_gestion_motivos_recurrentes(df_base_motivos)
+
+    with admin_tabs[8]:
+        st.markdown("#### Historial operativo y técnico")
+        st.caption("Consulta eventos del Dashboard, WhatsApp, Evolution API y resultados de notificaciones almacenados en Supabase.")
+
+        hoy_logs = obtener_fecha_local_hoy()
+        col_logs_1, col_logs_2, col_logs_3 = st.columns([1, 1, 1.2])
+        with col_logs_1:
+            fecha_logs_desde = st.date_input(
+                "Desde", value=hoy_logs - timedelta(days=7),
+                key="logs_fecha_desde"
+            )
+        with col_logs_2:
+            fecha_logs_hasta = st.date_input(
+                "Hasta", value=hoy_logs, key="logs_fecha_hasta"
+            )
+        with col_logs_3:
+            if st.button("↻ Actualizar registros", key="btn_actualizar_logs", use_container_width=True):
+                st.rerun(scope="fragment")
+
+        if fecha_logs_desde > fecha_logs_hasta:
+            st.warning("La fecha inicial no puede ser posterior a la fecha final.")
+        else:
+            tz_logs_py = timezone(timedelta(hours=-3))
+            desde_utc = datetime.combine(
+                fecha_logs_desde, datetime.min.time()
+            ).replace(tzinfo=tz_logs_py).astimezone(timezone.utc).isoformat()
+            hasta_utc = datetime.combine(
+                fecha_logs_hasta, datetime.max.time()
+            ).replace(tzinfo=tz_logs_py).astimezone(timezone.utc).isoformat()
+
+            tab_eventos, tab_notificaciones = st.tabs(["Eventos del sistema", "Notificaciones"])
+
+            with tab_eventos:
+                f_ev1, f_ev2, f_ev3 = st.columns(3)
+                fuente_eventos = f_ev1.selectbox(
+                    "Origen", ["Todos", "notificador_bot", "dashboard"],
+                    key="logs_event_source"
+                )
+                categoria_eventos = f_ev2.selectbox(
+                    "Categoría", ["Todas", "whatsapp", "render", "cron", "intercom", "clasificacion", "dashboard"],
+                    key="logs_event_category"
+                )
+                nivel_eventos = f_ev3.selectbox(
+                    "Nivel", ["Todos", "info", "warning", "error", "critical"],
+                    key="logs_event_level"
+                )
+
+                try:
+                    consulta_eventos = supabase.table("system_logs").select(
+                        "created_at, source, category, level, event, message, details"
+                    ).gte("created_at", desde_utc).lte("created_at", hasta_utc)
+                    if fuente_eventos != "Todos":
+                        consulta_eventos = consulta_eventos.eq("source", fuente_eventos)
+                    if categoria_eventos != "Todas":
+                        consulta_eventos = consulta_eventos.eq("category", categoria_eventos)
+                    if nivel_eventos != "Todos":
+                        consulta_eventos = consulta_eventos.eq("level", nivel_eventos)
+                    res_eventos = consulta_eventos.order("created_at", desc=True).limit(300).execute()
+                    df_eventos = pd.DataFrame(res_eventos.data or [])
+                    st.caption(f"Se muestran hasta 300 eventos. Registros encontrados: {len(df_eventos)}.")
+                    if not df_eventos.empty:
+                        st.dataframe(
+                            df_eventos,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "created_at": st.column_config.DatetimeColumn("Fecha y hora", format="DD/MM/YYYY HH:mm:ss"),
+                                "source": "Origen",
+                                "category": "Categoría",
+                                "level": "Nivel",
+                                "event": "Evento",
+                                "message": "Descripción",
+                                "details": st.column_config.JsonColumn("Detalles")
+                            }
+                        )
+                    else:
+                        st.info("No hay eventos para los filtros seleccionados.")
+                except Exception as error_logs:
+                    st.error(f"No se pudieron consultar los eventos: {error_logs}")
+
+            with tab_notificaciones:
+                f_n1, f_n2 = st.columns(2)
+                canal_notificaciones = f_n1.selectbox(
+                    "Canal", ["Todos", "whatsapp", "email"],
+                    key="logs_notification_channel"
+                )
+                estado_notificaciones = f_n2.selectbox(
+                    "Resultado", ["Todos", "sent", "failed", "skipped", "pending"],
+                    key="logs_notification_status"
+                )
+                try:
+                    consulta_notificaciones = supabase.table("notification_logs").select(
+                        "created_at, channel, notification_type, status, conversation_id, destination_label, provider, provider_status_code, provider_message_id, attempt, error"
+                    ).gte("created_at", desde_utc).lte("created_at", hasta_utc)
+                    if canal_notificaciones != "Todos":
+                        consulta_notificaciones = consulta_notificaciones.eq("channel", canal_notificaciones)
+                    if estado_notificaciones != "Todos":
+                        consulta_notificaciones = consulta_notificaciones.eq("status", estado_notificaciones)
+                    res_notificaciones = consulta_notificaciones.order("created_at", desc=True).limit(300).execute()
+                    df_notificaciones = pd.DataFrame(res_notificaciones.data or [])
+                    st.caption(f"Se muestran hasta 300 notificaciones. Registros encontrados: {len(df_notificaciones)}.")
+                    if not df_notificaciones.empty:
+                        st.dataframe(
+                            df_notificaciones,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "created_at": st.column_config.DatetimeColumn("Fecha y hora", format="DD/MM/YYYY HH:mm:ss"),
+                                "channel": "Canal",
+                                "notification_type": "Tipo",
+                                "status": "Resultado",
+                                "conversation_id": "ID conversación",
+                                "destination_label": "Destino",
+                                "provider": "Proveedor",
+                                "provider_status_code": "HTTP",
+                                "provider_message_id": "ID proveedor",
+                                "attempt": "Intento",
+                                "error": "Error"
+                            }
+                        )
+                    else:
+                        st.info("No hay notificaciones para los filtros seleccionados.")
+                except Exception as error_notif:
+                    st.error(f"No se pudo consultar el historial de notificaciones: {error_notif}")
+
+if tab_admin is not None:
+    with tab_admin:
+        renderizar_panel_admin(df_all)
+
+with tab_faq:
+    st.markdown("### Preguntas Frecuentes & Criterios Operativos")
+    st.caption("Guía oficial sobre reglas de negocio, horarios hábiles, medición de SLA y evaluación del CSAT.")
+
+    with st.expander("1. ¿Cómo se evalúa el SLA Operativo en Pantalla (Dashboard en Vivo)?", expanded=True):
+        st.markdown(r"""
+        * **Chats Evaluados:** Se incluyen exclusivamente conversaciones atendidas por **agentes humanos** (`por_agente == 'no excluido'`), excluyendo a *Mónica (Bot)*, *Soporte* o estados *Sin Asignar*.
+        * **Franja Horaria Válida:** Solo califican los chats ingresados dentro de la jornada laboral hábil (Lunes a Viernes de 08:00 a 17:30 hs y Sábados de 09:00 a 11:45 hs). Los chats en feriados o fuera de horario quedan marcados como `fuera de horario` / `excluido`.
+        * **Promedio 1ra Respuesta:** Media numérica en minutos desde la creación/derivación del chat hasta la primera intervención humana. Meta: $\le 2.0$ min.
+        * **Promedio de Gestión:** Media en minutos hábiles de resolución de chats cerrados. **Importante:** Se descartan automáticamente los chats con etiqueta *"Sin Respuesta"*. Meta: $\le 60.0$ min.
+        * **Porcentaje de Cumplimiento (% SLA):** Proporción de casos válidos que cumplieron la meta sobre el total evaluable. Objetivo operativo: $\ge 90\%$.
+        """)
+
+    with st.expander("2. ¿Cómo se computa el tiempo hábil para el SLA de Gestión?", expanded=False):
+        st.markdown(r"""
+        ### El SLA mide tiempo operativo real, no horas reloj
+
+        El tiempo de resolución **no cuenta el tiempo calendario transcurrido**, sino únicamente los minutos transcurridos dentro de los turnos hábiles definidos:
+
+        * **Lunes a Viernes:** 08:00 a 17:30 hs.
+        * **Sábados:** 09:00 a 11:45 hs.
+        * **Domingos y Feriados:** Inactivos (no acumulan minutos de SLA).
+        *(Nota: El turno extendido nocturno se encuentra actualmente pausado en las evaluaciones activas).*
+
+        > **Ejemplo:** Si un ticket ingresa un viernes a las 17:00 hs y se resuelve el lunes siguiente a las 08:30 hs, el SLA **no contabiliza 63 horas calendario, sino exactamente 60 minutos hábiles** (30 min del viernes + 30 min del lunes).
+        """)
+
+    with st.expander("3. ¿Por qué la etiqueta 'Sin Respuesta' se excluye solo en Gestión?", expanded=False):
+        st.markdown(r"""
+        * **En Tiempo de Gestión (Excluido):** Cuando un cliente abandona la consulta y se cierra por inactividad tras una hora de espera, incluirlo distorsionaría injustamente los tiempos del equipo. Por ello, se marca como `excluido por filtro` en gestión.
+        * **En Primera Respuesta (Incluido):** El deber de atender con rapidez al cliente al momento de ingresar existe antes de saber si responderá luego. Si la primera atención tardó de más, el incumplimiento se contabiliza.
+        * **En Conteo de Volumen (Incluido):** El chat ingresó y demandó tiempo de seguimiento, por lo que forma parte del volumen atendido en la jornada.
+        """)
+
+    with st.expander("4. ¿Cuál es el criterio para 'Cerrados Hoy' y 'Distribución de Carga'?", expanded=False):
+        st.markdown(r"""
+        Para asegurar una medición justa de la jornada diaria:
+        * **Cerrados Hoy (en métricas de carga):** Solo contabiliza tickets cuya **fecha de cierre sea hoy Y cuya fecha de creación/asignación también sea de hoy**.
+        * Los chats de días anteriores que se resuelvan hoy no alteran la carga de asignaciones generadas en el día, garantizando que el gráfico apilado refleje el flujo exacto de la jornada actual.
+        """)
+
+    with st.expander("5. ¿Cómo se mide y evoluciona el CSAT (Satisfacción del Cliente)?", expanded=False):
+        st.markdown(r"""
+        * **Origen de la Fecha:** Se toma la marca de tiempo exacta en que el cliente emitió la calificación (`fecha_calificacion`), no la fecha de apertura del chat.
+        * **Encuestas Positivas:** Puntuaciones de **4 y 5 estrellas** sobre el total de encuestas validadas recibidas:
+          $$\text{CSAT (\%)} = \left( \frac{\text{Encuestas Positivas}}{\text{Total Encuestas}} \right) \times 100$$
+        * **Evolución Semanal:** Agrupa el rendimiento en semanas de **Lunes a Domingo** identificadas con la semana del año (**S41, S42...**) tomando como histórico desde el trimestre anterior ($Q_{n-1}$).
+        """)
+
+    with st.expander("6. ¿Cómo opera el Bot de Notificaciones y Alertas por WhatsApp?", expanded=False):
+        st.markdown(r"""
+        El sistema cuenta con un bot automatizado integrado con Evolution API y Render para el monitoreo proactivo de la atención:
+
+        * **Horario Operativo del Bot:**
+          * **Lunes a Viernes:** de 08:15 a 18:00 hs.
+          * **Sábados:** de 09:15 a 12:00 hs.
+          * **Domingos y Feriados:** Inactivo.
+        
+        * **Tipos de Alertas:**
+          * **Alerta Grupal (Chat Sin Asignar):** Si un chat entrante no tiene agente asignado y supera el tiempo límite configurado ($\ge 1.0$ min), el bot envía una alerta con mención global (`@todos`) al grupo de soporte configurado.
+          * **Alerta Grupal Recurrente (Antigüedad de Chats):** Para chats abiertos asignados a agentes humanos, el bot notifica en el grupo de WhatsApp cada vez que se cumple un múltiplo de horas hábiles (cada 3 hs hábiles). En cada reiteración menciona directamente al agente responsable con su `@telefono`.
+        
+        * **Indicador de Estado (Cabecera):**
+          * **Bot Operativo (open):** Sesión de WhatsApp activa y lista para emitir alertas.
+          * **Bot Desconectado:** La sesión se cerró o se desvinculó. Dispone de un mecanismo de auto-recuperación y un botón de reinicio manual en la pestaña de Administración.
+        
+        * **Reporte Diario por Correo:**
+          * Se despacha automáticamente al correo configurado al finalizar la jornada (Lunes a Viernes a las 18:30 hs) vía Gmail API, incluyendo el resumen ejecutivo de volumen, cumplimiento de SLA, CSAT y el gráfico de distribución por agente.
+        """)
+
+
+# El indicador de carga inicial se gestiona con st.spinner alrededor de la consulta global.
