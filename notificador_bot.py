@@ -463,6 +463,55 @@ def procesar_alertas_y_reportes():
     min_indiv_th = float(cfg.get("minutos_alerta_individual", 5.0))
     tel_destino_indiv = cfg.get("telefono_alerta_individual")
 
+    # Los sábados la mención individual se dirige únicamente al agente de guardia.
+    # La fecha se calcula con la zona horaria de Paraguay y se resuelve el usuario
+    # mediante guardias_sabado.usuario_id -> usuarios_autorizados.id.
+    es_sabado = now_dt.weekday() == 5
+    guardia_sabado_nombre = None
+    guardia_sabado_telefono = None
+
+    if es_sabado:
+        fecha_guardia_hoy = now_dt.strftime("%Y-%m-%d")
+        try:
+            guardia_res = (
+                supabase.table("guardias_sabado")
+                .select("usuario_id")
+                .eq("fecha", fecha_guardia_hoy)
+                .limit(1)
+                .execute()
+            )
+            if guardia_res.data:
+                usuario_id_guardia = guardia_res.data[0].get("usuario_id")
+                if usuario_id_guardia is not None:
+                    usuario_res = (
+                        supabase.table("usuarios_autorizados")
+                        .select("nombre, telefono_whatsapp")
+                        .eq("id", usuario_id_guardia)
+                        .limit(1)
+                        .execute()
+                    )
+                    if usuario_res.data:
+                        guardia = usuario_res.data[0]
+                        guardia_sabado_nombre = str(guardia.get("nombre") or "").strip() or None
+                        telefono_raw = str(guardia.get("telefono_whatsapp") or "")
+                        guardia_sabado_telefono = "".join(ch for ch in telefono_raw if ch.isdigit()) or None
+
+            if not guardia_sabado_nombre:
+                print(
+                    f"⚠️ [GUARDIA SÁBADO] No se encontró un agente válido "
+                    f"en guardias_sabado para {fecha_guardia_hoy}. "
+                    "La alerta se enviará sin mención global."
+                )
+            elif not guardia_sabado_telefono:
+                print(
+                    f"⚠️ [GUARDIA SÁBADO] {guardia_sabado_nombre} no tiene "
+                    "telefono_whatsapp válido. La alerta se enviará sin mención."
+                )
+        except Exception as exc:
+            guardia_sabado_nombre = None
+            guardia_sabado_telefono = None
+            print(f"⚠️ [GUARDIA SÁBADO] No se pudo consultar la guardia: {exc}")
+
     if tel_destino_indiv:
         res_activos = supabase.table("conversaciones")\
             .select("id, created_at, canal, etiquetas, updated_at, tenant, nombre_contacto, primera_respuesta_min, estado, agente_asignado")\
@@ -507,18 +556,39 @@ def procesar_alertas_y_reportes():
             min_trans = (now_dt - created_dt).total_seconds() / 60.0
 
             if min_trans >= min_indiv_th:
-                # Agregamos la mención visible en el texto
+                # Entre semana se conserva @todos. Los sábados se menciona
+                # exclusivamente al agente asignado a la guardia de esa fecha.
+                if es_sabado:
+                    if guardia_sabado_telefono:
+                        texto_mencion = f"@{guardia_sabado_telefono}"
+                        menciones_guardia = [guardia_sabado_telefono]
+                    elif guardia_sabado_nombre:
+                        texto_mencion = f"*{guardia_sabado_nombre}*"
+                        menciones_guardia = None
+                    else:
+                        texto_mencion = "*Guardia sin identificar*"
+                        menciones_guardia = None
+
+                    encabezado_alerta = f"⚠️ *Chat sin 1ra respuesta — Guardia: {texto_mencion}*"
+                    mencionar_todos_alerta = False
+                else:
+                    encabezado_alerta = "⚠️ *@todos chat sin 1ra Respuesta*"
+                    menciones_guardia = None
+                    mencionar_todos_alerta = True
+
                 msg = (
-                    f"⚠️ *@todos chat sin 1ra Respuesta*\n\n"
+                    f"{encabezado_alerta}\n\n"
                     f"*ID:* {c['id']}\n"
                     f"*Contacto:* {c.get('nombre_contacto', 'Sin nombre')}\n"
                     f"*Tenant:* {c.get('tenant', 'Sin datos')}\n"
                     f"*Espera:* {round(min_trans, 1)} min\n"
                 )
-                
-                # Enviamos con el flag activar mención global
+
                 enviar_whatsapp(
-                    tel_destino_indiv, msg, mencionar_todos=True,
+                    tel_destino_indiv,
+                    msg,
+                    menciones=menciones_guardia,
+                    mencionar_todos=mencionar_todos_alerta,
                     notification_type="sla_sin_primera_respuesta",
                     conversation_id=c.get("id"),
                     destination_label="Alerta individual de SLA"
